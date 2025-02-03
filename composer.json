@@ -1,0 +1,62 @@
+{
+    "name": "thesis/template",
+    "description": "Thesis Template",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Valentin Udaltsov",
+            "email": "udaltsov.valentin@gmail.com"
+        },
+        {
+            "name": "Thesis Team",
+            "homepage": "https://github.com/orgs/thesisphp/people"
+        }
+    ],
+    "require": {
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "bamarni/composer-bin-plugin": "^1.8.2",
+        "ergebnis/composer-normalize": "^2.45.0",
+        "phpunit/phpunit": "^10.5.40",
+        "symfony/var-dumper": "^6.4.15 || ^7.2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Thesis\\Template\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Thesis\\Template\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "bamarni/composer-bin-plugin": true,
+            "ergebnis/composer-normalize": true
+        },
+        "bump-after-update": "dev",
+        "platform": {
+            "php": "8.3"
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "bamarni-bin": {
+            "bin-links": false,
+            "forward-command": true,
+            "target-directory": "tools"
+        }
+    },
+    "scripts": {
+        "check-require": "tools/composer-require-checker/vendor/bin/composer-require-checker",
+        "check-unused": "tools/composer-unused/vendor/bin/composer-unused",
+        "fixcs": "tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --diff --verbose",
+        "infection": "tools/infection/vendor/bin/infection --show-mutations",
+        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze",
+        "pre-command-run": "mkdir -p var",
+        "test": "phpunit"
+    }
+}

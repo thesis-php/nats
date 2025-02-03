@@ -1,0 +1,6 @@
+/**/vendor/
+/var/
+/.php-cs-fixer.php
+/phpstan.neon
+/phpunit.xml
+/psalm.xml

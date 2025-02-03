@@ -1,0 +1,12 @@
+{
+    "require-dev": {
+        "icanhazstring/composer-unused": "^0.8.11"
+    },
+    "config": {
+        "bump-after-update": "dev",
+        "platform": {
+            "php": "8.3"
+        },
+        "sort-packages": true
+    }
+}
