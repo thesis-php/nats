@@ -57,6 +57,15 @@
         }
     },
     "scripts": {
+        "check": [
+            "@composer fixcs -- --dry-run",
+            "@phpstan",
+            "@composer validate",
+            "@composer normalize --dry-run",
+            "@check-require",
+            "@check-unused",
+            "@test"
+        ],
         "check-require": "tools/composer-require-checker/vendor/bin/composer-require-checker",
         "check-unused": "tools/composer-unused/vendor/bin/composer-unused",
         "fixcs": "tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --diff --verbose",
