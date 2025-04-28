@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Protocol;
 
 use Amp\Parser\Parser as ProtocolParser;
-use Amp\Pipeline\Queue;
 
 /**
  * @internal
  */
-final class Parser extends ProtocolParser
+final class Parser
 {
     private const CRLF = "\r\n";
     private const OP_OK = '+';
@@ -20,43 +19,50 @@ final class Parser extends ProtocolParser
     private const OP_MSG = 'M';
     private const OP_HMSG = 'H';
 
+    private readonly ProtocolParser $parser;
+
     /**
-     * @param Queue<Frame> $queue
+     * @param \Closure(Frame): void $push
      */
-    public function __construct(Queue $queue)
+    public function __construct(\Closure $push)
     {
-        parent::__construct(self::parser($queue));
+        $this->parser = new ProtocolParser(self::parser($push));
+    }
+
+    public function push(string $bytes): void
+    {
+        $this->parser->push($bytes);
+    }
+
+    public function cancel(): void
+    {
+        $this->parser->cancel();
     }
 
     /**
-     * @param Queue<Frame> $queue
+     * @param \Closure(Frame): void $push
      * @return \Generator<int, int|string, string, void>
      */
-    private static function parser(Queue $queue): \Generator
+    private static function parser(\Closure $push): \Generator
     {
         /** @phpstan-ignore while.alwaysTrue */
         while (true) {
-            try {
-                $value = self::parseFrame(yield 1, yield self::CRLF);
-                $queue->push($value instanceof \Generator ? yield from $value : $value);
-            } catch (\Throwable $e) {
-                $queue->error($e);
-            }
+            $push(yield from self::parseFrame(yield 1, yield self::CRLF));
         }
     }
 
     /**
-     * @return Frame|\Generator<int, int|string, string, Frame>
+     * @return \Generator<int, int|string, string, Frame>
      */
-    private static function parseFrame(string $type, string $payload): mixed
+    private static function parseFrame(string $type, string $payload): \Generator
     {
         return match ($type) {
             self::OP_OK => Ok::Frame,
             self::OP_ERR => new Err(substr($payload, 4) ?: 'unknown'),
             self::OP_INFO => ServerInfo::fromJson(substr($payload, 4) ?: '{}'),
             self::OP_PING_PONG => $payload === 'ING' ? Ping::Frame : Pong::Frame,
-            self::OP_MSG => self::parseMessage(substr($payload, 3)),
-            self::OP_HMSG => self::parseMessage(substr($payload, 4), withHeaders: true),
+            self::OP_MSG => yield from self::parseMessage(substr($payload, 3)),
+            self::OP_HMSG => yield from self::parseMessage(substr($payload, 4), withHeaders: true),
             default => throw new \UnexpectedValueException("Unknown frame '{$payload}'."),
         };
     }

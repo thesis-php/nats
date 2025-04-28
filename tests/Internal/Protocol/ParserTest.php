@@ -196,7 +196,7 @@ final class ParserTest extends TestCase
         $queue = new Queue(\count($frames));
         $iterator = $queue->iterate();
 
-        $parser = new Parser($queue);
+        $parser = new Parser($queue->push(...));
 
         foreach ($lines as $line) {
             $parser->push($line);
