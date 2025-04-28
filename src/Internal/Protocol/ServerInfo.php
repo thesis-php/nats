@@ -10,6 +10,64 @@ namespace Thesis\Nats\Internal\Protocol;
 final class ServerInfo
 {
     /**
+     * @param non-empty-string $json
+     *
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     * @throws \JsonException
+     */
+    public static function fromJson(string $json): self
+    {
+        $payload = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
+
+        if (!\is_array($payload) || array_is_list($payload)) {
+            throw new \UnexpectedValueException("'info' must be an associative array.");
+        }
+
+        if (\count($payload) === 0) {
+            throw new \UnexpectedValueException("'info' must not be empty.");
+        }
+
+        /** @var non-empty-array<non-empty-string, mixed> $payload */
+        return self::fromArray($payload);
+    }
+
+    /**
+     * @param non-empty-array<non-empty-string, mixed> $payload
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    public static function fromArray(array $payload): self
+    {
+        return new self(
+            serverId: self::assert($payload, 'server_id', self::nonEmptyString(...)),
+            serverName: self::assert($payload, 'server_name', self::nonEmptyString(...)),
+            version: self::assert($payload, 'version', self::nonEmptyString(...)),
+            go: self::assert($payload, 'go', self::nonEmptyString(...)),
+            host: self::assert($payload, 'host', self::nonEmptyString(...)),
+            port: self::assert($payload, 'port', self::positiveInt(...)),
+            headers: self::assert($payload, 'headers', self::bool(...)),
+            maxPayload: self::assert($payload, 'max_payload', self::positiveInt(...)),
+            proto: self::assert($payload, 'proto', self::int(...)),
+            clientId: self::nullable($payload, 'client_id', self::int(...)),
+            authRequired: self::nullable($payload, 'auth_required', self::bool(...)),
+            tlsRequired: self::nullable($payload, 'tls_required', self::bool(...)),
+            tlsVerify: self::nullable($payload, 'tls_verify', self::bool(...)),
+            tlsAvailable: self::nullable($payload, 'tls_available', self::bool(...)),
+            connectUrls: self::list($payload, 'connect_urls', self::nonEmptyString(...)),
+            wsConnectUrls: self::list($payload, 'ws_connect_urls', self::nonEmptyString(...)),
+            ldm: self::nullable($payload, 'ldm', self::bool(...)),
+            gitCommit: self::nullable($payload, 'git_commit', self::string(...)),
+            jetstream: self::nullable($payload, 'jetstream', self::bool(...)),
+            ip: self::nullable($payload, 'ip', self::nonEmptyString(...)),
+            clientIp: self::nullable($payload, 'client_ip', self::nonEmptyString(...)),
+            nonce: self::nullable($payload, 'nonce', self::string(...)),
+            cluster: self::nullable($payload, 'cluster', self::string(...)),
+            domain: self::nullable($payload, 'domain', self::string(...)),
+        );
+    }
+
+    /**
      * @param non-empty-string $serverId the unique identifier of the NATS server
      * @param non-empty-string $serverName the name of the NATS server
      * @param non-empty-string $version the version of NATS
@@ -61,4 +119,139 @@ final class ServerInfo
         public readonly ?string $cluster = null,
         public readonly ?string $domain = null,
     ) {}
+
+    /**
+     * @template T
+     * @param non-empty-array<non-empty-string, mixed> $payload
+     * @param non-empty-string $key
+     * @param callable(non-empty-string, mixed): T $assert
+     * @return ?T
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function nullable(array $payload, string $key, callable $assert): mixed
+    {
+        if (!isset($payload[$key])) {
+            return null;
+        }
+
+        return self::assert($payload, $key, $assert);
+    }
+
+    /**
+     * @template T
+     * @param non-empty-array<non-empty-string, mixed> $payload
+     * @param non-empty-string $key
+     * @param callable(non-empty-string, mixed): T $assert
+     * @return ?list<T>
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function list(array $payload, string $key, callable $assert): ?array
+    {
+        if (!isset($payload[$key])) {
+            return null;
+        }
+
+        $values = $payload[$key];
+
+        if (!\is_array($values) || !array_is_list($values)) {
+            throw new \UnexpectedValueException("The 'info' key '{$key}' must be a list.");
+        }
+
+        return array_map(static fn(mixed $value): mixed => $assert($key, $value), $values);
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @return non-empty-string
+     * @throws \UnexpectedValueException
+     * @throws \InvalidArgumentException
+     */
+    private static function nonEmptyString(string $key, mixed $value): string
+    {
+        $value = self::string($key, $value);
+
+        if ($value === '') {
+            throw new \InvalidArgumentException("The 'info' key '{$key}' must not be empty.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @throws \UnexpectedValueException
+     */
+    private static function string(string $key, mixed $value): string
+    {
+        if (!\is_string($value)) {
+            throw new \UnexpectedValueException("The 'info' key '{$key}' must be a non-empty string.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @return positive-int
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function positiveInt(string $key, mixed $value): int
+    {
+        $value = self::int($key, $value);
+
+        if ($value <= 0) {
+            throw new \InvalidArgumentException("The 'info' key '{$key}' must be a positive integer.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function int(string $key, mixed $value): int
+    {
+        if (!\is_int($value)) {
+            throw new \UnexpectedValueException("The 'info' key '{$key}' must be an integer.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function bool(string $key, mixed $value): bool
+    {
+        if (!\is_bool($value)) {
+            throw new \UnexpectedValueException("The 'info' key '{$key}' must be a boolean.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * @template T
+     * @param non-empty-array<non-empty-string, mixed> $payload
+     * @param non-empty-string $key
+     * @param callable(non-empty-string, mixed): T $assert
+     * @return T
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     */
+    private static function assert(array $payload, string $key, callable $assert): mixed
+    {
+        if (!isset($payload[$key])) {
+            throw new \InvalidArgumentException("'info' must contain the key '{$key}'.");
+        }
+
+        return $assert($key, $payload[$key]);
+    }
 }
