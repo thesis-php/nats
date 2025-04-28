@@ -7,7 +7,4 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-enum Ok implements Frame
-{
-    case Frame;
-}
+interface Frame {}

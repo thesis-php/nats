@@ -7,11 +7,10 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class ServerInfo
+final class ServerInfo implements Frame
 {
     /**
      * @param non-empty-string $json
-     *
      * @throws \InvalidArgumentException
      * @throws \UnexpectedValueException
      * @throws \JsonException
@@ -21,11 +20,7 @@ final class ServerInfo
         $payload = json_decode($json, associative: true, flags: JSON_THROW_ON_ERROR);
 
         if (!\is_array($payload) || array_is_list($payload)) {
-            throw new \UnexpectedValueException("'info' must be an associative array.");
-        }
-
-        if (\count($payload) === 0) {
-            throw new \UnexpectedValueException("'info' must not be empty.");
+            throw new \UnexpectedValueException("'info' must be an non-empty associative array.");
         }
 
         /** @var non-empty-array<non-empty-string, mixed> $payload */

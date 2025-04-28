@@ -7,12 +7,17 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Err
+final class Err implements Frame
 {
+    /** @var non-empty-string */
+    public readonly string $message;
+
     /**
      * @param non-empty-string $message
      */
     public function __construct(
-        public readonly string $message,
-    ) {}
+        string $message,
+    ) {
+        $this->message = trim($message, '\'') ?: 'unknown';
+    }
 }

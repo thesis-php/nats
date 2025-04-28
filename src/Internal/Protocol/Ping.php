@@ -7,4 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-enum Ping {}
+enum Ping implements Frame
+{
+    case Frame;
+}

@@ -19,6 +19,8 @@
     ],
     "require": {
         "php": "^8.3",
+        "amphp/parser": "^1.1",
+        "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.3"
     },
     "require-dev": {
@@ -30,7 +32,10 @@
     "autoload": {
         "psr-4": {
             "Thesis\\Nats\\": "src/"
-        }
+        },
+        "files": [
+            "src/Internal/Lib/lib.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

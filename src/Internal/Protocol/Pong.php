@@ -7,4 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-enum Pong {}
+enum Pong implements Frame
+{
+    case Frame;
+}
