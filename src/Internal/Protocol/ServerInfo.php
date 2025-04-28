@@ -173,7 +173,7 @@ final class ServerInfo
         $value = self::string($key, $value);
 
         if ($value === '') {
-            throw new \InvalidArgumentException("The 'info' key '{$key}' must not be empty.");
+            throw new \InvalidArgumentException("The 'info' key '{$key}' must be a non-empty string.");
         }
 
         return $value;
@@ -186,7 +186,7 @@ final class ServerInfo
     private static function string(string $key, mixed $value): string
     {
         if (!\is_string($value)) {
-            throw new \UnexpectedValueException("The 'info' key '{$key}' must be a non-empty string.");
+            throw new \UnexpectedValueException("The 'info' key '{$key}' must be a string.");
         }
 
         return $value;
