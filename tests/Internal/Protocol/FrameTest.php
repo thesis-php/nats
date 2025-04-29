@@ -90,6 +90,38 @@ final class FrameTest extends TestCase
         new HPub('events.success', 'local', 'abz', new Headers(['Bar' => ['Baz']])),
         "HPUB events.success local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
     ])]
+    #[TestWith([
+        new Msg('events.success', '1'),
+        "MSG events.success 1 0\r\n\r\n",
+    ])]
+    #[TestWith([
+        new Msg('events.success', '1', 'local'),
+        "MSG events.success 1 local 0\r\n\r\n",
+    ])]
+    #[TestWith([
+        new Msg('events.success', '1', 'local', 'abz'),
+        "MSG events.success 1 local 3\r\nabz\r\n",
+    ])]
+    #[TestWith([
+        new Msg('events.success', '1', 'local', 'abz'),
+        "MSG events.success 1 local 3\r\nabz\r\n",
+    ])]
+    #[TestWith([
+        new HMsg('events.success', '1'),
+        "HMSG events.success 1 12 12\r\nNATS/1.0\r\n\r\n\r\n",
+    ])]
+    #[TestWith([
+        new HMsg('events.success', '1', 'local'),
+        "HMSG events.success 1 local 12 12\r\nNATS/1.0\r\n\r\n\r\n",
+    ])]
+    #[TestWith([
+        new HMsg('events.success', '1', 'local', 'abz'),
+        "HMSG events.success 1 local 12 15\r\nNATS/1.0\r\n\r\nabz\r\n",
+    ])]
+    #[TestWith([
+        new HMsg('events.success', '1', 'local', 'abz', new Headers(['Bar' => ['Baz']])),
+        "HMSG events.success 1 local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
+    ])]
     public function testEncode(Frame $frame, string $encoded): void
     {
         self::assertEquals($encoded, $frame->encode());

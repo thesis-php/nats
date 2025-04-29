@@ -114,14 +114,14 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "HMSG FOO.BAR 9 BAZ.69 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n",
-            new Msg(
+            new HMsg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
                 payload: 'Hello World',
-                headers: [
+                headers: new Headers([
                     'FoodGroup' => ['vegetable'],
-                ],
+                ]),
             ),
         ],
     )]
@@ -133,14 +133,14 @@ final class ParserTest extends TestCase
                 "FoodGroup: vegetable\r\n\r\n",
                 "Hello World\r\n",
             ],
-            new Msg(
+            new HMsg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
                 payload: 'Hello World',
-                headers: [
+                headers: new Headers([
                     'FoodGroup' => ['vegetable'],
-                ],
+                ]),
             ),
         ],
     )]
@@ -155,14 +155,14 @@ final class ParserTest extends TestCase
                 "HMSG FOO.BAR 9 40 51\r\nNATS/1.0\r\nFoodGroup: vegetable\r\nX: Y\r\n\r\nHello World\r\n",
             ],
             [
-                new Msg(
+                new HMsg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
                     payload: 'Hello World',
-                    headers: [
+                    headers: new Headers([
                         'FoodGroup' => ['vegetable'],
-                    ],
+                    ]),
                 ),
                 new Msg(
                     subject: 'FOO.BAR',
@@ -170,14 +170,14 @@ final class ParserTest extends TestCase
                     replyTo: 'BAZ.69',
                     payload: 'Hello, world',
                 ),
-                new Msg(
+                new HMsg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     payload: 'Hello World',
-                    headers: [
+                    headers: new Headers([
                         'FoodGroup' => ['vegetable'],
                         'X' => ['Y'],
-                    ],
+                    ]),
                 ),
             ],
         ],

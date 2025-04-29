@@ -95,7 +95,7 @@ final class Parser
     }
 
     /**
-     * @return \Generator<int, int|string, string, Msg>
+     * @return \Generator<int, int|string, string, HMsg>
      */
     private static function parseHMsg(string $payload): \Generator
     {
@@ -109,7 +109,7 @@ final class Parser
         $replyTo = $size === 5 ? $chunks[2] : null;
 
         $headersLength = (int) ($chunks[$size - 2] ?? 0);
-        $headers = Headers::fromString(yield $headersLength)->keyvals;
+        $headers = Headers::fromString(yield $headersLength);
 
         $length = (int) ($chunks[$size - 1] ?? 0);
         $length -= $headersLength;
@@ -117,7 +117,7 @@ final class Parser
 
         yield self::CRLF;
 
-        return new Msg(
+        return new HMsg(
             subject: $subject,
             sid: $sid,
             replyTo: $replyTo,
