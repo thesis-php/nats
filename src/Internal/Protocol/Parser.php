@@ -61,8 +61,8 @@ final class Parser
             self::OP_ERR => new Err(substr($payload, 4) ?: 'unknown'),
             self::OP_INFO => ServerInfo::fromJson(substr($payload, 4) ?: '{}'),
             self::OP_PING_PONG => $payload === 'ING' ? Ping::Frame : Pong::Frame,
-            self::OP_MSG => yield from self::parseMessage(substr($payload, 3)),
-            self::OP_HMSG => yield from self::parseMessage(substr($payload, 4), withHeaders: true),
+            self::OP_MSG => yield from self::parseMsg(substr($payload, 3)),
+            self::OP_HMSG => yield from self::parseHMsg(substr($payload, 4)),
             default => throw new \UnexpectedValueException("Unknown frame '{$payload}'."),
         };
     }
@@ -70,39 +70,50 @@ final class Parser
     /**
      * @return \Generator<int, int|string, string, Msg>
      */
-    private static function parseMessage(string $payload, bool $withHeaders = false): \Generator
+    private static function parseMsg(string $payload): \Generator
     {
-        if ($payload === '') {
-            throw new \UnexpectedValueException('msg cannot be empty.');
-        }
-
         $chunks = explode(' ', $payload);
         $size = \count($chunks);
 
         $subject = $chunks[0] ?: throw new \UnexpectedValueException('msg must contain subject.');
         $sid = ($chunks[1] ?? '') ?: throw new \UnexpectedValueException('msg must contain sid.');
-        $replyTo = null;
 
-        if ((!$withHeaders && $size === 4) || ($withHeaders && $size === 5)) {
-            $replyTo = $chunks[2] ?: null;
-        }
+        /** @var ?non-empty-string $replyTo */
+        $replyTo = $size === 4 ? $chunks[2] : null;
 
         $length = (int) ($chunks[$size - 1] ?? 0);
+        $payload = $length > 0 ? yield $length : null;
 
-        /** @var array<non-empty-string, list<string>> $headers */
-        $headers = [];
+        yield self::CRLF;
 
-        if ($withHeaders) {
-            $headersLength = (int) ($chunks[$size - 2] ?? 0);
-            $headers = Headers::fromString(yield $headersLength)->keyvals;
-            $length -= $headersLength;
-        }
+        return new Msg(
+            subject: $subject,
+            sid: $sid,
+            replyTo: $replyTo,
+            payload: $payload,
+        );
+    }
 
-        /** @var ?non-empty-string $payload */
-        $payload = match ($length) {
-            0 => null,
-            default => yield $length,
-        };
+    /**
+     * @return \Generator<int, int|string, string, Msg>
+     */
+    private static function parseHMsg(string $payload): \Generator
+    {
+        $chunks = explode(' ', $payload);
+        $size = \count($chunks);
+
+        $subject = $chunks[0] ?: throw new \UnexpectedValueException('msg must contain subject.');
+        $sid = ($chunks[1] ?? '') ?: throw new \UnexpectedValueException('msg must contain sid.');
+
+        /** @var ?non-empty-string $replyTo */
+        $replyTo = $size === 5 ? $chunks[2] : null;
+
+        $headersLength = (int) ($chunks[$size - 2] ?? 0);
+        $headers = Headers::fromString(yield $headersLength)->keyvals;
+
+        $length = (int) ($chunks[$size - 1] ?? 0);
+        $length -= $headersLength;
+        $payload = $length > 0 ? yield $length : null;
 
         yield self::CRLF;
 

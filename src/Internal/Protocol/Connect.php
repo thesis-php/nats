@@ -24,7 +24,7 @@ final class Connect implements Frame, \JsonSerializable
      * @param ?string $sig in case the server has responded with a nonce on INFO, then a NATS client must use this field to reply with the signed nonce
      * @param ?string $jwt the JWT that identifies a user permissions and account
      * @param ?bool $noResponders enable quick replies for cases where a request is sent to a topic with no responders
-     * @param ?bool $headers whether the client supports headers
+     * @param bool $headers whether the client supports headers
      * @param ?string $nkey the public NKey to authenticate the client. This will be used to verify the signature (sig) against the nonce provided in the INFO message
      */
     public function __construct(

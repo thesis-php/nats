@@ -19,8 +19,6 @@ $config = (new Config())
     ->setParallelConfig(ParallelConfigFactory::detect())
     ->setCacheFile(__DIR__ . '/var/' . basename(__FILE__) . '.cache');
 
-(new PhpCsFixerCodingStandard())->applyTo($config, [
-    'yield_from_array_to_yields' => false,
-]);
+(new PhpCsFixerCodingStandard())->applyTo($config);
 
 return $config;

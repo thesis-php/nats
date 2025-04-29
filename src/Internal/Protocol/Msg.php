@@ -13,7 +13,7 @@ final class Msg implements Frame
      * @param non-empty-string $subject subject name this message was received on
      * @param non-empty-string $sid the unique alphanumeric subscription ID of the subject
      * @param ?non-empty-string $replyTo the subject on which the publisher is listening for responses
-     * @param ?non-empty-string $payload the message payload data
+     * @param ?string $payload the message payload data
      * @param array<non-empty-string, list<string>> $headers header version NATS/1.0\r\n followed by one or more name: value pairs, each separated by \r\n
      */
     public function __construct(
