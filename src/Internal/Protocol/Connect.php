@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Connect implements \JsonSerializable
+final class Connect implements Frame, \JsonSerializable
 {
     /**
      * @param bool $verbose turns on +OK protocol acknowledgements
@@ -32,8 +32,8 @@ final class Connect implements \JsonSerializable
         public readonly bool $pedantic,
         public readonly bool $tlsRequired,
         public readonly string $name,
-        public readonly string $lang,
         public readonly string $version,
+        public readonly string $lang = 'php',
         public readonly ?string $authToken = null,
         public readonly ?string $user = null,
         public readonly ?string $pass = null,
@@ -42,9 +42,16 @@ final class Connect implements \JsonSerializable
         public readonly ?string $sig = null,
         public readonly ?string $jwt = null,
         public readonly ?bool $noResponders = null,
-        public readonly ?bool $headers = null,
+        public readonly bool $headers = true,
         public readonly ?string $nkey = null,
     ) {}
+
+    public function encode(): string
+    {
+        $payload = json_encode($this, flags: JSON_THROW_ON_ERROR);
+
+        return "CONNECT {$payload}\r\n";
+    }
 
     /**
      * @return array<non-empty-string, mixed>

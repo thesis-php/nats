@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class ServerInfo implements Frame
+final class ServerInfo implements Frame, \JsonSerializable
 {
     /**
      * @param non-empty-string $json
@@ -114,6 +114,49 @@ final class ServerInfo implements Frame
         public readonly ?string $cluster = null,
         public readonly ?string $domain = null,
     ) {}
+
+    public function encode(): string
+    {
+        $payload = json_encode($this, flags: JSON_THROW_ON_ERROR);
+
+        return "INFO {$payload}\r\n";
+    }
+
+    /**
+     * @return array<non-empty-string, mixed>
+     */
+    public function jsonSerialize(): array
+    {
+        return array_filter(
+            [
+                'server_id' => $this->serverId,
+                'server_name' => $this->serverName,
+                'version' => $this->version,
+                'go' => $this->go,
+                'host' => $this->host,
+                'port' => $this->port,
+                'headers' => $this->headers,
+                'max_payload' => $this->maxPayload,
+                'proto' => $this->proto,
+                'client_id' => $this->clientId,
+                'auth_required' => $this->authRequired,
+                'tls_required' => $this->tlsRequired,
+                'tls_verify' => $this->tlsVerify,
+                'tls_available' => $this->tlsAvailable,
+                'connect_urls' => $this->connectUrls,
+                'ws_connect_urls' => $this->wsConnectUrls,
+                'ldm' => $this->ldm,
+                'git_commit' => $this->gitCommit,
+                'jetstream' => $this->jetstream,
+                'ip' => $this->ip,
+                'client_ip' => $this->clientIp,
+                'nonce' => $this->nonce,
+                'cluster' => $this->cluster,
+                'domain' => $this->domain,
+            ],
+            static fn(mixed $value): bool => $value !== null,
+        );
+    }
 
     /**
      * @template T

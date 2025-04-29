@@ -15,9 +15,13 @@ final class Err implements Frame
     /**
      * @param non-empty-string $message
      */
-    public function __construct(
-        string $message,
-    ) {
+    public function __construct(string $message)
+    {
         $this->message = trim($message, '\'') ?: 'unknown';
+    }
+
+    public function encode(): string
+    {
+        return "-ERR '{$this->message}'\r\n";
     }
 }

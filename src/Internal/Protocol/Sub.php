@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Sub
+final class Sub implements Frame
 {
     /**
      * @param non-empty-string $subject the subject name to subscribe to
@@ -19,4 +19,15 @@ final class Sub
         public readonly string $sid,
         public readonly ?string $queueGroup = null,
     ) {}
+
+    public function encode(): string
+    {
+        $buffer = "SUB {$this->subject} {$this->sid}";
+
+        if ($this->queueGroup !== null) {
+            $buffer .= " {$this->queueGroup}";
+        }
+
+        return "{$buffer}\r\n";
+    }
 }

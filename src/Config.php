@@ -19,6 +19,9 @@ final class Config
     /** @var non-empty-string */
     public readonly string $version;
 
+    /** @var non-empty-string */
+    public readonly string $name;
+
     /**
      * @param non-empty-list<non-empty-string> $urls
      * @param float $connectionTimeout in seconds
@@ -35,6 +38,7 @@ final class Config
         public readonly bool $tcpNoDelay = true,
     ) {
         $this->version = Lib\version();
+        $this->name = Lib\name;
     }
 
     public static function default(): self

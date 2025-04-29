@@ -68,7 +68,7 @@ final class Parser
     }
 
     /**
-     * @return \Generator<int, int|string, string, Message>
+     * @return \Generator<int, int|string, string, Msg>
      */
     private static function parseMessage(string $payload, bool $withHeaders = false): \Generator
     {
@@ -89,12 +89,12 @@ final class Parser
 
         $length = (int) ($chunks[$size - 1] ?? 0);
 
-        /** @var array<non-empty-string, non-empty-string> $headers */
+        /** @var array<non-empty-string, list<string>> $headers */
         $headers = [];
 
         if ($withHeaders) {
             $headersLength = (int) ($chunks[$size - 2] ?? 0);
-            $headers = [...self::parseHeaders(yield $headersLength)];
+            $headers = Headers::fromString(yield $headersLength)->keyvals;
             $length -= $headersLength;
         }
 
@@ -106,29 +106,12 @@ final class Parser
 
         yield self::CRLF;
 
-        return new Message(
+        return new Msg(
             subject: $subject,
             sid: $sid,
             replyTo: $replyTo,
             payload: $payload,
             headers: $headers,
         );
-    }
-
-    /**
-     * @return iterable<non-empty-string, non-empty-string>
-     */
-    private static function parseHeaders(string $value): iterable
-    {
-        foreach (explode(self::CRLF, trim($value)) as $item) {
-            $keypair = explode(': ', $item);
-            if (\count($keypair) === 2) {
-                [$key, $value] = $keypair;
-
-                if ($key !== '' && $value !== '') {
-                    yield $key => $value;
-                }
-            }
-        }
     }
 }

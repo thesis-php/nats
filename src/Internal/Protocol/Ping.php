@@ -10,4 +10,9 @@ namespace Thesis\Nats\Internal\Protocol;
 enum Ping implements Frame
 {
     case Frame;
+
+    public function encode(): string
+    {
+        return "PING\r\n";
+    }
 }

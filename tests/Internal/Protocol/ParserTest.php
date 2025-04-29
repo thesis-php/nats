@@ -59,7 +59,7 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "MSG FOO.BAR 9 12\r\nHello, world\r\n",
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 payload: 'Hello, world',
@@ -69,7 +69,7 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "MSG FOO.BAR 9 0\r\n\r\n",
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
             ),
@@ -78,7 +78,7 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "MSG FOO.BAR 9 BAZ.69 12\r\nHello, world\r\n",
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
@@ -92,7 +92,7 @@ final class ParserTest extends TestCase
                 "MSG FOO.BAR 9 BAZ.69 12\r\n",
                 "Hello, world\r\n",
             ],
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
@@ -103,7 +103,7 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "MSG FOO.BAR 9 BAZ.69 12\r\nHello, world\r\n",
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
@@ -114,13 +114,13 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "HMSG FOO.BAR 9 BAZ.69 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n",
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
                 payload: 'Hello World',
                 headers: [
-                    'FoodGroup' => 'vegetable',
+                    'FoodGroup' => ['vegetable'],
                 ],
             ),
         ],
@@ -133,13 +133,13 @@ final class ParserTest extends TestCase
                 "FoodGroup: vegetable\r\n\r\n",
                 "Hello World\r\n",
             ],
-            new Message(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
                 payload: 'Hello World',
                 headers: [
-                    'FoodGroup' => 'vegetable',
+                    'FoodGroup' => ['vegetable'],
                 ],
             ),
         ],
@@ -155,28 +155,28 @@ final class ParserTest extends TestCase
                 "HMSG FOO.BAR 9 40 51\r\nNATS/1.0\r\nFoodGroup: vegetable\r\nX: Y\r\n\r\nHello World\r\n",
             ],
             [
-                new Message(
+                new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
                     payload: 'Hello World',
                     headers: [
-                        'FoodGroup' => 'vegetable',
+                        'FoodGroup' => ['vegetable'],
                     ],
                 ),
-                new Message(
+                new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
                     payload: 'Hello, world',
                 ),
-                new Message(
+                new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     payload: 'Hello World',
                     headers: [
-                        'FoodGroup' => 'vegetable',
-                        'X' => 'Y',
+                        'FoodGroup' => ['vegetable'],
+                        'X' => ['Y'],
                     ],
                 ),
             ],

@@ -10,4 +10,9 @@ namespace Thesis\Nats\Internal\Protocol;
 enum Pong implements Frame
 {
     case Frame;
+
+    public function encode(): string
+    {
+        return "PONG\r\n";
+    }
 }

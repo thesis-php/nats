@@ -10,4 +10,9 @@ namespace Thesis\Nats\Internal\Protocol;
 enum Ok implements Frame
 {
     case Frame;
+
+    public function encode(): string
+    {
+        return "+OK\r\n";
+    }
 }

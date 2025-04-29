@@ -34,7 +34,8 @@
             "Thesis\\Nats\\": "src/"
         },
         "files": [
-            "src/Internal/Lib/lib.php"
+            "src/Internal/Lib/lib.php",
+            "src/Internal/Connection/network.php"
         ]
     },
     "autoload-dev": {
