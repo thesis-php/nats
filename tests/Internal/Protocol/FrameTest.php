@@ -71,7 +71,7 @@ final class FrameTest extends TestCase
         "PUB events.success local 0\r\n\r\n",
     ])]
     #[TestWith([
-        new Pub('events.success', 'local', 'abz'),
+        new Pub('events.success', 'local', new Message('abz')),
         "PUB events.success local 3\r\nabz\r\n",
     ])]
     #[TestWith([
@@ -83,11 +83,11 @@ final class FrameTest extends TestCase
         "HPUB events.success local 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success', 'local', 'abz'),
+        new HPub('events.success', 'local', new Message('abz', new Headers())),
         "HPUB events.success local 12 15\r\nNATS/1.0\r\n\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success', 'local', 'abz', new Headers(['Bar' => ['Baz']])),
+        new HPub('events.success', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
         "HPUB events.success local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
     ])]
     #[TestWith([
@@ -99,11 +99,11 @@ final class FrameTest extends TestCase
         "MSG events.success 1 local 0\r\n\r\n",
     ])]
     #[TestWith([
-        new Msg('events.success', '1', 'local', 'abz'),
+        new Msg('events.success', '1', 'local', new Message('abz')),
         "MSG events.success 1 local 3\r\nabz\r\n",
     ])]
     #[TestWith([
-        new Msg('events.success', '1', 'local', 'abz'),
+        new Msg('events.success', '1', 'local', new Message('abz')),
         "MSG events.success 1 local 3\r\nabz\r\n",
     ])]
     #[TestWith([
@@ -115,11 +115,11 @@ final class FrameTest extends TestCase
         "HMSG events.success 1 local 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1', 'local', 'abz'),
+        new HMsg('events.success', '1', 'local', new Message('abz', new Headers())),
         "HMSG events.success 1 local 12 15\r\nNATS/1.0\r\n\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1', 'local', 'abz', new Headers(['Bar' => ['Baz']])),
+        new HMsg('events.success', '1', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
         "HMSG events.success 1 local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
     ])]
     public function testEncode(Frame $frame, string $encoded): void

@@ -13,13 +13,12 @@ final class Msg implements Frame
      * @param non-empty-string $subject subject name this message was received on
      * @param non-empty-string $sid the unique alphanumeric subscription ID of the subject
      * @param ?non-empty-string $replyTo the subject on which the publisher is listening for responses
-     * @param ?string $payload the message payload data
      */
     public function __construct(
         public readonly string $subject,
         public readonly string $sid,
         public readonly ?string $replyTo = null,
-        public readonly ?string $payload = null,
+        public readonly Message $message = new Message(),
     ) {}
 
     public function encode(): string
@@ -30,8 +29,6 @@ final class Msg implements Frame
             $buffer .= " {$this->replyTo}";
         }
 
-        $length = \strlen($this->payload ?: '');
-
-        return "{$buffer} {$length}\r\n{$this->payload}\r\n";
+        return "{$buffer} {$this->message->encode()}";
     }
 }

@@ -62,7 +62,7 @@ final class ParserTest extends TestCase
             new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
-                payload: 'Hello, world',
+                message: new Message('Hello, world'),
             ),
         ],
     )]
@@ -82,7 +82,7 @@ final class ParserTest extends TestCase
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
-                payload: 'Hello, world',
+                message: new Message('Hello, world'),
             ),
         ],
     )]
@@ -96,7 +96,7 @@ final class ParserTest extends TestCase
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
-                payload: 'Hello, world',
+                message: new Message('Hello, world'),
             ),
         ],
     )]
@@ -107,7 +107,7 @@ final class ParserTest extends TestCase
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
-                payload: 'Hello, world',
+                message: new Message('Hello, world'),
             ),
         ],
     )]
@@ -118,10 +118,12 @@ final class ParserTest extends TestCase
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
-                payload: 'Hello World',
-                headers: new Headers([
-                    'FoodGroup' => ['vegetable'],
-                ]),
+                message: new Message(
+                    payload: 'Hello World',
+                    headers: new Headers([
+                        'FoodGroup' => ['vegetable'],
+                    ]),
+                ),
             ),
         ],
     )]
@@ -137,10 +139,12 @@ final class ParserTest extends TestCase
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
-                payload: 'Hello World',
-                headers: new Headers([
-                    'FoodGroup' => ['vegetable'],
-                ]),
+                message: new Message(
+                    payload: 'Hello World',
+                    headers: new Headers([
+                        'FoodGroup' => ['vegetable'],
+                    ]),
+                ),
             ),
         ],
     )]
@@ -159,25 +163,29 @@ final class ParserTest extends TestCase
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
-                    payload: 'Hello World',
-                    headers: new Headers([
-                        'FoodGroup' => ['vegetable'],
-                    ]),
+                    message: new Message(
+                        payload: 'Hello World',
+                        headers: new Headers([
+                            'FoodGroup' => ['vegetable'],
+                        ]),
+                    ),
                 ),
                 new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
-                    payload: 'Hello, world',
+                    message: new Message('Hello, world'),
                 ),
                 new HMsg(
                     subject: 'FOO.BAR',
                     sid: '9',
-                    payload: 'Hello World',
-                    headers: new Headers([
-                        'FoodGroup' => ['vegetable'],
-                        'X' => ['Y'],
-                    ]),
+                    message: new Message(
+                        payload: 'Hello World',
+                        headers: new Headers([
+                            'FoodGroup' => ['vegetable'],
+                            'X' => ['Y'],
+                        ]),
+                    ),
                 ),
             ],
         ],

@@ -90,7 +90,7 @@ final class Parser
             subject: $subject,
             sid: $sid,
             replyTo: $replyTo,
-            payload: $payload,
+            message: new Message($payload),
         );
     }
 
@@ -121,8 +121,7 @@ final class Parser
             subject: $subject,
             sid: $sid,
             replyTo: $replyTo,
-            payload: $payload,
-            headers: $headers,
+            message: new Message($payload, $headers),
         );
     }
 }
