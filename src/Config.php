@@ -33,7 +33,9 @@ final class Config
         public readonly bool $verbose = true,
         public readonly bool $pedantic = false,
         public readonly float $connectionTimeout = self::DEFAULT_CONNECTION_TIMEOUT,
+        #[\SensitiveParameter]
         public readonly ?string $user = null,
+        #[\SensitiveParameter]
         public readonly ?string $password = null,
         public readonly bool $tcpNoDelay = true,
     ) {
