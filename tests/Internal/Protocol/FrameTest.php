@@ -63,6 +63,14 @@ final class FrameTest extends TestCase
         "SUB events.* 1 local\r\n",
     ])]
     #[TestWith([
+        new Unsub('1'),
+        "UNSUB 1\r\n",
+    ])]
+    #[TestWith([
+        new Unsub('1', 5),
+        "UNSUB 1 5\r\n",
+    ])]
+    #[TestWith([
         new Pub('events.success'),
         "PUB events.success 0\r\n\r\n",
     ])]
