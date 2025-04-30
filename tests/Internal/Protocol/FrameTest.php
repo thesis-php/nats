@@ -115,19 +115,19 @@ final class FrameTest extends TestCase
         "MSG events.success 1 local 3\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1'),
+        new Msg('events.success', '1', message: new Message(headers: new Headers())),
         "HMSG events.success 1 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1', 'local'),
+        new Msg('events.success', '1', 'local', new Message(headers: new Headers())),
         "HMSG events.success 1 local 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1', 'local', new Message('abz', new Headers())),
+        new Msg('events.success', '1', 'local', new Message('abz', new Headers())),
         "HMSG events.success 1 local 12 15\r\nNATS/1.0\r\n\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HMsg('events.success', '1', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
+        new Msg('events.success', '1', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
         "HMSG events.success 1 local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
     ])]
     public function testEncode(Frame $frame, string $encoded): void

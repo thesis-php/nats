@@ -114,7 +114,7 @@ final class ParserTest extends TestCase
     #[TestWith(
         [
             "HMSG FOO.BAR 9 BAZ.69 34 45\r\nNATS/1.0\r\nFoodGroup: vegetable\r\n\r\nHello World\r\n",
-            new HMsg(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
@@ -135,7 +135,7 @@ final class ParserTest extends TestCase
                 "FoodGroup: vegetable\r\n\r\n",
                 "Hello World\r\n",
             ],
-            new HMsg(
+            new Msg(
                 subject: 'FOO.BAR',
                 sid: '9',
                 replyTo: 'BAZ.69',
@@ -159,7 +159,7 @@ final class ParserTest extends TestCase
                 "HMSG FOO.BAR 9 40 51\r\nNATS/1.0\r\nFoodGroup: vegetable\r\nX: Y\r\n\r\nHello World\r\n",
             ],
             [
-                new HMsg(
+                new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     replyTo: 'BAZ.69',
@@ -176,7 +176,7 @@ final class ParserTest extends TestCase
                     replyTo: 'BAZ.69',
                     message: new Message('Hello, world'),
                 ),
-                new HMsg(
+                new Msg(
                     subject: 'FOO.BAR',
                     sid: '9',
                     message: new Message(

@@ -95,7 +95,7 @@ final class Parser
     }
 
     /**
-     * @return \Generator<int, int|string, string, HMsg>
+     * @return \Generator<int, int|string, string, Msg>
      */
     private static function parseHMsg(string $payload): \Generator
     {
@@ -117,7 +117,7 @@ final class Parser
 
         yield self::CRLF;
 
-        return new HMsg(
+        return new Msg(
             subject: $subject,
             sid: $sid,
             replyTo: $replyTo,

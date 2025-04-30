@@ -23,7 +23,12 @@ final class Msg implements Frame
 
     public function encode(): string
     {
-        $buffer = "MSG {$this->subject} {$this->sid}";
+        $op = 'MSG';
+        if ($this->message->headers !== null) {
+            $op = 'HMSG';
+        }
+
+        $buffer = "{$op} {$this->subject} {$this->sid}";
 
         if ($this->replyTo !== null) {
             $buffer .= " {$this->replyTo}";
