@@ -30,7 +30,7 @@ final class Config
      */
     public function __construct(
         public readonly array $urls = [self::DEFAULT_URL],
-        public readonly bool $verbose = true,
+        public readonly bool $verbose = false,
         public readonly bool $pedantic = false,
         public readonly float $connectionTimeout = self::DEFAULT_CONNECTION_TIMEOUT,
         #[\SensitiveParameter]
@@ -76,7 +76,7 @@ final class Config
             $tcpNoDelay = filter_var($query['tcp_nodelay'], FILTER_VALIDATE_BOOL);
         }
 
-        $verbose = true;
+        $verbose = false;
         if (isset($query['verbose'])) {
             $verbose = filter_var($query['verbose'], FILTER_VALIDATE_BOOL);
         }
@@ -133,7 +133,7 @@ final class Config
     {
         return new self(
             urls: $options['urls'] ?? [self::DEFAULT_URL],
-            verbose: $options['verbose'] ?? true,
+            verbose: $options['verbose'] ?? false,
             pedantic: $options['pedantic'] ?? false,
             connectionTimeout: $options['connection_timeout'] ?? self::DEFAULT_CONNECTION_TIMEOUT,
             user: $options['user'] ?? null,
