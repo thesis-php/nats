@@ -48,13 +48,11 @@ final class FramerTest extends TestCase
         $socket
             ->expects(self::exactly(\count($responses)))
             ->method('read')
-            ->willReturnOnConsecutiveCalls(...$responses)
-        ;
+            ->willReturnOnConsecutiveCalls(...$responses);
 
         $socket
             ->expects(self::once())
-            ->method('close')
-        ;
+            ->method('close');
 
         $framer = new Framer($socket);
 
@@ -69,8 +67,7 @@ final class FramerTest extends TestCase
         $socket
             ->expects(self::once())
             ->method('write')
-            ->with("PONG\r\nSUB events.* 1\r\nPUB events.success 3\r\nabz\r\n")
-        ;
+            ->with("PONG\r\nSUB events.* 1\r\nPUB events.success 3\r\nabz\r\n");
 
         $framer = new Framer($socket);
 
