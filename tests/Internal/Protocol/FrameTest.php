@@ -83,19 +83,19 @@ final class FrameTest extends TestCase
         "PUB events.success local 3\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success'),
+        new Pub('events.success', message: new Message(headers: new Headers())),
         "HPUB events.success 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success', 'local'),
+        new Pub('events.success', 'local', message: new Message(headers: new Headers())),
         "HPUB events.success local 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success', 'local', new Message('abz', new Headers())),
+        new Pub('events.success', 'local', new Message('abz', new Headers())),
         "HPUB events.success local 12 15\r\nNATS/1.0\r\n\r\nabz\r\n",
     ])]
     #[TestWith([
-        new HPub('events.success', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
+        new Pub('events.success', 'local', new Message('abz', new Headers(['Bar' => ['Baz']]))),
         "HPUB events.success local 22 25\r\nNATS/1.0\r\nBar: Baz\r\n\r\nabz\r\n",
     ])]
     #[TestWith([

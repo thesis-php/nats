@@ -21,7 +21,12 @@ final class Pub implements Frame
 
     public function encode(): string
     {
-        $buffer = "PUB {$this->subject}";
+        $op = 'PUB';
+        if ($this->message->headers !== null) {
+            $op = 'HPUB';
+        }
+
+        $buffer = "{$op} {$this->subject}";
 
         if ($this->replyTo !== null) {
             $buffer .= " {$this->replyTo}";
