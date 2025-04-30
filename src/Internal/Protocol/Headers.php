@@ -21,6 +21,26 @@ final class Headers implements \IteratorAggregate
     ) {}
 
     /**
+     * @param array<non-empty-string, mixed> $keyvals
+     */
+    public static function fromArray(array $keyvals): self
+    {
+        $headers = [];
+
+        foreach ($keyvals as $key => $val) {
+            if (!\is_array($val)) {
+                $val = [$val];
+            } elseif (!array_is_list($val)) {
+                $val = array_values($val);
+            }
+
+            $headers[$key] = $val;
+        }
+
+        return new self($headers);
+    }
+
+    /**
      * @return self<string>
      * @throws \UnexpectedValueException
      * @throws \InvalidArgumentException
