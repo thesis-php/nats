@@ -11,13 +11,14 @@ namespace Thesis\Nats\Internal\Protocol;
  */
 final class Headers implements \IteratorAggregate
 {
-    private const PREFIX = "NATS/1.0\r\n";
+    private const PREFIX = "NATS/1.0";
 
     /**
      * @param array<non-empty-string, list<TValue>> $keyvals
      */
     public function __construct(
         public readonly array $keyvals = [],
+        public readonly ?int $status = null,
     ) {}
 
     /**
@@ -51,10 +52,12 @@ final class Headers implements \IteratorAggregate
             throw new \UnexpectedValueException(\sprintf('Invalid msg headers "%s" received: no leading prefix "%s".', $encoded, self::PREFIX));
         }
 
-        $encoded = substr($encoded, \strlen(self::PREFIX));
+        $lines = explode("\r\n", trim($encoded));
+        $status = self::parseStatus(array_shift($lines));
+
         $headers = [];
 
-        foreach (explode("\r\n", trim($encoded)) as $line) {
+        foreach ($lines as $line) {
             $keypair = explode(': ', $line);
             if (\count($keypair) !== 2) {
                 throw new \InvalidArgumentException(\sprintf('Invalid msg header line "%s" received.', $line));
@@ -67,7 +70,7 @@ final class Headers implements \IteratorAggregate
             }
         }
 
-        return new self($headers);
+        return new self($headers, $status);
     }
 
     /**
@@ -76,6 +79,11 @@ final class Headers implements \IteratorAggregate
     public function encode(): string
     {
         $buffer = self::PREFIX;
+        if ($this->status !== null) {
+            $buffer .= " {$this->status}";
+        }
+
+        $buffer .= "\r\n";
 
         foreach ($this->keyvals as $key => $vals) {
             foreach ($vals as $val) {
@@ -91,5 +99,15 @@ final class Headers implements \IteratorAggregate
     public function getIterator(): \Traversable
     {
         yield from $this->keyvals;
+    }
+
+    private static function parseStatus(string $line): ?int
+    {
+        $chunks = explode(' ', $line);
+        if (\count($chunks) === 2) {
+            return (int) $chunks[1];
+        }
+
+        return null;
     }
 }
