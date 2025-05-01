@@ -38,6 +38,7 @@ final class Config
         #[\SensitiveParameter]
         public readonly ?string $password = null,
         public readonly bool $tcpNoDelay = true,
+        public readonly bool $noResponders = false,
     ) {
         $this->version = Lib\version();
         $this->name = Lib\name;
@@ -86,6 +87,11 @@ final class Config
             $pedantic = filter_var($query['pedantic'], FILTER_VALIDATE_BOOL);
         }
 
+        $noResponders = false;
+        if (isset($query['no_responders'])) {
+            $noResponders = filter_var($query['no_responders'], FILTER_VALIDATE_BOOL);
+        }
+
         $port = self::DEFAULT_PORT;
         if (isset($components['port']) && $components['port'] > 0) {
             $port = $components['port'];
@@ -115,6 +121,7 @@ final class Config
             user: $user,
             password: $password,
             tcpNoDelay: $tcpNoDelay,
+            noResponders: $noResponders,
         );
     }
 
@@ -127,6 +134,7 @@ final class Config
      *     pedantic?: bool,
      *     connection_timeout?: positive-int,
      *     tcp_nodelay?: bool,
+     *     no_responders?: bool,
      * } $options
      */
     public static function fromArray(array $options): self
@@ -139,6 +147,7 @@ final class Config
             user: $options['user'] ?? null,
             password: $options['password'] ?? null,
             tcpNoDelay: $options['tcp_nodelay'] ?? true,
+            noResponders: $options['no_responders'] ?? false,
         );
     }
 }
