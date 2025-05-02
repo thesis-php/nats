@@ -22,12 +22,12 @@ final class Sub implements Frame
 
     public function encode(): string
     {
-        $buffer = "SUB {$this->subject} {$this->sid}";
+        $buffer = "SUB {$this->subject}";
 
         if ($this->queueGroup !== null) {
             $buffer .= " {$this->queueGroup}";
         }
 
-        return "{$buffer}\r\n";
+        return "{$buffer} {$this->sid}\r\n";
     }
 }

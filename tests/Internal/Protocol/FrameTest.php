@@ -60,7 +60,7 @@ final class FrameTest extends TestCase
     ])]
     #[TestWith([
         new Sub('events.*', '1', 'local'),
-        "SUB events.* 1 local\r\n",
+        "SUB events.* local 1\r\n",
     ])]
     #[TestWith([
         new Unsub('1'),
