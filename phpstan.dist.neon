@@ -3,6 +3,7 @@ parameters:
     paths:
         - src
         - tests
+        - examples
     checkBenevolentUnionTypes: true
     # ignoreErrors:
     #     -
@@ -10,3 +11,5 @@ parameters:
     editorUrl: '=>'
     editorUrlTitle: '%%file%%:%%line%%'
     tmpDir: ./var/phpstan
+    stubFiles:
+        - stubs/amphp.phpstub

@@ -10,7 +10,7 @@ use Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class SocketWriter
+final class Writer
 {
     /** @var Protocol\Frame[] */
     private array $frames = [];

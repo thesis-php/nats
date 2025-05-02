@@ -11,7 +11,7 @@ namespace Thesis\Nats\Internal\Protocol;
  */
 final class Headers implements \IteratorAggregate
 {
-    private const PREFIX = "NATS/1.0";
+    private const PREFIX = 'NATS/1.0';
 
     /**
      * @param array<non-empty-string, list<TValue>> $keyvals

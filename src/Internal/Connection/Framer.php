@@ -13,18 +13,17 @@ use Thesis\Nats\Internal\Protocol;
 
 /**
  * @internal
- * @template-implements \IteratorAggregate<array-key, Protocol\Frame>
  */
-final class Framer implements \IteratorAggregate
+final class Framer
 {
-    private readonly SocketWriter $writer;
+    private readonly Writer $writer;
 
     /** @var ConcurrentIterator<Protocol\Frame> */
     private readonly ConcurrentIterator $iterator;
 
     public function __construct(Socket $socket)
     {
-        $this->writer = new SocketWriter($socket);
+        $this->writer = new Writer($socket);
 
         /** @var Queue<Protocol\Frame> $queue */
         $queue = new Queue();
@@ -66,10 +65,5 @@ final class Framer implements \IteratorAggregate
 
         $this->writer->write([...$frames]);
         $this->writer->flush();
-    }
-
-    public function getIterator(): \Traversable
-    {
-        return $this->iterator->getIterator();
     }
 }
