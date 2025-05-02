@@ -24,7 +24,7 @@ final class SocketConnection implements Connection
 
     private readonly Hooks\Provider $hooks;
 
-    private readonly ConnectionInfo $info;
+    private ?ConnectionInfo $info = null;
 
     private bool $running = false;
 
@@ -34,7 +34,6 @@ final class SocketConnection implements Connection
     ) {
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\Provider();
-        $this->info = new ConnectionInfo();
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
@@ -54,11 +53,11 @@ final class SocketConnection implements Connection
             );
         }
 
-        $this->info->tune($frame);
-
         if (!$this->running) {
             $this->run();
         }
+
+        $this->info ??= ConnectionInfo::fromServerInfo($frame);
 
         $this->execute(new Protocol\Connect(
             verbose: $this->config->verbose,
@@ -69,7 +68,7 @@ final class SocketConnection implements Connection
             user: $this->config->user,
             pass: $this->config->password,
             noResponders: $this->config->noResponders,
-            headers: $this->info->allowHeaders(),
+            headers: $this->info->allowHeaders,
         ));
     }
 
@@ -102,7 +101,7 @@ final class SocketConnection implements Connection
 
     public function info(): ConnectionInfo
     {
-        return $this->info;
+        return $this->info ?: throw new ConnectionIsNotAvailable();
     }
 
     public function close(): void

@@ -11,23 +11,21 @@ use Thesis\Nats\Internal\Protocol\ServerInfo;
  */
 final class ConnectionInfo
 {
-    private bool $headers = false;
-
-    private bool $jetstream = false;
-
-    public function tune(ServerInfo $info): void
+    public static function fromServerInfo(ServerInfo $info): self
     {
-        $this->headers = $info->headers;
-        $this->jetstream = $info->jetstream ?: false;
+        return new self(
+            serverVersion: $info->version,
+            allowHeaders: $info->headers,
+            supportJetstream: $info->jetstream ?: false,
+        );
     }
 
-    public function allowHeaders(): bool
-    {
-        return $this->headers;
-    }
-
-    public function supportJetstream(): bool
-    {
-        return $this->jetstream;
-    }
+    /**
+     * @param non-empty-string $serverVersion
+     */
+    public function __construct(
+        public readonly string $serverVersion,
+        public readonly bool $allowHeaders = false,
+        public readonly bool $supportJetstream = false,
+    ) {}
 }

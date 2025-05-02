@@ -61,7 +61,12 @@ final class Client
         Message $message = new Message(),
         ?string $replyTo = null,
     ): void {
-        $this->connection()->execute(Internal\Command::pub($subject, $message, $replyTo));
+        $connection = $this->connection();
+        if (\count($message->headers) > 0 && !$connection->info()->allowHeaders) {
+            throw Exception\FeatureIsNotSupported::forHeaders($connection->info()->serverVersion);
+        }
+
+        $connection->execute(Internal\Command::pub($subject, $message, $replyTo));
     }
 
     /**
