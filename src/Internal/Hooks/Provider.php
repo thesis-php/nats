@@ -7,27 +7,29 @@ namespace Thesis\Nats\Internal\Hooks;
 /**
  * @internal
  * @phpstan-type OnMessageCallback = callable(MessageReceived): void
+ * @phpstan-type OnCloseCallback = callable(): void
+ * @phpstan-type OnPingCallback = callable(): void
+ * @phpstan-type OnPongCallback = callable(): void
  */
-final class Provider
+interface Provider
 {
-    /** @var list<OnMessageCallback> */
-    private array $messageCallbacks = [];
-
     /**
      * @param OnMessageCallback $callback
      */
-    public function onMessage(callable $callback): void
-    {
-        $this->messageCallbacks[] = $callback;
-    }
+    public function onMessage(callable $callback): void;
 
-    public function dispatch(MessageReceived $event): void
-    {
-        /** @phpstan-ignore instanceof.alwaysTrue */
-        if ($event instanceof MessageReceived) {
-            foreach ($this->messageCallbacks as $messageCallback) {
-                $messageCallback($event);
-            }
-        }
-    }
+    /**
+     * @param OnPingCallback $callback
+     */
+    public function onPing(callable $callback): void;
+
+    /**
+     * @param OnPongCallback $callback
+     */
+    public function onPong(callable $callback): void;
+
+    /**
+     * @param OnCloseCallback $callback
+     */
+    public function onClose(callable $callback): void;
 }
