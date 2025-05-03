@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Connection;
 
 use Thesis\Nats\Internal\Hooks;
-use Thesis\Nats\Internal\Protocol\Frame;
+use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\NatsException;
 
 /**
@@ -16,7 +16,7 @@ interface Connection
     /**
      * @throws NatsException
      */
-    public function execute(Frame $frame): void;
+    public function execute(Protocol\Frame $frame): void;
 
     public function hooks(): Hooks\Provider;
 

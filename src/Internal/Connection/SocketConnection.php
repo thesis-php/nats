@@ -22,7 +22,9 @@ final class SocketConnection implements Connection
     /** @var \SplQueue<DeferredFuture<Protocol\Frame>> */
     private readonly \SplQueue $queue;
 
-    private readonly Hooks\Provider $hooks;
+    private readonly Hooks\BlockingProvider $hooks;
+
+    private PingPongHandler $pingpongs;
 
     private ?ConnectionInfo $info = null;
 
@@ -33,7 +35,8 @@ final class SocketConnection implements Connection
         private readonly Socket $socket,
     ) {
         $this->framer = new Framer($this->socket);
-        $this->hooks = new Hooks\Provider();
+        $this->hooks = new Hooks\BlockingProvider();
+        $this->pingpongs = new PingPongHandler($this);
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
@@ -70,6 +73,10 @@ final class SocketConnection implements Connection
             noResponders: $this->config->noResponders,
             headers: $this->info->allowHeaders,
         ));
+
+        if (($interval = $this->config->ping) !== null) {
+            $this->pingpongs->startup($interval, $this->config->maxPings);
+        }
     }
 
     public function execute(Protocol\Frame $frame): void
@@ -106,6 +113,8 @@ final class SocketConnection implements Connection
 
     public function close(): void
     {
+        $this->hooks->dispatch(Hooks\ConnectionClosed::Event);
+
         $this->running = false;
         $this->socket->close();
     }
@@ -121,19 +130,24 @@ final class SocketConnection implements Connection
             while ($running) {
                 try {
                     while (($frame = $framer->readFrame()) !== null) {
-                        if (!$queue->isEmpty()) {
-                            $deferred = $queue->shift();
-                            $deferred->complete($frame);
-                        }
-
-                        if ($frame instanceof Protocol\Msg) {
-                            $hooks->dispatch(new Hooks\MessageReceived(
+                        $event = match (true) {
+                            $frame instanceof Protocol\Ping => Hooks\PingReceived::Event,
+                            $frame instanceof Protocol\Pong => Hooks\PongReceived::Event,
+                            $frame instanceof Protocol\Msg => new Hooks\MessageReceived(
                                 subject: $frame->subject,
                                 sid: $frame->sid,
                                 replyTo: $frame->replyTo,
                                 payload: $frame->message->payload,
                                 headers: $frame->message->headers,
-                            ));
+                            ),
+                            default => null,
+                        };
+
+                        if ($event !== null) {
+                            $hooks->dispatch($event);
+                        } elseif (!$queue->isEmpty()) {
+                            $deferred = $queue->shift();
+                            $deferred->complete($frame);
                         }
                     }
                 } catch (\Throwable $e) {
