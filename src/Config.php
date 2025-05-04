@@ -31,6 +31,7 @@ final class Config
      * @param ?non-empty-string $password
      * @param ?positive-int $ping in milliseconds
      * @param positive-int $maxPings the maximum number of pings that we have not received a response to, after which the connection to the server will be closed
+     * @param ?non-empty-string $jetStreamDomain
      */
     public function __construct(
         public readonly array $urls = [self::DEFAULT_URL],
@@ -45,6 +46,7 @@ final class Config
         public readonly bool $noResponders = false,
         public readonly ?int $ping = self::DEFAULT_PING_INTERVAL,
         public readonly int $maxPings = self::DEFAULT_MAX_PINGS,
+        public readonly ?string $jetStreamDomain = null,
     ) {
         $this->version = Lib\version();
         $this->name = Lib\name;
@@ -113,6 +115,11 @@ final class Config
             $maxPings = (int) $query['max_pings'];
         }
 
+        $jetStreamDomain = null;
+        if (isset($query['jetstream_domain']) && \is_string($query['jetstream_domain']) && $query['jetstream_domain'] !== '') {
+            $jetStreamDomain = $query['jetstream_domain'];
+        }
+
         $port = self::DEFAULT_PORT;
         if (isset($components['port']) && $components['port'] > 0) {
             $port = $components['port'];
@@ -145,6 +152,7 @@ final class Config
             noResponders: $noResponders,
             ping: $ping,
             maxPings: $maxPings,
+            jetStreamDomain: $jetStreamDomain,
         );
     }
 
@@ -160,6 +168,7 @@ final class Config
      *     no_responders?: bool,
      *     ping?: positive-int,
      *     max_pings?: positive-int,
+     *     jetstream_domain?: non-empty-string,
      * } $options
      */
     public static function fromArray(array $options): self
@@ -175,6 +184,7 @@ final class Config
             noResponders: $options['no_responders'] ?? false,
             ping: $options['ping'] ?? self::DEFAULT_PING_INTERVAL,
             maxPings: $options['max_pings'] ?? self::DEFAULT_MAX_PINGS,
+            jetStreamDomain: $options['jetstream_domain'] ?? null,
         );
     }
 }

@@ -24,6 +24,7 @@
         "amphp/parser": "^1.1",
         "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.3",
+        "cuyz/valinor": "^1.15",
         "revolt/event-loop": "^1.0"
     },
     "require-dev": {

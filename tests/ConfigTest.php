@@ -129,6 +129,27 @@ final class ConfigTest extends TestCase
             ),
         ],
     )]
+    #[TestWith(
+        [
+            'tcp://admin:secret@127.0.0.1:4222,127.0.0.1:4223?verbose=false&pedantic=true&connection_timeout=5&tcp_nodelay=false&no_responders=true&ping=2000&max_pings=10&jetstream_domain=local',
+            new Config(
+                urls: [
+                    '127.0.0.1:4222',
+                    '127.0.0.1:4223',
+                ],
+                verbose: false,
+                pedantic: true,
+                connectionTimeout: 5,
+                user: 'admin',
+                password: 'secret',
+                tcpNoDelay: false,
+                noResponders: true,
+                ping: 2000,
+                maxPings: 10,
+                jetStreamDomain: 'local',
+            ),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));

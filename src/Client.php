@@ -9,6 +9,8 @@ use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Rpc;
+use Thesis\Nats\Serialization\Serializer;
+use Thesis\Nats\Serialization\ValinorSerializer;
 use function Amp\async;
 
 /**
@@ -33,9 +35,9 @@ final class Client
 
     public function __construct(
         private readonly Config $config,
-        ?Connection\ConnectionFactory $connectionFactory = null,
+        private readonly Serializer $serializer = new ValinorSerializer(),
     ) {
-        $this->connectionFactory = $connectionFactory ?: Connection\SocketConnectionFactory::fromConfig($this->config);
+        $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
     }
 
     /**
@@ -50,6 +52,20 @@ final class Client
     public static function default(): self
     {
         return new self(Config::default());
+    }
+
+    /**
+     * @param ?non-empty-string $domain
+     */
+    public function jetStream(?string $domain = null): JetStream
+    {
+        $info = $this->connection()->info();
+
+        if (!$info->supportJetstream) {
+            throw Exception\FeatureIsNotSupported::forJetStream($info->serverVersion);
+        }
+
+        return new JetStream($this, $this->serializer, $domain ?: $this->config->jetStreamDomain);
     }
 
     /**

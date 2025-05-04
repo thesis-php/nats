@@ -18,4 +18,12 @@ final class FeatureIsNotSupported extends \RuntimeException implements NatsExcep
     {
         return new self("Headers is not supported by this Nats version '{$serverVersion}'.");
     }
+
+    /**
+     * @param non-empty-string $serverVersion
+     */
+    public static function forJetStream(string $serverVersion): self
+    {
+        return new self("JetStream is not supported by this Nats version '{$serverVersion}'.");
+    }
 }
