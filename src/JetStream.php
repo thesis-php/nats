@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Result\Result;
 use Thesis\Nats\Serialization\Serializer;
@@ -41,10 +42,25 @@ final class JetStream
         return $this->request(new Api\CreateStreamRequest($config));
     }
 
+    public function updateStream(Api\StreamConfig $config): Api\StreamInfo
+    {
+        return $this->request(new Api\UpdateStreamRequest($config));
+    }
+
+    public function createOrUpdateStream(Api\StreamConfig $config): Api\StreamInfo
+    {
+        try {
+            return $this->updateStream($config);
+        } catch (StreamNotFound) {
+            return $this->createStream($config);
+        }
+    }
+
     /**
      * @template T
      * @param Api\Request<T> $request
      * @return T
+     * @throws NatsException
      */
     private function request(Api\Request $request): mixed
     {

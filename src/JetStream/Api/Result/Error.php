@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api\Result;
 
+use Thesis\Nats\Exception\StreamNotFound;
+
 /**
  * @internal
  */
 final readonly class Error
 {
+    private const int STREAM_NOT_FOUND = 10059;
+
     public function __construct(
         public int $code,
         public int $errCode,
@@ -17,6 +21,9 @@ final readonly class Error
 
     public function throw(): never
     {
-        throw new \RuntimeException("Nats error {$this->description}({$this->code}) received.");
+        throw match ($this->errCode) {
+            self::STREAM_NOT_FOUND => new StreamNotFound($this->description),
+            default => new \RuntimeException("Nats error {$this->description}({$this->code}) received."),
+        };
     }
 }
