@@ -9,17 +9,17 @@ use Amp\Parser\Parser as ProtocolParser;
 /**
  * @internal
  */
-final class Parser
+final readonly class Parser
 {
-    private const CRLF = "\r\n";
-    private const OP_OK = '+';
-    private const OP_ERR = '-';
-    private const OP_INFO = 'I';
-    private const OP_PING_PONG = 'P';
-    private const OP_MSG = 'M';
-    private const OP_HMSG = 'H';
+    private const string CRLF = "\r\n";
+    private const string OP_OK = '+';
+    private const string OP_ERR = '-';
+    private const string OP_INFO = 'I';
+    private const string OP_PING_PONG = 'P';
+    private const string OP_MSG = 'M';
+    private const string OP_HMSG = 'H';
 
-    private readonly ProtocolParser $parser;
+    private ProtocolParser $parser;
 
     /**
      * @param \Closure(Frame): void $push

@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class ServerInfo implements Frame, \JsonSerializable
+final readonly class ServerInfo implements Frame, \JsonSerializable
 {
     /**
      * @param non-empty-string $json
@@ -89,30 +89,30 @@ final class ServerInfo implements Frame, \JsonSerializable
      * @param ?string $domain the configured NATS domain of the server
      */
     public function __construct(
-        public readonly string $serverId,
-        public readonly string $serverName,
-        public readonly string $version,
-        public readonly string $go,
-        public readonly string $host,
-        public readonly int $port,
-        public readonly bool $headers,
-        public readonly int $maxPayload,
-        public readonly int $proto,
-        public readonly ?int $clientId = null,
-        public readonly ?bool $authRequired = null,
-        public readonly ?bool $tlsRequired = null,
-        public readonly ?bool $tlsVerify = null,
-        public readonly ?bool $tlsAvailable = null,
-        public readonly ?array $connectUrls = null,
-        public readonly ?array $wsConnectUrls = null,
-        public readonly ?bool $ldm = null,
-        public readonly ?string $gitCommit = null,
-        public readonly ?bool $jetstream = null,
-        public readonly ?string $ip = null,
-        public readonly ?string $clientIp = null,
-        public readonly ?string $nonce = null,
-        public readonly ?string $cluster = null,
-        public readonly ?string $domain = null,
+        public string $serverId,
+        public string $serverName,
+        public string $version,
+        public string $go,
+        public string $host,
+        public int $port,
+        public bool $headers,
+        public int $maxPayload,
+        public int $proto,
+        public ?int $clientId = null,
+        public ?bool $authRequired = null,
+        public ?bool $tlsRequired = null,
+        public ?bool $tlsVerify = null,
+        public ?bool $tlsAvailable = null,
+        public ?array $connectUrls = null,
+        public ?array $wsConnectUrls = null,
+        public ?bool $ldm = null,
+        public ?string $gitCommit = null,
+        public ?bool $jetstream = null,
+        public ?string $ip = null,
+        public ?string $clientIp = null,
+        public ?string $nonce = null,
+        public ?string $cluster = null,
+        public ?string $domain = null,
     ) {}
 
     public function encode(): string

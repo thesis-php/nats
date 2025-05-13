@@ -38,7 +38,6 @@
             "Thesis\\Nats\\": "src/"
         },
         "files": [
-            "src/Internal/Lib/lib.php",
             "src/Internal/Id/generateInboxId.php",
             "src/Internal/Id/generateSubscriptionId.php",
             "src/Internal/Id/generateUniqueId.php"
@@ -70,6 +69,7 @@
     "scripts": {
         "check": [
             "@composer fixcs -- --dry-run",
+            "@composer rector -- --dry-run",
             "@phpstan",
             "@composer validate",
             "@composer normalize --dry-run",
@@ -83,6 +83,7 @@
         "infection": "tools/infection/vendor/bin/infection --show-mutations",
         "phpstan": "tools/phpstan/vendor/bin/phpstan analyze",
         "pre-command-run": "mkdir -p var",
+        "rector": "tools/rector/vendor/bin/rector process",
         "test": "phpunit"
     }
 }

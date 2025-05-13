@@ -7,7 +7,7 @@ namespace Thesis\Nats\JetStream;
 /**
  * @api
  */
-final class AccountLimits
+final readonly class AccountLimits
 {
     /**
      * @param int $maxMemory is the maximum amount of memory available for this account
@@ -16,9 +16,9 @@ final class AccountLimits
      * @param int $maxConsumers is the maximum number of consumers allowed for this account
      */
     public function __construct(
-        public readonly int $maxMemory,
-        public readonly int $maxStorage,
-        public readonly int $maxStreams,
-        public readonly int $maxConsumers,
+        public int $maxMemory,
+        public int $maxStorage,
+        public int $maxStreams,
+        public int $maxConsumers,
     ) {}
 }

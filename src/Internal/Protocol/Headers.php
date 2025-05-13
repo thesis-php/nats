@@ -9,16 +9,16 @@ namespace Thesis\Nats\Internal\Protocol;
  * @template TValue = mixed
  * @template-implements \IteratorAggregate<non-empty-string, list<TValue>>
  */
-final class Headers implements \IteratorAggregate
+final readonly class Headers implements \IteratorAggregate
 {
-    private const PREFIX = 'NATS/1.0';
+    private const string PREFIX = 'NATS/1.0';
 
     /**
      * @param array<non-empty-string, list<TValue>> $keyvals
      */
     public function __construct(
-        public readonly array $keyvals = [],
-        public readonly ?int $status = null,
+        public array $keyvals = [],
+        public ?int $status = null,
     ) {}
 
     /**

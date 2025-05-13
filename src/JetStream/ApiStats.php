@@ -7,7 +7,7 @@ namespace Thesis\Nats\JetStream;
 /**
  * @api
  */
-final class ApiStats
+final readonly class ApiStats
 {
     /**
      * @param int $level is the API level for this account
@@ -16,9 +16,9 @@ final class ApiStats
      * @param non-negative-int $inflight is the number of API calls currently in flight
      */
     public function __construct(
-        public readonly int $level,
-        public readonly int $total,
-        public readonly int $errors,
-        public readonly int $inflight = 0,
+        public int $level,
+        public int $total,
+        public int $errors,
+        public int $inflight = 0,
     ) {}
 }

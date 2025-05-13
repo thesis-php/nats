@@ -4,25 +4,20 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Thesis\Nats\Internal\Lib;
-
 /**
  * @api
  */
-final class Config
+final readonly class Config
 {
-    private const DEFAULT_URL = '127.0.0.1:4222';
-    private const DEFAULT_HOST = '127.0.0.1';
-    private const DEFAULT_PORT = 4222;
-    private const DEFAULT_CONNECTION_TIMEOUT = 10;
-    private const DEFAULT_PING_INTERVAL = 10000;
-    private const DEFAULT_MAX_PINGS = 5;
+    private const string DEFAULT_URL = '127.0.0.1:4222';
+    private const string DEFAULT_HOST = '127.0.0.1';
+    private const int DEFAULT_PORT = 4222;
+    private const int DEFAULT_CONNECTION_TIMEOUT = 10;
+    private const int DEFAULT_PING_INTERVAL = 10000;
+    private const int DEFAULT_MAX_PINGS = 5;
 
     /** @var non-empty-string */
-    public readonly string $version;
-
-    /** @var non-empty-string */
-    public readonly string $name;
+    public string $version;
 
     /**
      * @param non-empty-list<non-empty-string> $urls
@@ -34,22 +29,21 @@ final class Config
      * @param ?non-empty-string $jetStreamDomain
      */
     public function __construct(
-        public readonly array $urls = [self::DEFAULT_URL],
-        public readonly bool $verbose = false,
-        public readonly bool $pedantic = false,
-        public readonly float $connectionTimeout = self::DEFAULT_CONNECTION_TIMEOUT,
+        public array $urls = [self::DEFAULT_URL],
+        public bool $verbose = false,
+        public bool $pedantic = false,
+        public float $connectionTimeout = self::DEFAULT_CONNECTION_TIMEOUT,
         #[\SensitiveParameter]
-        public readonly ?string $user = null,
+        public ?string $user = null,
         #[\SensitiveParameter]
-        public readonly ?string $password = null,
-        public readonly bool $tcpNoDelay = true,
-        public readonly bool $noResponders = false,
-        public readonly ?int $ping = self::DEFAULT_PING_INTERVAL,
-        public readonly int $maxPings = self::DEFAULT_MAX_PINGS,
-        public readonly ?string $jetStreamDomain = null,
+        public ?string $password = null,
+        public bool $tcpNoDelay = true,
+        public bool $noResponders = false,
+        public ?int $ping = self::DEFAULT_PING_INTERVAL,
+        public int $maxPings = self::DEFAULT_MAX_PINGS,
+        public ?string $jetStreamDomain = null,
     ) {
-        $this->version = Lib\version();
-        $this->name = Lib\name;
+        $this->version = '0.1.x'; // TODO: replace with actual version.
     }
 
     public static function default(): self

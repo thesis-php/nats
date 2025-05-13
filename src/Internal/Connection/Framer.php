@@ -14,12 +14,12 @@ use Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Framer
+final readonly class Framer
 {
-    private readonly Writer $writer;
+    private Writer $writer;
 
     /** @var ConcurrentIterator<Protocol\Frame> */
-    private readonly ConcurrentIterator $iterator;
+    private ConcurrentIterator $iterator;
 
     public function __construct(Socket $socket)
     {

@@ -7,15 +7,15 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Unsub implements Frame
+final readonly class Unsub implements Frame
 {
     /**
      * @param non-empty-string $sid
      * @param ?positive-int $maxMessages
      */
     public function __construct(
-        private readonly string $sid,
-        public readonly ?int $maxMessages = null,
+        private string $sid,
+        public ?int $maxMessages = null,
     ) {}
 
     public function encode(): string

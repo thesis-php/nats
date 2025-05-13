@@ -8,7 +8,7 @@ namespace Thesis\Nats\JetStream;
  * @api
  * @TODO flatten Tier?
  */
-final class AccountInfo
+final readonly class AccountInfo
 {
     /**
      * @param int $memory is the memory storage being used for Stream Message storage
@@ -20,15 +20,15 @@ final class AccountInfo
      * @param array<non-empty-string, Tier> $tiers
      */
     public function __construct(
-        public readonly int $memory,
-        public readonly int $storage,
-        public readonly int $reservedMemory,
-        public readonly int $reservedStorage,
-        public readonly int $streams,
-        public readonly int $consumers,
-        public readonly AccountLimits $limits,
-        public readonly ApiStats $api,
-        public readonly ?string $domain = null,
-        public readonly array $tiers = [],
+        public int $memory,
+        public int $storage,
+        public int $reservedMemory,
+        public int $reservedStorage,
+        public int $streams,
+        public int $consumers,
+        public AccountLimits $limits,
+        public ApiStats $api,
+        public ?string $domain = null,
+        public array $tiers = [],
     ) {}
 }

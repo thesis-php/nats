@@ -24,7 +24,7 @@ final class SocketConnection implements Connection
 
     private readonly Hooks\BlockingProvider $hooks;
 
-    private PingPongHandler $pingpongs;
+    private readonly PingPongHandler $pingpongs;
 
     private ?ConnectionInfo $info = null;
 
@@ -66,7 +66,7 @@ final class SocketConnection implements Connection
             verbose: $this->config->verbose,
             pedantic: $this->config->pedantic,
             tlsRequired: false,
-            name: $this->config->name,
+            name: 'thesis/nats',
             version: $this->config->version,
             user: $this->config->user,
             pass: $this->config->password,

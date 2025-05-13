@@ -9,7 +9,7 @@ use Thesis\Nats\Internal\Protocol\Headers;
 /**
  * @internal
  */
-final class MessageReceived
+final readonly class MessageReceived
 {
     /**
      * @param non-empty-string $subject
@@ -17,10 +17,10 @@ final class MessageReceived
      * @param ?Headers<string> $headers
      */
     public function __construct(
-        public readonly string $subject,
-        public readonly string $sid,
-        public readonly ?string $replyTo = null,
-        public readonly ?string $payload = null,
-        public readonly ?Headers $headers = null,
+        public string $subject,
+        public string $sid,
+        public ?string $replyTo = null,
+        public ?string $payload = null,
+        public ?Headers $headers = null,
     ) {}
 }

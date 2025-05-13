@@ -13,11 +13,11 @@ use function Amp\Socket\connect;
 /**
  * @internal
  */
-final class SocketConnectionFactory implements ConnectionFactory
+final readonly class SocketConnectionFactory implements ConnectionFactory
 {
     private function __construct(
-        private readonly Config $config,
-        private readonly ConnectContext $context,
+        private Config $config,
+        private ConnectContext $context,
     ) {}
 
     public static function fromConfig(Config $config): self

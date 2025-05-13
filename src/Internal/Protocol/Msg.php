@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Msg implements Frame
+final readonly class Msg implements Frame
 {
     /**
      * @param non-empty-string $subject subject name this message was received on
@@ -15,10 +15,10 @@ final class Msg implements Frame
      * @param ?non-empty-string $replyTo the subject on which the publisher is listening for responses
      */
     public function __construct(
-        public readonly string $subject,
-        public readonly string $sid,
-        public readonly ?string $replyTo = null,
-        public readonly Message $message = new Message(),
+        public string $subject,
+        public string $sid,
+        public ?string $replyTo = null,
+        public Message $message = new Message(),
     ) {}
 
     public function encode(): string

@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Connect implements Frame, \JsonSerializable
+final readonly class Connect implements Frame, \JsonSerializable
 {
     /**
      * @param bool $verbose turns on +OK protocol acknowledgements
@@ -28,22 +28,22 @@ final class Connect implements Frame, \JsonSerializable
      * @param ?string $nkey the public NKey to authenticate the client. This will be used to verify the signature (sig) against the nonce provided in the INFO message
      */
     public function __construct(
-        public readonly bool $verbose,
-        public readonly bool $pedantic,
-        public readonly bool $tlsRequired,
-        public readonly string $name,
-        public readonly string $version,
-        public readonly string $lang = 'php',
-        public readonly ?string $authToken = null,
-        public readonly ?string $user = null,
-        public readonly ?string $pass = null,
-        public readonly ?Proto $protocol = null,
-        public readonly ?bool $echo = null,
-        public readonly ?string $sig = null,
-        public readonly ?string $jwt = null,
-        public readonly ?bool $noResponders = null,
-        public readonly bool $headers = true,
-        public readonly ?string $nkey = null,
+        public bool $verbose,
+        public bool $pedantic,
+        public bool $tlsRequired,
+        public string $name,
+        public string $version,
+        public string $lang = 'php',
+        public ?string $authToken = null,
+        public ?string $user = null,
+        public ?string $pass = null,
+        public ?Proto $protocol = null,
+        public ?bool $echo = null,
+        public ?string $sig = null,
+        public ?string $jwt = null,
+        public ?bool $noResponders = null,
+        public bool $headers = true,
+        public ?string $nkey = null,
     ) {}
 
     public function encode(): string

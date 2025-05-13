@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Sub implements Frame
+final readonly class Sub implements Frame
 {
     /**
      * @param non-empty-string $subject the subject name to subscribe to
@@ -15,9 +15,9 @@ final class Sub implements Frame
      * @param ?non-empty-string $queueGroup if specified, the subscriber will join this queue group
      */
     public function __construct(
-        public readonly string $subject,
-        public readonly string $sid,
-        public readonly ?string $queueGroup = null,
+        public string $subject,
+        public string $sid,
+        public ?string $queueGroup = null,
     ) {}
 
     public function encode(): string

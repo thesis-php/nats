@@ -13,9 +13,9 @@ use CuyZ\Valinor\MapperBuilder;
 /**
  * @api
  */
-final class ValinorSerializer implements Serializer
+final readonly class ValinorSerializer implements Serializer
 {
-    private readonly TreeMapper $mapper;
+    private TreeMapper $mapper;
 
     /**
      * @param ?non-empty-string $cachePath

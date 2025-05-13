@@ -7,15 +7,15 @@ namespace Thesis\Nats\Internal\Protocol;
 /**
  * @internal
  */
-final class Message implements Frame
+final readonly class Message implements Frame
 {
     /**
      * @param ?string $payload the message payload data
      * @param ?Headers $headers header version NATS/1.0␍␊ followed by one or more name: value pairs
      */
     public function __construct(
-        public readonly ?string $payload = null,
-        public readonly ?Headers $headers = null,
+        public ?string $payload = null,
+        public ?Headers $headers = null,
     ) {}
 
     public function encode(): string

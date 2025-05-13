@@ -7,7 +7,7 @@ namespace Thesis\Nats\JetStream;
 /**
  * @api
  */
-final class Tier
+final readonly class Tier
 {
     /**
      * @param int $memory is the memory storage being used for Stream Message storage
@@ -18,12 +18,12 @@ final class Tier
      * @param int $consumers is the number of consumers currently defined for this account
      */
     public function __construct(
-        public readonly int $memory,
-        public readonly int $storage,
-        public readonly int $reservedMemory,
-        public readonly int $reservedStorage,
-        public readonly int $streams,
-        public readonly int $consumers,
-        public readonly AccountLimits $limits,
+        public int $memory,
+        public int $storage,
+        public int $reservedMemory,
+        public int $reservedStorage,
+        public int $streams,
+        public int $consumers,
+        public AccountLimits $limits,
     ) {}
 }

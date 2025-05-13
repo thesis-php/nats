@@ -9,7 +9,7 @@ use Thesis\Nats\Internal\Id;
 /**
  * @internal
  */
-final class ReplyTo
+final readonly class ReplyTo
 {
     /**
      * @param non-empty-string $channel
@@ -44,7 +44,7 @@ final class ReplyTo
      * @param non-empty-string $token
      */
     private function __construct(
-        public readonly string $subject,
-        public readonly string $token,
+        public string $subject,
+        public string $token,
     ) {}
 }

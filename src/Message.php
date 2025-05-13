@@ -7,14 +7,14 @@ namespace Thesis\Nats;
 /**
  * @api
  */
-final class Message
+final readonly class Message
 {
     /**
      * @param array<non-empty-string, mixed> $headers
      */
     public function __construct(
-        public readonly ?string $payload = null,
-        public readonly array $headers = [],
-        public readonly ?Status $status = null,
+        public ?string $payload = null,
+        public array $headers = [],
+        public ?Status $status = null,
     ) {}
 }

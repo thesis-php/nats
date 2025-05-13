@@ -9,10 +9,10 @@ use Thesis\Nats\Exception;
 /**
  * @internal
  */
-final class Err implements Frame
+final readonly class Err implements Frame
 {
     /** @var non-empty-string */
-    public readonly string $message;
+    public string $message;
 
     /**
      * @param non-empty-string $message

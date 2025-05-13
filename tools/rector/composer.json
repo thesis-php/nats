@@ -1,0 +1,12 @@
+{
+  "require-dev": {
+    "rector/rector": "^2.0.15"
+  },
+  "config": {
+    "bump-after-update": "dev",
+    "platform": {
+      "php": "8.3.17"
+    },
+    "sort-packages": true
+  }
+}

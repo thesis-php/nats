@@ -9,7 +9,7 @@ use Thesis\Nats\Internal\Protocol\ServerInfo;
 /**
  * @internal
  */
-final class ConnectionInfo
+final readonly class ConnectionInfo
 {
     public static function fromServerInfo(ServerInfo $info): self
     {
@@ -24,8 +24,8 @@ final class ConnectionInfo
      * @param non-empty-string $serverVersion
      */
     public function __construct(
-        public readonly string $serverVersion,
-        public readonly bool $allowHeaders = false,
-        public readonly bool $supportJetstream = false,
+        public string $serverVersion,
+        public bool $allowHeaders = false,
+        public bool $supportJetstream = false,
     ) {}
 }
