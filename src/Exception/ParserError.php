@@ -9,7 +9,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class ParserError extends \RuntimeException implements NatsException
+final class ParserError extends NatsException
 {
     public function __construct(int $code = 0, ?\Throwable $previous = null)
     {

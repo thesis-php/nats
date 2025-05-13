@@ -9,7 +9,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class FeatureIsNotSupported extends \RuntimeException implements NatsException
+final class FeatureIsNotSupported extends NatsException
 {
     /**
      * @param non-empty-string $serverVersion

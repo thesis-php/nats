@@ -9,4 +9,4 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class ServerIsNotAvailable extends \RuntimeException implements NatsException {}
+final class ServerIsNotAvailable extends NatsException {}

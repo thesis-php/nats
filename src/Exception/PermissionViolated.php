@@ -9,4 +9,4 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class PermissionViolated extends \RuntimeException implements NatsException {}
+final class PermissionViolated extends NatsException {}

@@ -9,7 +9,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class AuthorizationTimeout extends \RuntimeException implements NatsException
+final class AuthorizationTimeout extends NatsException
 {
     public function __construct(int $code = 0, ?\Throwable $previous = null)
     {

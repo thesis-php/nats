@@ -9,7 +9,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class MaximumControlLineExceeded extends \RuntimeException implements NatsException
+final class MaximumControlLineExceeded extends NatsException
 {
     public function __construct(int $code = 0, ?\Throwable $previous = null)
     {

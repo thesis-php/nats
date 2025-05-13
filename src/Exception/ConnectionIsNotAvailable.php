@@ -9,4 +9,4 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class ConnectionIsNotAvailable extends \LogicException implements NatsException {}
+final class ConnectionIsNotAvailable extends NatsException {}

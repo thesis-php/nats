@@ -9,7 +9,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class StaleConnection extends \RuntimeException implements NatsException
+final class StaleConnection extends NatsException
 {
     public function __construct(int $code = 0, ?\Throwable $previous = null)
     {

@@ -7,4 +7,4 @@ namespace Thesis\Nats;
 /**
  * @api
  */
-interface NatsException extends \Throwable {}
+abstract class NatsException extends \Exception {}
