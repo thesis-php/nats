@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\JetStream;
+namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\JetStream\Api;
+use Thesis\Nats\JetStream\Api\Result\Result;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 
@@ -29,21 +31,40 @@ final class JetStream
         }
     }
 
-    public function accountInfo(): JetStream\AccountInfo
+    public function accountInfo(): Api\AccountInfo
     {
-        return $this->doRequest('INFO', JetStream\AccountInfo::class);
+        return $this->request(new Api\GetAccountInfoRequest());
+    }
+
+    public function createStream(Api\StreamConfig $config): Api\StreamInfo
+    {
+        return $this->request(new Api\CreateStreamRequest($config));
     }
 
     /**
-     * @template T of object
-     * @param non-empty-string $method
-     * @param class-string<T> $classType
+     * @template T
+     * @param Api\Request<T> $request
      * @return T
      */
-    private function doRequest(string $method, string $classType): object
+    private function request(Api\Request $request): mixed
     {
-        $response = $this->client->request("{$this->prefix}{$method}");
+        $response = $this->client->request(
+            subject: "{$this->prefix}{$request->endpoint()}",
+            message: new Message(
+                payload: $request->payload() !== null ? json_encode($request->payload(), flags: JSON_THROW_ON_ERROR) : null,
+            ),
+        );
 
-        return $this->serializer->deserialize($classType, $response->message->payload ?: '{}');
+        /** @var array<non-empty-string, mixed> $responsePayload */
+        $responsePayload = json_decode($response->message->payload ?? '{}', associative: true, flags: JSON_THROW_ON_ERROR);
+        if (!isset($responsePayload['error'])) {
+            $responsePayload['response'] = $responsePayload;
+        }
+
+        /** @var Result<T> $result */
+        $result = $this->serializer->deserialize(Result::type($request->type()), $responsePayload);
+        $result->error?->throw();
+
+        return $result->response ?? throw new \RuntimeException('Empty response was not expected.');
     }
 }

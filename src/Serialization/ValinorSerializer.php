@@ -9,6 +9,7 @@ use CuyZ\Valinor\Cache\FileWatchingCache;
 use CuyZ\Valinor\Mapper\Source\Source;
 use CuyZ\Valinor\Mapper\TreeMapper;
 use CuyZ\Valinor\MapperBuilder;
+use Thesis\Time\TimeSpan;
 
 /**
  * @api
@@ -23,7 +24,11 @@ final readonly class ValinorSerializer implements Serializer
     public function __construct(?string $cachePath = null, bool $debug = false)
     {
         $builder = (new MapperBuilder())
-            ->allowSuperfluousKeys();
+            ->allowSuperfluousKeys()
+            ->registerConstructor(
+                TimeSpan::fromNanoseconds(...),
+                static fn(string $date): \DateTimeImmutable => new \DateTimeImmutable($date),
+            );
 
         if ($cachePath !== null) {
             $cache = new FileSystemCache($cachePath);
@@ -38,8 +43,11 @@ final readonly class ValinorSerializer implements Serializer
         $this->mapper = $builder->mapper();
     }
 
-    public function deserialize(string $class, string $data): object
+    public function deserialize(string $type, array $data): mixed
     {
-        return $this->mapper->map($class, Source::json($data)->camelCaseKeys());
+        return $this->mapper->map(
+            signature: $type,
+            source: Source::array($data)->camelCaseKeys(),
+        );
     }
 }
