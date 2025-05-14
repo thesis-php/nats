@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\JetStream\Api;
+use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
+use Thesis\Nats\Json\Encoder;
+use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 
@@ -25,6 +29,7 @@ final class JetStream
     public function __construct(
         private readonly Client $client,
         private readonly Serializer $serializer = new ValinorSerializer(),
+        private readonly Encoder $encoder = new NativeEncoder(),
         ?string $domain = null,
     ) {
         if ($domain !== null) {
@@ -72,9 +77,29 @@ final class JetStream
      * @param non-empty-string $name
      * @throws NatsException
      */
-    public function deleteStream(string $name): bool
+    public function deleteStream(string $name): Api\StreamDeleted
     {
-        return $this->request(new Api\DeleteStreamRequest($name))->success;
+        return $this->request(new Api\DeleteStreamRequest($name));
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @param ?non-negative-int $sequence
+     * @param ?non-negative-int $keep
+     * @throws NatsException
+     */
+    public function purgeStream(
+        string $name,
+        ?int $sequence = null,
+        ?int $keep = null,
+        ?string $subject = null,
+    ): Api\StreamPurged {
+        return $this->request(new Api\PurgeStreamRequest(
+            name: $name,
+            sequence: $sequence,
+            keep: $keep,
+            subject: $subject,
+        ));
     }
 
     /**
@@ -88,20 +113,21 @@ final class JetStream
         $response = $this->client->request(
             subject: "{$this->prefix}{$request->endpoint()}",
             message: new Message(
-                payload: $request->payload() !== null ? json_encode($request->payload(), flags: JSON_THROW_ON_ERROR) : null,
+                payload: $request->payload() !== null ? $this->encoder->encode($request->payload()) : null,
             ),
         );
 
-        /** @var array<non-empty-string, mixed> $responsePayload */
-        $responsePayload = json_decode($response->message->payload ?? '{}', associative: true, flags: JSON_THROW_ON_ERROR);
-        if (!isset($responsePayload['error'])) {
-            $responsePayload['response'] = $responsePayload;
+        $payload = $response->message->payload ?? '{}';
+        if ($payload === '') {
+            throw new NoServerResponse();
         }
 
         /** @var Result<T> $result */
-        $result = $this->serializer->deserialize(Result::type($request->type()), $responsePayload);
-        $result->error?->throw();
+        $result = $this->serializer->deserialize(
+            type: Result::type($request->type()),
+            data: new Mapping\FixStructureSource($this->encoder->decode($payload)),
+        );
 
-        return $result->response ?? throw new \RuntimeException('Empty response was not expected.');
+        return $result->response();
     }
 }

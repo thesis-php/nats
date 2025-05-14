@@ -12,9 +12,9 @@ interface Serializer
     /**
      * @template T of object
      * @param non-empty-string|class-string<T> $type
-     * @param array<non-empty-string, mixed> $data
+     * @param iterable<non-empty-string, mixed> $data
      * @return ($type is class-string<T> ? T : mixed)
      * @throws \Throwable
      */
-    public function deserialize(string $type, array $data): mixed;
+    public function deserialize(string $type, iterable $data): mixed;
 }

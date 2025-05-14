@@ -19,11 +19,11 @@ final readonly class Error
         public string $description,
     ) {}
 
-    public function throw(): never
+    public function exception(): \Exception
     {
-        throw match ($this->errCode) {
+        return match ($this->errCode) {
             self::STREAM_NOT_FOUND => new StreamNotFound($this->description),
-            default => new \RuntimeException("Nats error {$this->description}({$this->code}) received."),
+            default => new \RuntimeException("Nats error: '{$this->description} ({$this->errCode}) received'."),
         };
     }
 }

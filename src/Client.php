@@ -56,6 +56,7 @@ final class Client
 
     /**
      * @param ?non-empty-string $domain
+     * @throws NatsException
      */
     public function jetStream(?string $domain = null): JetStream
     {
@@ -65,7 +66,11 @@ final class Client
             throw Exception\FeatureIsNotSupported::forJetStream($info->serverVersion);
         }
 
-        return new JetStream($this, $this->serializer, $domain ?: $this->config->jetStreamDomain);
+        return new JetStream(
+            client: $this,
+            serializer: $this->serializer,
+            domain: $domain ?: $this->config->jetStreamDomain,
+        );
     }
 
     /**

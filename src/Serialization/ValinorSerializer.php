@@ -43,11 +43,11 @@ final readonly class ValinorSerializer implements Serializer
         $this->mapper = $builder->mapper();
     }
 
-    public function deserialize(string $type, array $data): mixed
+    public function deserialize(string $type, iterable $data): mixed
     {
         return $this->mapper->map(
             signature: $type,
-            source: Source::array($data)->camelCaseKeys(),
+            source: Source::iterable($data)->camelCaseKeys(),
         );
     }
 }

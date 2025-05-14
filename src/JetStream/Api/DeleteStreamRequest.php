@@ -6,7 +6,7 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-implements Request<DeleteStreamResponse>
+ * @template-implements Request<StreamDeleted>
  */
 final readonly class DeleteStreamRequest implements Request
 {
@@ -29,6 +29,6 @@ final readonly class DeleteStreamRequest implements Request
 
     public function type(): string
     {
-        return DeleteStreamResponse::class;
+        return StreamDeleted::class;
     }
 }

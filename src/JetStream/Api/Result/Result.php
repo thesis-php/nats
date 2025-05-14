@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api\Result;
 
+use Thesis\Nats\Exception\NoServerResponse;
+use Thesis\Nats\NatsException;
+
 /**
  * @internal
  * @template ResponseType
@@ -19,6 +22,15 @@ final readonly class Result
         public ?Error $error = null,
         public mixed $response = null,
     ) {}
+
+    /**
+     * @return ResponseType
+     * @throws NatsException
+     */
+    public function response(): mixed
+    {
+        return $this->response ?? throw $this->error?->exception() ?? new NoServerResponse();
+    }
 
     /**
      * @param non-empty-string $type
