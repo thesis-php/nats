@@ -170,6 +170,21 @@ final class JetStream
      * @param non-empty-string $consumer
      * @throws NatsException
      */
+    public function consumerInfo(
+        string $stream,
+        string $consumer,
+    ): Api\ConsumerInfo {
+        return $this->request(new Api\ConsumerInfoRequest(
+            stream: $stream,
+            consumer: $consumer,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
     public function deleteConsumer(string $stream, string $consumer): Api\ConsumerDeleted
     {
         return $this->request(new Api\ConsumerDeleteRequest(
