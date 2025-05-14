@@ -77,6 +77,15 @@ final class JetStream
      * @param non-empty-string $name
      * @throws NatsException
      */
+    public function streamInfo(string $name): Api\StreamInfo
+    {
+        return $this->request(new Api\StreamInfoRequest($name));
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
     public function deleteStream(string $name): Api\StreamDeleted
     {
         return $this->request(new Api\DeleteStreamRequest($name));
