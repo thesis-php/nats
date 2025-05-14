@@ -6,15 +6,15 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-implements PaginatedResponse<non-empty-string>
+ * @template-implements PaginatedResponse<StreamInfo>
  */
-final readonly class StreamNamesCollection implements PaginatedResponse
+final readonly class StreamInfoCollection implements PaginatedResponse
 {
     /**
      * @param non-negative-int $total
      * @param non-negative-int $offset
      * @param non-negative-int $limit
-     * @param list<non-empty-string> $streams
+     * @param list<StreamInfo> $streams
      */
     public function __construct(
         public int $total,

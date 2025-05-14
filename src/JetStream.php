@@ -109,19 +109,37 @@ final class JetStream
      */
     public function streamNames(?string $subject = null): iterable
     {
+        yield from $this->paginatedRequest(new Api\StreamNamesRequest($subject));
+    }
+
+    /**
+     * @param ?non-empty-string $subject
+     * @return iterable<Api\StreamInfo>
+     * @throws NatsException
+     */
+    public function streamList(?string $subject = null): iterable
+    {
+        yield from $this->paginatedRequest(new Api\StreamListRequest($subject));
+    }
+
+    /**
+     * @template T
+     * @param Api\PaginatedRequest<Api\PaginatedResponse<T>> $request
+     * @return iterable<T>
+     * @throws NatsException
+     */
+    private function paginatedRequest(Api\PaginatedRequest $request): iterable
+    {
         $offset = 0;
 
         while (true) {
-            $collection = $this->request(new Api\StreamNamesRequest(
-                subject: $subject,
-                offset: $offset,
-            ));
+            $response = $this->request($request->withOffset($offset));
 
-            yield from $collection;
+            yield from $response;
 
-            $offset += \count($collection->streams);
+            $offset += \count($response);
 
-            if ($offset >= $collection->total) {
+            if ($offset >= $response->total()) {
                 break;
             }
         }

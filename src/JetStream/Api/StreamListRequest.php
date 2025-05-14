@@ -6,9 +6,9 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-implements PaginatedRequest<StreamNamesCollection>
+ * @template-implements PaginatedRequest<StreamInfoCollection>
  */
-final readonly class StreamNamesRequest implements PaginatedRequest
+final readonly class StreamListRequest implements PaginatedRequest
 {
     /**
      * @param ?non-empty-string $subject
@@ -29,7 +29,7 @@ final readonly class StreamNamesRequest implements PaginatedRequest
 
     public function endpoint(): string
     {
-        return 'STREAM.NAMES';
+        return 'STREAM.LIST';
     }
 
     /**
@@ -48,6 +48,6 @@ final readonly class StreamNamesRequest implements PaginatedRequest
 
     public function type(): string
     {
-        return StreamNamesCollection::class;
+        return StreamInfoCollection::class;
     }
 }
