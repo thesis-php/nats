@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Amp\Future;
-use function Amp\async;
+use Amp\Cancellation;
+use Thesis\Sync;
+use function Amp\weakClosure;
 
 /**
  * @api
  */
 final class Delivery
 {
-    /** @var ?Future<void> */
-    private ?Future $repliedFuture = null;
-
-    private bool $replied = false;
+    /** @var ?Sync\Once<bool> */
+    private ?Sync\Once $replied = null;
 
     /**
      * @param \Closure(non-empty-string, Message): void $reply
@@ -29,27 +28,23 @@ final class Delivery
         public readonly Message $message = new Message(),
     ) {}
 
-    public function reply(Message $message): void
+    public function reply(Message $message, ?Cancellation $cancellation = null): void
     {
-        $this->repliedFuture?->await();
-
-        if ($this->replied) {
-            throw new \LogicException('Message is already replied.');
-        }
-
         $replyTo = $this->replyTo;
         if ($replyTo === null) {
             throw new \LogicException('Message is not a request.');
         }
 
-        /** @phpstan-ignore argument.type */
-        $this->repliedFuture ??= async($this->reply, $replyTo, $message);
-
-        try {
-            $this->repliedFuture->await();
-            $this->replied = true;
-        } finally {
-            $this->repliedFuture = null;
+        if ($this->replied?->await($cancellation)) {
+            throw new \LogicException('Message is already replied.');
         }
+
+        $this->replied ??= new Sync\Once(weakClosure(function () use ($message, $replyTo): bool {
+            ($this->reply)($replyTo, $message);
+
+            return true;
+        }));
+
+        $this->replied->await($cancellation);
     }
 }
