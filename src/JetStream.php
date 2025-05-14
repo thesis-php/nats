@@ -32,21 +32,33 @@ final class JetStream
         }
     }
 
+    /**
+     * @throws NatsException
+     */
     public function accountInfo(): Api\AccountInfo
     {
         return $this->request(new Api\GetAccountInfoRequest());
     }
 
+    /**
+     * @throws NatsException
+     */
     public function createStream(Api\StreamConfig $config): Api\StreamInfo
     {
         return $this->request(new Api\CreateStreamRequest($config));
     }
 
+    /**
+     * @throws NatsException
+     */
     public function updateStream(Api\StreamConfig $config): Api\StreamInfo
     {
         return $this->request(new Api\UpdateStreamRequest($config));
     }
 
+    /**
+     * @throws NatsException
+     */
     public function createOrUpdateStream(Api\StreamConfig $config): Api\StreamInfo
     {
         try {
@@ -54,6 +66,15 @@ final class JetStream
         } catch (StreamNotFound) {
             return $this->createStream($config);
         }
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function deleteStream(string $name): bool
+    {
+        return $this->request(new Api\DeleteStreamRequest($name))->success;
     }
 
     /**
