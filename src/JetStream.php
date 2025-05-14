@@ -6,6 +6,7 @@ namespace Thesis\Nats;
 
 use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Exception\StreamNotFound;
+use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
@@ -129,6 +130,60 @@ final class JetStream
     public function streamList(?string $subject = null): iterable
     {
         yield from $this->paginatedRequest(new Api\StreamListRequest($subject));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function createConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): Api\ConsumerInfo {
+        return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE);
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function updateConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): Api\ConsumerInfo {
+        return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_UPDATE);
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function createOrUpdateConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): Api\ConsumerInfo {
+        return $this->upsertConsumer($stream, $config);
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param ?Api\CreateConsumerRequest::ACTION_* $action
+     * @throws NatsException
+     */
+    private function upsertConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): Api\ConsumerInfo
+    {
+        $consumerName = $config->name ?? $config->durableName;
+
+        if ($consumerName === null || $consumerName === '') {
+            $consumerName = Id\generateUniqueId(10);
+        }
+
+        return $this->request(new Api\CreateConsumerRequest(
+            consumerName: $consumerName,
+            streamName: $stream,
+            config: $config,
+            action: $action,
+        ));
     }
 
     /**
