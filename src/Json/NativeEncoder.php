@@ -15,9 +15,13 @@ final readonly class NativeEncoder implements Encoder
 
     public function encode(mixed $value): string
     {
+        if ($value === []) {
+            return '{}';
+        }
+
         return json_encode(
             value: $value,
-            flags: $this->flags | JSON_THROW_ON_ERROR | JSON_FORCE_OBJECT,
+            flags: $this->flags | JSON_THROW_ON_ERROR,
         );
     }
 
