@@ -8,7 +8,7 @@ namespace Thesis\Nats\JetStream\Api;
  * @api
  * @template-implements Request<AccountInfo>
  */
-final readonly class GetAccountInfoRequest implements Request
+final readonly class AccountInfoRequest implements Request
 {
     public function endpoint(): string
     {

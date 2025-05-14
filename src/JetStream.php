@@ -42,7 +42,7 @@ final class JetStream
      */
     public function accountInfo(): Api\AccountInfo
     {
-        return $this->request(new Api\GetAccountInfoRequest());
+        return $this->request(new Api\AccountInfoRequest());
     }
 
     /**
