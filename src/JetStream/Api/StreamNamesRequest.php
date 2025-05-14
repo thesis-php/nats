@@ -33,7 +33,6 @@ final readonly class StreamNamesRequest implements Request
             [
                 'subject' => $this->subject,
                 'offset' => $this->offset,
-                'limit' => 1,
             ],
             static fn(mixed $value): bool => $value !== null,
         );
