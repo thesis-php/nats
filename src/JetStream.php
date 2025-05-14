@@ -103,6 +103,31 @@ final class JetStream
     }
 
     /**
+     * @param ?non-empty-string $subject
+     * @return iterable<non-empty-string>
+     * @throws NatsException
+     */
+    public function streamNames(?string $subject = null): iterable
+    {
+        $offset = 0;
+
+        while (true) {
+            $collection = $this->request(new Api\StreamNamesRequest(
+                subject: $subject,
+                offset: $offset,
+            ));
+
+            yield from $collection;
+
+            $offset += \count($collection->streams);
+
+            if ($offset >= $collection->total) {
+                break;
+            }
+        }
+    }
+
+    /**
      * @template T
      * @param Api\Request<T> $request
      * @return T

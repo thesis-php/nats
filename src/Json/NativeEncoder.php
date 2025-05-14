@@ -17,7 +17,7 @@ final readonly class NativeEncoder implements Encoder
     {
         return json_encode(
             value: $value,
-            flags: $this->flags | JSON_THROW_ON_ERROR,
+            flags: $this->flags | JSON_THROW_ON_ERROR | JSON_FORCE_OBJECT,
         );
     }
 
