@@ -180,6 +180,22 @@ final class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @param ?non-empty-string $subject
+     * @return iterable<non-empty-string>
+     * @throws NatsException
+     */
+    public function consumerNames(
+        string $stream,
+        ?string $subject = null,
+    ): iterable {
+        yield from $this->paginatedRequest(new Api\ConsumerNamesRequest(
+            stream: $stream,
+            subject: $subject,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
      */
