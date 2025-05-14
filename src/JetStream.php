@@ -227,6 +227,24 @@ final class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @param non-empty-string $group
+     * @throws NatsException
+     */
+    public function unpinConsumer(
+        string $stream,
+        string $consumer,
+        string $group,
+    ): void {
+        $this->request(new Api\ConsumerUnpinRequest(
+            stream: $stream,
+            consumer: $consumer,
+            group: $group,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
      * @param ?non-empty-string $subject
      * @return iterable<non-empty-string>
      * @throws NatsException
