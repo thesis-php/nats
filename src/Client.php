@@ -28,6 +28,8 @@ final class Client
     /** @var array<non-empty-string, callable(Delivery, self): void> */
     private array $subscribers = [];
 
+    private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
+
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpcFuture = null;
 
@@ -38,6 +40,7 @@ final class Client
         private readonly Serializer $serializer = new ValinorSerializer(),
     ) {
         $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
+        $this->subscriptionIdGenerator = new Id\SubscriptionIdGenerator();
     }
 
     /**
@@ -101,7 +104,7 @@ final class Client
         callable $handler,
         ?string $queueGroup = null,
     ): string {
-        $subscriptionId = Id\generateSubscriptionId();
+        $subscriptionId = $this->subscriptionIdGenerator->nextId();
         $this->subscribers[$subscriptionId] = $handler;
 
         $this->connection()->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));

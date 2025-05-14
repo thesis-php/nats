@@ -39,7 +39,6 @@
         },
         "files": [
             "src/Internal/Id/generateInboxId.php",
-            "src/Internal/Id/generateSubscriptionId.php",
             "src/Internal/Id/generateUniqueId.php"
         ]
     },
