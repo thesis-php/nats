@@ -7,7 +7,7 @@ namespace Thesis\Nats\JetStream\Api;
 /**
  * @api
  */
-final readonly class StreamDeleted
+final readonly class ConsumerDeleted
 {
     public function __construct(
         public bool $success,

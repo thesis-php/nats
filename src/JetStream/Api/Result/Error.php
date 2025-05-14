@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api\Result;
 
+use Thesis\Nats\Exception\ConsumerNotFound;
 use Thesis\Nats\Exception\StreamNotFound;
 
 /**
@@ -12,6 +13,7 @@ use Thesis\Nats\Exception\StreamNotFound;
 final readonly class Error
 {
     private const int STREAM_NOT_FOUND = 10059;
+    private const int CONSUMER_NOT_FOUND = 10014;
 
     public function __construct(
         public int $code,
@@ -23,6 +25,7 @@ final readonly class Error
     {
         return match ($this->errCode) {
             self::STREAM_NOT_FOUND => new StreamNotFound($this->description),
+            self::CONSUMER_NOT_FOUND => new ConsumerNotFound($this->description),
             default => new \RuntimeException("Nats error: '{$this->description} ({$this->errCode}) received'."),
         };
     }

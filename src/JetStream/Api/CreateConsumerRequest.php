@@ -14,20 +14,20 @@ final readonly class CreateConsumerRequest implements Request
     public const string ACTION_UPDATE = 'update';
 
     /**
-     * @param non-empty-string $consumerName
-     * @param non-empty-string $streamName
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
      * @param ?self::ACTION_* $action
      */
     public function __construct(
-        private string $consumerName,
-        private string $streamName,
+        private string $stream,
+        private string $consumer,
         private ConsumerConfig $config,
         private ?string $action = null,
     ) {}
 
     public function endpoint(): string
     {
-        $endpoint = "CONSUMER.CREATE.{$this->streamName}.{$this->consumerName}";
+        $endpoint = "CONSUMER.CREATE.{$this->stream}.{$this->consumer}";
         if ($this->config->filterSubject !== null && $this->config->filterSubject !== '' && ($this->config->filterSubjects ?? []) === []) {
             $endpoint .= ".{$this->config->filterSubject}";
         }
@@ -41,7 +41,7 @@ final readonly class CreateConsumerRequest implements Request
     public function payload(): array
     {
         return [
-            'stream_name' => $this->streamName,
+            'stream_name' => $this->stream,
             'config' => $this->config,
             'action' => $this->action ?? '',
         ];

@@ -13,7 +13,7 @@ final readonly class StreamPurged
      * @param non-negative-int $purged
      */
     public function __construct(
-        public bool $success = true,
+        public bool $success,
         public int $purged = 0,
     ) {}
 }
