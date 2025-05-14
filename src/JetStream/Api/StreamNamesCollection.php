@@ -14,13 +14,13 @@ final readonly class StreamNamesCollection implements PaginatedResponse
      * @param non-negative-int $total
      * @param non-negative-int $offset
      * @param non-negative-int $limit
-     * @param list<non-empty-string> $streams
+     * @param ?list<non-empty-string> $streams
      */
     public function __construct(
         public int $total,
         public int $offset,
         public int $limit,
-        public array $streams,
+        public ?array $streams = null,
     ) {}
 
     public function total(): int
@@ -30,11 +30,11 @@ final readonly class StreamNamesCollection implements PaginatedResponse
 
     public function getIterator(): \Traversable
     {
-        yield from $this->streams;
+        yield from $this->streams ?? [];
     }
 
     public function count(): int
     {
-        return \count($this->streams);
+        return \count($this->streams ?? []);
     }
 }
