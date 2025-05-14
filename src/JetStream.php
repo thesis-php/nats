@@ -195,6 +195,38 @@ final class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function pauseConsumer(
+        string $stream,
+        string $consumer,
+        \DateTimeImmutable $pauseUntil,
+    ): Api\ConsumerPaused {
+        return $this->request(new Api\ConsumerPauseRequest(
+            stream: $stream,
+            consumer: $consumer,
+            pauseUntil: $pauseUntil,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function resumeConsumer(
+        string $stream,
+        string $consumer,
+    ): Api\ConsumerPaused {
+        return $this->request(new Api\ConsumerPauseRequest(
+            stream: $stream,
+            consumer: $consumer,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
      * @param ?non-empty-string $subject
      * @return iterable<non-empty-string>
      * @throws NatsException
