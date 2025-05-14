@@ -16,10 +16,10 @@ final readonly class PurgeStreamRequest implements Request
      * @param ?non-negative-int $keep
      */
     public function __construct(
-        public string $name,
-        public ?int $sequence = null,
-        public ?int $keep = null,
-        public ?string $subject = null,
+        private string $name,
+        private ?int $sequence = null,
+        private ?int $keep = null,
+        private ?string $subject = null,
     ) {}
 
     public function endpoint(): string

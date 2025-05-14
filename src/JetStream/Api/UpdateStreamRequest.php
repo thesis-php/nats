@@ -11,7 +11,7 @@ namespace Thesis\Nats\JetStream\Api;
 final readonly class UpdateStreamRequest implements Request
 {
     public function __construct(
-        public StreamConfig $config,
+        private StreamConfig $config,
     ) {}
 
     public function endpoint(): string

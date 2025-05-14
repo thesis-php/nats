@@ -14,7 +14,7 @@ final readonly class StreamInfoRequest implements Request
      * @param non-empty-string $name
      */
     public function __construct(
-        public string $name,
+        private string $name,
     ) {}
 
     public function endpoint(): string

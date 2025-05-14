@@ -16,7 +16,7 @@ final readonly class ConsumerListRequest implements PaginatedRequest
      */
     public function __construct(
         private string $stream,
-        public ?int $offset = null,
+        private ?int $offset = null,
     ) {}
 
     public function withOffset(int $offset): self

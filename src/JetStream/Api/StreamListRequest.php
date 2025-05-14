@@ -15,8 +15,8 @@ final readonly class StreamListRequest implements PaginatedRequest
      * @param ?non-negative-int $offset
      */
     public function __construct(
-        public ?string $subject = null,
-        public ?int $offset = null,
+        private ?string $subject = null,
+        private ?int $offset = null,
     ) {}
 
     public function withOffset(int $offset): self
