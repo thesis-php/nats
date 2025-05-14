@@ -196,6 +196,16 @@ final class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @return iterable<Api\ConsumerInfo>
+     * @throws NatsException
+     */
+    public function consumerList(string $stream): iterable
+    {
+        yield from $this->paginatedRequest(new Api\ConsumerListRequest($stream));
+    }
+
+    /**
+     * @param non-empty-string $stream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
      */
