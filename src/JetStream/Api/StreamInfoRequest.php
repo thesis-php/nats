@@ -19,7 +19,7 @@ final readonly class StreamInfoRequest implements Request
 
     public function endpoint(): string
     {
-        return "STREAM.INFO.{$this->name}";
+        return ApiMethod::StreamInfo->compile($this->name);
     }
 
     public function payload(): null

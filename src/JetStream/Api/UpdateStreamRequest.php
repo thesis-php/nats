@@ -16,7 +16,7 @@ final readonly class UpdateStreamRequest implements Request
 
     public function endpoint(): string
     {
-        return "STREAM.UPDATE.{$this->config->name}";
+        return ApiMethod::UpdateStream->compile($this->config->name);
     }
 
     public function payload(): StreamConfig

@@ -13,13 +13,14 @@ use Thesis\Time\TimeSpan;
 final readonly class StreamConfig implements \JsonSerializable
 {
     /**
+     * @param non-empty-string $name
      * @param ?list<non-empty-string> $subjects
      * @param int<1, 5> $replicas
      * @param ?list<StreamSource> $sources
      * @param ?array<string, string> $metadata
      */
     public function __construct(
-        public string $name = '',
+        public string $name,
         public ?string $description = null,
         public ?array $subjects = null,
         public RetentionPolicy $retention = RetentionPolicy::Limits,

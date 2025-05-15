@@ -27,7 +27,7 @@ final readonly class CreateConsumerRequest implements Request
 
     public function endpoint(): string
     {
-        $endpoint = "CONSUMER.CREATE.{$this->stream}.{$this->consumer}";
+        $endpoint = ApiMethod::CreateConsumer->compile($this->stream, $this->consumer);
         if ($this->config->filterSubject !== null && $this->config->filterSubject !== '' && ($this->config->filterSubjects ?? []) === []) {
             $endpoint .= ".{$this->config->filterSubject}";
         }

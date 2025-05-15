@@ -12,7 +12,7 @@ final readonly class AccountInfoRequest implements Request
 {
     public function endpoint(): string
     {
-        return 'INFO';
+        return ApiMethod::Info->value;
     }
 
     public function payload(): null

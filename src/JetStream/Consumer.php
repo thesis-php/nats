@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Thesis\Nats\Client;
+use Thesis\Nats\Delivery;
+use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream;
+use Thesis\Nats\JetStream\Api\Router;
+use Thesis\Nats\Json\Encoder;
+use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 
 /**
@@ -21,7 +27,26 @@ final readonly class Consumer
         public string $name,
         public string $stream,
         private JetStream $js,
+        private Client $client,
+        private Router $router,
+        private Encoder $json,
     ) {}
+
+    /**
+     * @param callable(Delivery): void $handler
+     */
+    public function consume(callable $handler): void
+    {
+        $id = Id\generateInboxId();
+
+        $this->client->subscribe($id, $handler);
+
+        $this->client->publish(
+            subject: $this->router->route(Api\ApiMethod::ConsumerMessageNext->compile($this->stream, $this->name)),
+            message: new Message($this->json->encode(new Api\PullRequest(batch: 1))),
+            replyTo: $id,
+        );
+    }
 
     /**
      * @throws NatsException

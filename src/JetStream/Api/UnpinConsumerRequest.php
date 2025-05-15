@@ -6,23 +6,24 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-implements Request<ConsumerPaused>
+ * @template-implements Request<EmptyResponse>
  */
-final readonly class ConsumerPauseRequest implements Request
+final readonly class UnpinConsumerRequest implements Request
 {
     /**
      * @param non-empty-string $stream
      * @param non-empty-string $consumer
+     * @param non-empty-string $group
      */
     public function __construct(
         private string $stream,
         private string $consumer,
-        private ?\DateTimeImmutable $pauseUntil = null,
+        private string $group,
     ) {}
 
     public function endpoint(): string
     {
-        return "CONSUMER.PAUSE.{$this->stream}.{$this->consumer}";
+        return ApiMethod::UnpinConsumer->compile($this->stream, $this->consumer);
     }
 
     /**
@@ -30,16 +31,11 @@ final readonly class ConsumerPauseRequest implements Request
      */
     public function payload(): array
     {
-        return array_filter(
-            [
-                'pause_until' => $this->pauseUntil?->format(\DateTimeInterface::RFC3339),
-            ],
-            static fn(mixed $value): bool => $value !== null,
-        );
+        return ['group' => $this->group];
     }
 
     public function type(): string
     {
-        return ConsumerPaused::class;
+        return EmptyResponse::class;
     }
 }

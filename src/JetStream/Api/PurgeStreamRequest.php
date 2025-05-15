@@ -24,7 +24,7 @@ final readonly class PurgeStreamRequest implements Request
 
     public function endpoint(): string
     {
-        return "STREAM.PURGE.{$this->name}";
+        return ApiMethod::PurgeStream->compile($this->name);
     }
 
     /**

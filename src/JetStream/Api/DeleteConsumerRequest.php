@@ -8,7 +8,7 @@ namespace Thesis\Nats\JetStream\Api;
  * @api
  * @template-implements Request<ConsumerDeleted>
  */
-final readonly class ConsumerDeleteRequest implements Request
+final readonly class DeleteConsumerRequest implements Request
 {
     /**
      * @param non-empty-string $stream
@@ -21,7 +21,7 @@ final readonly class ConsumerDeleteRequest implements Request
 
     public function endpoint(): string
     {
-        return "CONSUMER.DELETE.{$this->stream}.{$this->consumer}";
+        return ApiMethod::DeleteConsumer->compile($this->stream, $this->consumer);
     }
 
     public function payload(): null

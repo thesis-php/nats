@@ -16,7 +16,7 @@ final readonly class CreateStreamRequest implements Request
 
     public function endpoint(): string
     {
-        return "STREAM.CREATE.{$this->config->name}";
+        return ApiMethod::StreamCreate->compile($this->config->name);
     }
 
     public function payload(): StreamConfig

@@ -21,7 +21,7 @@ final readonly class ConsumerInfoRequest implements Request
 
     public function endpoint(): string
     {
-        return "CONSUMER.INFO.{$this->stream}.{$this->consumer}";
+        return ApiMethod::ConsumerInfo->compile($this->stream, $this->consumer);
     }
 
     public function payload(): null

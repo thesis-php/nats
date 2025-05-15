@@ -19,7 +19,7 @@ final readonly class DeleteStreamRequest implements Request
 
     public function endpoint(): string
     {
-        return "STREAM.DELETE.{$this->name}";
+        return ApiMethod::DeleteStream->compile($this->name);
     }
 
     public function payload(): null

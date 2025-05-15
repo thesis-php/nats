@@ -7,6 +7,7 @@ namespace Thesis\Nats;
 use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\Exception\RequestHasNoResponders;
+use Thesis\Nats\Internal\Id;
 
 #[CoversClass(Client::class)]
 final class ClientTest extends NatsTestCase
@@ -33,11 +34,13 @@ final class ClientTest extends NatsTestCase
     {
         $client = $this->client();
 
-        $client->subscribe('events.*', static function (Delivery $delivery): void {
+        $id = Id\generateUniqueId();
+
+        $client->subscribe("{$id}.*", static function (Delivery $delivery): void {
             $delivery->reply(new Message('ok'));
         });
 
-        self::assertEquals('ok', $client->request('events.happens', new Message('Are you ok?'))->message->payload);
+        self::assertEquals('ok', $client->request("{$id}.happens", new Message('Are you ok?'))->message->payload);
 
         $client->disconnect();
     }
@@ -46,9 +49,11 @@ final class ClientTest extends NatsTestCase
     {
         $client = $this->client();
 
-        $client->unsubscribe($client->subscribe('events.*', static fn() => null));
+        $id = Id\generateUniqueId();
+
+        $client->unsubscribe($client->subscribe("{$id}.*", static fn() => null));
 
         self::expectException(RequestHasNoResponders::class);
-        $client->request('events.happens', new Message('Are you ok?'));
+        $client->request("{$id}.happens", new Message('Are you ok?'));
     }
 }

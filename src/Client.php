@@ -159,7 +159,7 @@ final class Client
         $rpc = $this->rpc?->await($cancellation);
 
         try {
-            $this->disconnection = new Sync\Once(static function() use ($connection, $rpc): void {
+            $this->disconnection = new Sync\Once(static function () use ($connection, $rpc): void {
                 $rpc?->shutdown();
                 $connection->close();
             });

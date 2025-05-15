@@ -29,7 +29,7 @@ final readonly class ConsumerListRequest implements PaginatedRequest
 
     public function endpoint(): string
     {
-        return "CONSUMER.LIST.{$this->stream}";
+        return ApiMethod::ConsumerList->compile($this->stream);
     }
 
     /**

@@ -32,7 +32,7 @@ final readonly class ConsumerNamesRequest implements PaginatedRequest
 
     public function endpoint(): string
     {
-        return "CONSUMER.NAMES.{$this->stream}";
+        return ApiMethod::ConsumerNames->compile($this->stream);
     }
 
     /**

@@ -29,7 +29,7 @@ final readonly class StreamListRequest implements PaginatedRequest
 
     public function endpoint(): string
     {
-        return 'STREAM.LIST';
+        return ApiMethod::StreamList->value;
     }
 
     /**

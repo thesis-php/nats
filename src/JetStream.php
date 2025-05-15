@@ -18,24 +18,21 @@ use Thesis\Nats\Serialization\ValinorSerializer;
 /**
  * @api
  */
-final class JetStream
+final readonly class JetStream
 {
-    /** @var non-empty-string */
-    private string $prefix = '$JS.API.';
+    private Api\Router $router;
 
     /**
      * @internal
      * @param ?non-empty-string $domain
      */
     public function __construct(
-        private readonly Client $client,
-        private readonly Serializer $serializer = new ValinorSerializer(),
-        private readonly Encoder $encoder = new NativeEncoder(),
+        private Client $client,
+        private Serializer $serializer = new ValinorSerializer(),
+        private Encoder $encoder = new NativeEncoder(),
         ?string $domain = null,
     ) {
-        if ($domain !== null) {
-            $this->prefix = substr_replace($this->prefix, "\$JS.{$domain}.API.", 0);
-        }
+        $this->router = new Api\Router($domain);
     }
 
     /**
@@ -49,9 +46,9 @@ final class JetStream
     /**
      * @throws NatsException
      */
-    public function createStream(Api\StreamConfig $config): Api\StreamInfo
+    public function createStream(Api\StreamConfig $config): JetStream\Stream
     {
-        return $this->request(new Api\CreateStreamRequest($config));
+        return $this->setupStream($this->request(new Api\CreateStreamRequest($config)));
     }
 
     /**
@@ -65,10 +62,10 @@ final class JetStream
     /**
      * @throws NatsException
      */
-    public function createOrUpdateStream(Api\StreamConfig $config): Api\StreamInfo
+    public function createOrUpdateStream(Api\StreamConfig $config): JetStream\Stream
     {
         try {
-            return $this->updateStream($config);
+            return $this->setupStream($this->updateStream($config));
         } catch (StreamNotFound) {
             return $this->createStream($config);
         }
@@ -140,13 +137,8 @@ final class JetStream
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
     ): JetStream\Consumer {
-        $info = $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE);
-
-        return new JetStream\Consumer(
-            info: $info,
-            name: $info->name,
-            stream: $stream,
-            js: $this,
+        return $this->setupConsumer(
+            $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE),
         );
     }
 
@@ -169,13 +161,8 @@ final class JetStream
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
     ): JetStream\Consumer {
-        $info = $this->upsertConsumer($stream, $config);
-
-        return new JetStream\Consumer(
-            info: $info,
-            name: $info->name,
-            stream: $stream,
-            js: $this,
+        return $this->setupConsumer(
+            $this->upsertConsumer($stream, $config),
         );
     }
 
@@ -201,7 +188,7 @@ final class JetStream
      */
     public function deleteConsumer(string $stream, string $consumer): Api\ConsumerDeleted
     {
-        return $this->request(new Api\ConsumerDeleteRequest(
+        return $this->request(new Api\DeleteConsumerRequest(
             stream: $stream,
             consumer: $consumer,
         ));
@@ -217,7 +204,7 @@ final class JetStream
         string $consumer,
         \DateTimeImmutable $pauseUntil,
     ): Api\ConsumerPaused {
-        return $this->request(new Api\ConsumerPauseRequest(
+        return $this->request(new Api\PauseConsumerRequest(
             stream: $stream,
             consumer: $consumer,
             pauseUntil: $pauseUntil,
@@ -233,7 +220,7 @@ final class JetStream
         string $stream,
         string $consumer,
     ): Api\ConsumerPaused {
-        return $this->request(new Api\ConsumerPauseRequest(
+        return $this->request(new Api\PauseConsumerRequest(
             stream: $stream,
             consumer: $consumer,
         ));
@@ -250,7 +237,7 @@ final class JetStream
         string $consumer,
         string $group,
     ): void {
-        $this->request(new Api\ConsumerUnpinRequest(
+        $this->request(new Api\UnpinConsumerRequest(
             stream: $stream,
             consumer: $consumer,
             group: $group,
@@ -304,6 +291,28 @@ final class JetStream
         ));
     }
 
+    private function setupConsumer(Api\ConsumerInfo $info): JetStream\Consumer
+    {
+        return new JetStream\Consumer(
+            info: $info,
+            name: $info->name,
+            stream: $info->streamName,
+            js: $this,
+            client: $this->client,
+            router: $this->router,
+            json: $this->encoder,
+        );
+    }
+
+    private function setupStream(Api\StreamInfo $info): JetStream\Stream
+    {
+        return new JetStream\Stream(
+            info: $info,
+            name: $info->config->name,
+            js: $this,
+        );
+    }
+
     /**
      * @template T
      * @param Api\PaginatedRequest<Api\PaginatedResponse<T>> $request
@@ -336,7 +345,7 @@ final class JetStream
     private function request(Api\Request $request): mixed
     {
         $response = $this->client->request(
-            subject: "{$this->prefix}{$request->endpoint()}",
+            subject: $this->router->route($request->endpoint()),
             message: new Message(
                 payload: $request->payload() !== null ? $this->encoder->encode($request->payload()) : null,
             ),

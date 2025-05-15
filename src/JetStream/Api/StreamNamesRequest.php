@@ -29,7 +29,7 @@ final readonly class StreamNamesRequest implements PaginatedRequest
 
     public function endpoint(): string
     {
-        return 'STREAM.NAMES';
+        return ApiMethod::StreamNames->value;
     }
 
     /**
