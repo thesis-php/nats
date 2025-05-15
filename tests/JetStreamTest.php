@@ -210,13 +210,13 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        $consumer = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
 
-        $info = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumer, ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumer, $info->name);
-        self::assertSame(AckPolicy::Explicit, $info->config->ackPolicy);
-        self::assertSame(0, $info->numPending);
+        self::assertSame($consumerName, $consumer->info->name);
+        self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
+        self::assertSame(0, $consumer->info->numPending);
 
         $client->disconnect();
     }
@@ -230,15 +230,15 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        $consumer = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
 
-        $createdInfo = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumer, ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedInfo = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumer, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $updatedInfo = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($createdInfo->config->durableName, $updatedInfo->config->durableName);
-        self::assertSame($createdInfo->config->ackPolicy, $updatedInfo->config->ackPolicy);
-        self::assertNull($createdInfo->config->description);
+        self::assertSame($consumer->info->config->durableName, $updatedInfo->config->durableName);
+        self::assertSame($consumer->info->config->ackPolicy, $updatedInfo->config->ackPolicy);
+        self::assertNull($consumer->info->config->description);
         self::assertSame('Test Consumer', $updatedInfo->config->description);
 
         $client->disconnect();
@@ -266,13 +266,13 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        $consumer = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
 
-        $info = $js->createOrUpdateConsumer($stream, new ConsumerConfig(durableName: $consumer, ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->createOrUpdateConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumer, $info->name);
-        self::assertSame(AckPolicy::Explicit, $info->config->ackPolicy);
-        self::assertSame(0, $info->numPending);
+        self::assertSame($consumerName, $consumer->info->name);
+        self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
+        self::assertSame(0, $consumer->info->numPending);
 
         $client->disconnect();
     }
@@ -286,16 +286,16 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        $consumer = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
 
-        $createdInfo = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumer, ackPolicy: AckPolicy::Explicit));
+        $createdConsumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedInfo = $js->createOrUpdateConsumer($stream, new ConsumerConfig(durableName: $consumer, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $updatedConsumer = $js->createOrUpdateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($createdInfo->config->durableName, $updatedInfo->config->durableName);
-        self::assertSame($createdInfo->config->ackPolicy, $updatedInfo->config->ackPolicy);
-        self::assertNull($createdInfo->config->description);
-        self::assertSame('Test Consumer', $updatedInfo->config->description);
+        self::assertSame($createdConsumer->info->config->durableName, $updatedConsumer->info->config->durableName);
+        self::assertSame($createdConsumer->info->config->ackPolicy, $updatedConsumer->info->config->ackPolicy);
+        self::assertNull($createdConsumer->info->config->description);
+        self::assertSame('Test Consumer', $updatedConsumer->info->config->description);
 
         $client->disconnect();
     }
@@ -309,13 +309,13 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        $consumer = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
 
-        $createdInfo = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumer, ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $consumerInfo = $js->consumerInfo($stream, $consumer);
+        $consumerInfo = $js->consumerInfo($stream, $consumerName);
 
-        self::assertEquals($createdInfo->config, $consumerInfo->config);
+        self::assertEquals($consumer->info->config, $consumerInfo->config);
 
         $client->disconnect();
     }

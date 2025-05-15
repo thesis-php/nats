@@ -12,6 +12,7 @@ use Thesis\Time\TimeSpan;
 final readonly class ConsumerInfo
 {
     /**
+     * @param non-empty-string $streamName
      * @param non-empty-string $name
      * @param non-negative-int $numPending
      * @param ?list<PriorityGroupState> $priorityGroups

@@ -139,8 +139,15 @@ final class JetStream
     public function createConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): Api\ConsumerInfo {
-        return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE);
+    ): JetStream\Consumer {
+        $info = $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE);
+
+        return new JetStream\Consumer(
+            info: $info,
+            name: $info->name,
+            stream: $stream,
+            js: $this,
+        );
     }
 
     /**
@@ -161,8 +168,15 @@ final class JetStream
     public function createOrUpdateConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): Api\ConsumerInfo {
-        return $this->upsertConsumer($stream, $config);
+    ): JetStream\Consumer {
+        $info = $this->upsertConsumer($stream, $config);
+
+        return new JetStream\Consumer(
+            info: $info,
+            name: $info->name,
+            stream: $stream,
+            js: $this,
+        );
     }
 
     /**
