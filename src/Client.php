@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Amp\Future;
+use Amp\Cancellation;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Rpc;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
-use function Amp\async;
+use Thesis\Sync;
+use function Amp\weakClosure;
 
 /**
  * @api
@@ -20,20 +21,19 @@ final class Client
 {
     private readonly Connection\ConnectionFactory $connectionFactory;
 
-    /** @var ?Future<Connection\Connection> */
-    private ?Future $connectionFuture = null;
+    /** @var ?Sync\Once<Connection\Connection> */
+    private ?Sync\Once $connection = null;
 
-    private ?Connection\Connection $connection = null;
+    /** @var ?Sync\Once<void> */
+    private ?Sync\Once $disconnection = null;
+
+    /** @var ?Sync\Once<Rpc\Handler> */
+    private ?Sync\Once $rpc = null;
 
     /** @var array<non-empty-string, callable(Delivery, self): void> */
     private array $subscribers = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
-
-    /** @var ?Future<Rpc\Handler> */
-    private ?Future $rpcFuture = null;
-
-    private ?Rpc\Handler $rpc = null;
 
     public function __construct(
         private readonly Config $config,
@@ -61,9 +61,9 @@ final class Client
      * @param ?non-empty-string $domain
      * @throws NatsException
      */
-    public function jetStream(?string $domain = null): JetStream
+    public function jetStream(?string $domain = null, ?Cancellation $cancellation = null): JetStream
     {
-        $info = $this->connection()->info();
+        $info = $this->connection($cancellation)->info();
 
         if (!$info->supportJetstream) {
             throw Exception\FeatureIsNotSupported::forJetStream($info->serverVersion);
@@ -79,13 +79,16 @@ final class Client
     /**
      * @param non-empty-string $subject
      * @param ?non-empty-string $replyTo
+     * @throws NatsException
      */
     public function publish(
         string $subject,
         Message $message = new Message(),
         ?string $replyTo = null,
+        ?Cancellation $cancellation = null,
     ): void {
-        $connection = $this->connection();
+        $connection = $this->connection($cancellation);
+
         if (\count($message->headers) > 0 && !$connection->info()->allowHeaders) {
             throw Exception\FeatureIsNotSupported::forHeaders($connection->info()->serverVersion);
         }
@@ -98,16 +101,18 @@ final class Client
      * @param callable(Delivery, self): void $handler
      * @param ?non-empty-string $queueGroup
      * @return non-empty-string
+     * @throws NatsException
      */
     public function subscribe(
         string $subject,
         callable $handler,
         ?string $queueGroup = null,
+        ?Cancellation $cancellation = null,
     ): string {
         $subscriptionId = $this->subscriptionIdGenerator->nextId();
         $this->subscribers[$subscriptionId] = $handler;
 
-        $this->connection()->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
+        $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
 
         return $subscriptionId;
     }
@@ -118,47 +123,51 @@ final class Client
     public function request(
         string $subject,
         Message $message = new Message(),
+        ?Cancellation $cancellation = null,
     ): Delivery {
-        if ($this->rpc === null) {
-            $this->rpcFuture ??= async(function (): Rpc\Handler {
-                $handler = new Rpc\Handler($this);
-                $handler->setup();
+        $this->rpc ??= new Sync\Once(function (): Rpc\Handler {
+            $handler = new Rpc\Handler($this);
+            $handler->setup();
 
-                return $handler;
-            });
-
-            try {
-                $this->rpc = $this->rpcFuture->await();
-            } finally {
-                $this->rpcFuture = null;
-            }
-        }
+            return $handler;
+        });
 
         return $this->rpc
+            ->await($cancellation)
             ->request($subject, $message)
-            ->await();
+            ->await($cancellation);
     }
 
     /**
      * @param non-empty-string $sid
+     * @throws NatsException
      */
-    public function unsubscribe(string $sid): void
+    public function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
     {
-        $this->connection()->execute(Internal\Command::unsub($sid));
+        $this->connection($cancellation)->execute(Internal\Command::unsub($sid));
     }
 
-    public function disconnect(): void
+    public function disconnect(?Cancellation $cancellation = null): void
     {
-        if ($this->connection === null) {
+        $this->disconnection?->await($cancellation);
+
+        $connection = $this->connection?->await($cancellation);
+        if ($connection === null) {
             return;
         }
 
-        try {
-            $this->rpc?->shutdown();
+        $rpc = $this->rpc?->await($cancellation);
 
-            $this->connection->close();
+        try {
+            $this->disconnection = new Sync\Once(static function() use ($connection, $rpc): void {
+                $rpc?->shutdown();
+                $connection->close();
+            });
+
+            $this->disconnection->await($cancellation);
         } finally {
             $this->connection = null;
+            $this->rpc = null;
             $this->subscribers = [];
         }
     }
@@ -188,23 +197,15 @@ final class Client
         );
     }
 
-    private function connection(): Connection\Connection
+    private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $this->connectionFuture?->await();
+        $this->connection ??= new Sync\Once(weakClosure(function (): Connection\Connection {
+            $connection = $this->connectionFactory->connect();
+            $connection->hooks()->onMessage($this->invokeSubscriber(...));
 
-        if ($this->connection !== null) {
-            return $this->connection;
-        }
+            return $connection;
+        }));
 
-        $this->connectionFuture ??= async($this->connectionFactory->connect(...));
-
-        try {
-            $this->connection = $this->connectionFuture->await();
-            $this->connection->hooks()->onMessage($this->invokeSubscriber(...));
-        } finally {
-            $this->connectionFuture = null;
-        }
-
-        return $this->connection;
+        return $this->connection->await($cancellation);
     }
 }
