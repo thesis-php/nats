@@ -6,7 +6,7 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-covariant ResponseType
+ * @template-covariant ResponseType of PaginatedResponse<*>
  * @template-extends Request<ResponseType>
  */
 interface PaginatedRequest extends Request
