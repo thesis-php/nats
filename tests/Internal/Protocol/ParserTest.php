@@ -42,6 +42,21 @@ final class ParserTest extends TestCase
     )]
     #[TestWith(
         [
+            "MSG _INBOX.c17b04c0911e1b7dedb1ea89a5ae40b0499799f8.9a7f48f9b1c53275c9ed94ed8a77a1b246e9cdf7 1 0\r\n\r\n",
+            new Msg('_INBOX.c17b04c0911e1b7dedb1ea89a5ae40b0499799f8.9a7f48f9b1c53275c9ed94ed8a77a1b246e9cdf7', '1'),
+        ],
+    )]
+    #[TestWith(
+        [
+            [
+                "MSG _INBOX.c17b04c0911e1b7dedb1ea89a5ae40b0499799f8.9a7f48f9b1c53275c9ed94ed8a77a1b246e9cdf7 1 0\r\n",
+                "\r\n",
+            ],
+            new Msg('_INBOX.c17b04c0911e1b7dedb1ea89a5ae40b0499799f8.9a7f48f9b1c53275c9ed94ed8a77a1b246e9cdf7', '1'),
+        ],
+    )]
+    #[TestWith(
+        [
             'INFO {"server_id":"NCNITNSOJEGWKBAVPXS5M43GLPANADGR6YOMDAYSTVZDHDR6DLD64ZDA","server_name":"nats-1","version":"2.11.1","go":"go1.24.1","host":"0.0.0.0","port":4222,"headers":true,"max_payload":1048576,"proto":1}' . "\r\n",
             new ServerInfo(
                 serverId: 'NCNITNSOJEGWKBAVPXS5M43GLPANADGR6YOMDAYSTVZDHDR6DLD64ZDA',
