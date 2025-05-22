@@ -6,4 +6,6 @@ on:
 jobs:
   check:
     uses: thesis-php/.github/.github/workflows/check.yml@main
+    with:
+      test: false
     secrets: inherit

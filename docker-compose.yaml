@@ -5,8 +5,8 @@ services:
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
-      - 4222:4222
-      - 8222:8222
+      - "4222:4222"
+      - "8222:8222"
 
   nats-2:
     image: nats
@@ -14,7 +14,7 @@ services:
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
-      - 4223:4222
+      - "4223:4222"
 
   nats-3:
     image: nats
@@ -22,4 +22,4 @@ services:
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
-      - 4224:4222
+      - "4224:4222"
