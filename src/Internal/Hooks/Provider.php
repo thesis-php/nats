@@ -6,30 +6,30 @@ namespace Thesis\Nats\Internal\Hooks;
 
 /**
  * @internal
- * @phpstan-type OnMessageCallback = callable(MessageReceived): void
- * @phpstan-type OnCloseCallback = callable(): void
- * @phpstan-type OnPingCallback = callable(): void
- * @phpstan-type OnPongCallback = callable(): void
+ * @phpstan-type OnMessageCallback = \Closure(MessageReceived): void
+ * @phpstan-type OnCloseCallback = \Closure(): void
+ * @phpstan-type OnPingCallback = \Closure(): void
+ * @phpstan-type OnPongCallback = \Closure(): void
  */
 interface Provider
 {
     /**
      * @param OnMessageCallback $callback
      */
-    public function onMessage(callable $callback): void;
+    public function onMessage(\Closure $callback): void;
 
     /**
      * @param OnPingCallback $callback
      */
-    public function onPing(callable $callback): void;
+    public function onPing(\Closure $callback): void;
 
     /**
      * @param OnPongCallback $callback
      */
-    public function onPong(callable $callback): void;
+    public function onPong(\Closure $callback): void;
 
     /**
      * @param OnCloseCallback $callback
      */
-    public function onClose(callable $callback): void;
+    public function onClose(\Closure $callback): void;
 }
