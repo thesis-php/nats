@@ -62,4 +62,13 @@ final readonly class Stream
     {
         return $this->js->createOrUpdateConsumer($this->name, $config);
     }
+
+    /**
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function deleteConsumer(string $consumer): Api\ConsumerDeleted
+    {
+        return $this->js->deleteConsumer($this->name, $consumer);
+    }
 }
