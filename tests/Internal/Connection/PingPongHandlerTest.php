@@ -6,7 +6,7 @@ namespace Thesis\Nats\Internal\Connection;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Thesis\Nats\Internal\Hooks\BlockingProvider;
+use Thesis\Nats\Internal\Hooks\ConcurrentProvider;
 use Thesis\Nats\Internal\Hooks\PingReceived;
 use Thesis\Nats\Internal\Protocol\Ping;
 use Thesis\Nats\Internal\Protocol\Pong;
@@ -17,7 +17,7 @@ final class PingPongHandlerTest extends TestCase
 {
     public function testPingPong(): void
     {
-        $provider = new BlockingProvider();
+        $provider = new ConcurrentProvider();
 
         $connection = $this->createMock(Connection::class);
         $connection
@@ -35,6 +35,8 @@ final class PingPongHandlerTest extends TestCase
         for ($i = 0; $i < 10; ++$i) {
             $provider->dispatch(PingReceived::Event);
         }
+
+        delay(0.1);
     }
 
     public function testMaxPingExhausted(): void

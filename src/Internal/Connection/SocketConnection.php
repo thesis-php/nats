@@ -22,7 +22,7 @@ final class SocketConnection implements Connection
     /** @var \SplQueue<DeferredFuture<Protocol\Frame>> */
     private readonly \SplQueue $queue;
 
-    private readonly Hooks\BlockingProvider $hooks;
+    private readonly Hooks\ConcurrentProvider $hooks;
 
     private readonly PingPongHandler $pingpongs;
 
@@ -35,7 +35,7 @@ final class SocketConnection implements Connection
         private readonly Socket $socket,
     ) {
         $this->framer = new Framer($this->socket);
-        $this->hooks = new Hooks\BlockingProvider();
+        $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
