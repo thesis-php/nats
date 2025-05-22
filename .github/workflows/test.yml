@@ -38,6 +38,19 @@ jobs:
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
             nats \
             -c /etc/server.conf --name nats-2 -p 4222 -m 8222
+      - name: Wait for NATS to be ready
+        run: |
+          for i in {1..10}; do
+            if nc -z localhost 4222; then
+              echo "NATS is up"
+              exit 0
+            fi
+            echo "Waiting for NATS..."
+            sleep 1
+          done
+          echo "NATS did not start in time" >&2
+          docker logs nats-1 || true
+          exit 1
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
