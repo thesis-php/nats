@@ -24,9 +24,6 @@ final class Client
     /** @var ?Sync\Once<Connection\Connection> */
     private ?Sync\Once $connection = null;
 
-    /** @var ?Sync\Once<void> */
-    private ?Sync\Once $disconnection = null;
-
     /** @var ?Sync\Once<Rpc\Handler> */
     private ?Sync\Once $rpc = null;
 
@@ -125,12 +122,12 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $this->rpc ??= new Sync\Once(function (): Rpc\Handler {
+        $this->rpc ??= new Sync\Once(weakClosure(function (): Rpc\Handler {
             $handler = new Rpc\Handler($this);
             $handler->setup();
 
             return $handler;
-        });
+        }));
 
         return $this->rpc
             ->await($cancellation)
@@ -145,31 +142,18 @@ final class Client
     public function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
     {
         $this->connection($cancellation)->execute(Internal\Command::unsub($sid));
+        unset($this->subscribers[$sid]);
     }
 
     public function disconnect(?Cancellation $cancellation = null): void
     {
-        $this->disconnection?->await($cancellation);
-
         $connection = $this->connection?->await($cancellation);
         if ($connection === null) {
             return;
         }
 
-        $rpc = $this->rpc?->await($cancellation);
-
-        try {
-            $this->disconnection = new Sync\Once(static function () use ($connection, $rpc): void {
-                $rpc?->shutdown();
-                $connection->close();
-            });
-
-            $this->disconnection->await($cancellation);
-        } finally {
-            $this->connection = null;
-            $this->rpc = null;
-            $this->subscribers = [];
-        }
+        $this->connection = null;
+        $connection->close();
     }
 
     public function __destruct()
