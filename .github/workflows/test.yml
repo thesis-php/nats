@@ -7,35 +7,37 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      nats-1:
-        image: nats
-        options: -c /etc/server.conf --name nats-1 -p 4222 -m 8222
-        volumes:
-          - ./nats/server.conf:/etc/server.conf
-        ports:
-          - "4222:4222"
-          - "8222:8222"
-      nats-2:
-        image: nats
-        options: -c /etc/server.conf --name nats-2 -p 4222 -m 8222
-        volumes:
-          - ./nats/server.conf:/etc/server.conf
-        ports:
-          - "4223:4222"
-      nats-3:
-        image: nats
-        options: -c /etc/server.conf --name nats-3 -p 4222 -m 8222
-        volumes:
-          - ./nats/server.conf:/etc/server.conf
-        ports:
-          - "4224:4222"
     strategy:
       matrix:
         php: ["8.3", "8.4"]
         dependencies: ["locked", "lowest", "highest"]
     steps:
       - uses: actions/checkout@v4
+      - name: Start nats-1
+        run: |
+          docker run -d \
+            --name nats-1 \
+            -p 4222:4222 \
+            -p 8222:8222 \
+            -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
+            nats \
+            -c /etc/server.conf --name nats-1 -p 4222 -m 8222
+      - name: Start nats-2
+        run: |
+          docker run -d \
+            --name nats-2 \
+            -p 4222:4222 \
+            -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
+            nats \
+            -c /etc/server.conf --name nats-2 -p 4222 -m 8222
+      - name: Start nats-3
+        run: |
+          docker run -d \
+            --name nats-3 \
+            -p 4222:4222 \
+            -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
+            nats \
+            -c /etc/server.conf --name nats-2 -p 4222 -m 8222
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
