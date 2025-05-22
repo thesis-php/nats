@@ -13,10 +13,13 @@ jobs:
         dependencies: ["locked", "lowest", "highest"]
     steps:
       - uses: actions/checkout@v4
+      - name: Create Docker network for NATS
+        run: docker network create nats-net
       - name: Start nats-1
         run: |
           docker run -d \
             --name nats-1 \
+            --network nats-net \
             -p 4222:4222 \
             -p 8222:8222 \
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
@@ -26,6 +29,7 @@ jobs:
         run: |
           docker run -d \
             --name nats-2 \
+            --network nats-net \
             -p 4223:4222 \
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
             nats \
@@ -34,6 +38,7 @@ jobs:
         run: |
           docker run -d \
             --name nats-3 \
+            --network nats-net \
             -p 4224:4222 \
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
             nats \
