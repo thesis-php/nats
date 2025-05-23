@@ -15,45 +15,60 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final readonly class Consumer
+final class Consumer
 {
+    /** @var array<non-empty-string, Internal\MessageHandler> */
+    private array $subscribers = [];
+
     /**
      * @param non-empty-string $name
      * @param non-empty-string $stream
      */
     public function __construct(
-        public Api\ConsumerInfo $info,
-        public string $name,
-        public string $stream,
-        private JetStream $js,
-        private Client $client,
-        private Router $router,
-        private Encoder $json,
+        public readonly Api\ConsumerInfo $info,
+        public readonly string $name,
+        public readonly string $stream,
+        private readonly JetStream $js,
+        private readonly Client $client,
+        private readonly Router $router,
+        private readonly Encoder $json,
     ) {}
 
     /**
      * @param callable(Delivery): void $handler
+     * @return callable(): void
      * @throws NatsException
      */
     public function consume(
         callable $handler,
         ConsumeConfig $config = new ConsumeConfig(),
         ?Cancellation $cancellation = null,
-    ): void {
+    ): callable {
         $id = Id\generateInboxId();
 
-        $this->client->subscribe(
+        $messageHandler = new Internal\MessageHandler(
+            handler: $handler,
+            client: $this->client,
+            json: $this->json,
+            config: $config,
+            subject: $this->router->route(Api\ApiMethod::ConsumerMessageNext->compile($this->stream, $this->name)),
+            replyTo: $id,
+        );
+
+        $sid = $this->client->subscribe(
             subject: $id,
-            handler: new Internal\MessageHandler(
-                handler: $handler,
-                client: $this->client,
-                json: $this->json,
-                config: $config,
-                subject: $this->router->route(Api\ApiMethod::ConsumerMessageNext->compile($this->stream, $this->name)),
-                replyTo: $id,
-            ),
+            handler: $messageHandler,
             cancellation: $cancellation,
         );
+
+        $this->subscribers[$sid] = $messageHandler;
+
+        return function () use ($sid, $messageHandler): void {
+            $this->client->unsubscribe($sid);
+            unset($this->subscribers[$sid]);
+
+            $messageHandler->stop();
+        };
     }
 
     /**

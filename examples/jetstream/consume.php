@@ -22,13 +22,13 @@ $stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
 $consumer = $stream->createConsumer(new Nats\JetStream\Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Nats\JetStream\Api\AckPolicy::Explicit));
 
 $consumer->consume(
-    handler: static function (Nats\JetStream\Delivery $message): void {
-        dump($message->message->payload);
-        $message->ack();
+    handler: static function (Nats\JetStream\Delivery $delivery): void {
+        dump($delivery->message->payload);
+        $delivery->ack();
     },
 );
 
-for ($i = 0; $i < 1_000; ++$i) {
+for ($i = 0; $i < 10; ++$i) {
     $client->publish('events.activated', new Nats\Message("Message#{$i}"));
 }
 

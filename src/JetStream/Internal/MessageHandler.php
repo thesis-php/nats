@@ -9,6 +9,7 @@ use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 
@@ -62,13 +63,23 @@ final readonly class MessageHandler
 
     public function __invoke(NatsDelivery $delivery): void
     {
-        ($this->handler)(new JetStreamDelivery(
-            message: $delivery->message,
-            subject: $delivery->subject,
-            replyTo: $delivery->replyTo ?? throw new \LogicException('Reply for jetstream delivery cannot be empty.'),
-            acks: $this->acks,
-        ));
+        $replyTo = $delivery->replyTo;
 
-        $this->barrier->arrive();
+        if ($replyTo !== null) {
+            ($this->handler)(new JetStreamDelivery(
+                message: $delivery->message,
+                subject: $delivery->subject,
+                metadata: Metadata::parse($replyTo),
+                replyTo: $replyTo,
+                acks: $this->acks,
+            ));
+
+            $this->barrier->arrive();
+        }
+    }
+
+    public function stop(): void
+    {
+        $this->barrier->close();
     }
 }

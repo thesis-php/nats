@@ -68,7 +68,7 @@ final class MetadataTest extends TestCase
 
     public function testParseInvalidPrefix(): void
     {
-        self::expectExceptionObject(new \InvalidArgumentException('Invalid subject format: no leading "$JS.ACK." prefix.'));
+        self::expectExceptionObject(new \InvalidArgumentException("Invalid subject format: no leading '\$JS.ACK.' prefix."));
         Metadata::parse('EventsStream.EventsConsumer.1.1.1.1747976767996376564.0');
     }
 

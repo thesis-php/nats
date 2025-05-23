@@ -40,7 +40,7 @@ final readonly class Metadata
         $prefix = '$JS.ACK.';
 
         if (!str_starts_with($subject, $prefix)) {
-            throw new \InvalidArgumentException('Invalid subject format: no leading "$JS.ACK." prefix.');
+            throw new \InvalidArgumentException("Invalid subject format: no leading '{$prefix}' prefix.");
         }
 
         $tokens = explode('.', substr($subject, strlen($prefix)));

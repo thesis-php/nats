@@ -32,6 +32,7 @@ final class Delivery
     public function __construct(
         public readonly Message $message,
         public readonly string $subject,
+        public readonly Metadata $metadata,
         private readonly string $replyTo,
         private readonly Acks $acks,
     ) {}
