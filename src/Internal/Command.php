@@ -74,7 +74,7 @@ final class Command
     {
         return new Protocol\Message(
             payload: $message->payload,
-            headers: \count($message->headers) > 0 ? Protocol\Headers::fromArray($message->headers) : null,
+            headers: $message->headers ?? null,
         );
     }
 }

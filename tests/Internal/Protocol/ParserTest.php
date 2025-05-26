@@ -8,6 +8,7 @@ use Amp\Pipeline\Queue;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
+use Thesis\Nats\Headers;
 
 #[CoversClass(Parser::class)]
 final class ParserTest extends TestCase

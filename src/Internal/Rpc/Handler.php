@@ -76,7 +76,7 @@ final class Handler
         /** @var DeferredFuture<Delivery> $deferred */
         $deferred = new DeferredFuture();
         $this->futures[$replyTo->token] = static function (Delivery $delivery) use ($deferred): void {
-            if ($delivery->message->status === Status::NoResponders) {
+            if ($delivery->message->headers?->status() === Status::NoResponders) {
                 $deferred->error(new RequestHasNoResponders());
             } else {
                 $deferred->complete($delivery);

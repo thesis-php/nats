@@ -109,7 +109,7 @@ final readonly class Parser
         $replyTo = $size === 5 ? $chunks[2] : null;
 
         $headersLength = (int) ($chunks[$size - 2] ?? 0);
-        $headers = Headers::fromString(yield $headersLength);
+        $headers = decodeHeaders(yield $headersLength);
 
         $length = (int) ($chunks[$size - 1] ?? 0);
         $length -= $headersLength;

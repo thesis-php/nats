@@ -16,4 +16,5 @@ enum Status: int
     case MaxBytesExceeded = 409;
     case NoResponders = 503;
     case PinIdMismatch = 423;
+    case Unknown = -1;
 }

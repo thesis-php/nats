@@ -40,7 +40,9 @@
         },
         "files": [
             "src/Internal/Id/generateInboxId.php",
-            "src/Internal/Id/generateUniqueId.php"
+            "src/Internal/Id/generateUniqueId.php",
+            "src/Internal/Protocol/encodeHeaders.php",
+            "src/Internal/Protocol/decodeHeaders.php"
         ]
     },
     "autoload-dev": {

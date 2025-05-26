@@ -7,6 +7,7 @@ namespace Thesis\Nats\Internal\Protocol;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
+use Thesis\Nats\Headers;
 
 #[CoversClass(Connect::class)]
 final class FrameTest extends TestCase

@@ -86,7 +86,7 @@ final class Client
     ): void {
         $connection = $this->connection($cancellation);
 
-        if (\count($message->headers) > 0 && !$connection->info()->allowHeaders) {
+        if ($message->headers !== null && \count($message->headers) > 0 && !$connection->info()->allowHeaders) {
             throw Exception\FeatureIsNotSupported::forHeaders($connection->info()->serverVersion);
         }
 
@@ -173,8 +173,7 @@ final class Client
                 replyTo: $event->replyTo,
                 message: new Message(
                     payload: $event->payload,
-                    headers: $event->headers?->keyvals ?: [],
-                    status: $event->headers?->status !== null ? Status::from($event->headers->status) : null,
+                    headers: $event->headers,
                 ),
             ),
             $this,

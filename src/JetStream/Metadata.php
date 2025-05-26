@@ -43,7 +43,7 @@ final readonly class Metadata
             throw new \InvalidArgumentException("Invalid subject format: no leading '{$prefix}' prefix.");
         }
 
-        $tokens = explode('.', substr($subject, strlen($prefix)));
+        $tokens = explode('.', substr($subject, \strlen($prefix)));
         $length = \count($tokens);
 
         if ($length < 7 || ($length > 7 && $length < 9)) {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Header\StatusCode;
+
 /**
  * @api
  * @template-implements \IteratorAggregate<non-empty-string, list<string>>
@@ -84,6 +86,19 @@ final class Headers implements
     public function values(string|HeaderKey $key): array
     {
         return $this->values[self::keyToString($key)] ?? [];
+    }
+
+    /**
+     * @param non-empty-string|HeaderKey<*> $key
+     */
+    public function exists(string|HeaderKey $key): bool
+    {
+        return isset($this->values[self::keyToString($key)]);
+    }
+
+    public function status(): Status
+    {
+        return Status::tryFrom((int) $this->get(StatusCode::Header)) ?: Status::Unknown;
     }
 
     public function getIterator(): \Traversable

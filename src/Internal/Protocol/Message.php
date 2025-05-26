@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Protocol;
 
+use Thesis\Nats\Headers;
+
 /**
  * @internal
  */
@@ -24,7 +26,7 @@ final readonly class Message implements Frame
 
         $length = \strlen($this->payload ?: '');
 
-        $headers = $this->headers?->encode();
+        $headers = $this->headers !== null ? encodeHeaders($this->headers) : null;
         $headersLength = \strlen($headers ?: '');
 
         $length += $headersLength;
