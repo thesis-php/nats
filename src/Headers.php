@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Thesis\Nats\Header\StatusCode;
-
 /**
  * @api
  * @template-implements \IteratorAggregate<non-empty-string, list<string>>
@@ -23,29 +21,45 @@ final class Headers implements
     ) {}
 
     /**
-     * @template T of string
+     * @template T
      * @param non-empty-string|HeaderKey<T> $key
-     * @param ($key is HeaderKey<*> ? T : string) ...$value
+     * @param ($key is HeaderKey<T> ? T : string) ...$values
      */
-    public function with(string|HeaderKey $key, mixed ...$value): self
+    public function with(string|HeaderKey $key, mixed ...$values): self
     {
+        if ($key instanceof HeaderKey) {
+            $values = array_map(
+                /** @phpstan-ignore argument.type */
+                static fn(mixed $value): string => $key->encode($value),
+                $values,
+            );
+        }
+
         $headers = clone $this;
-        $headers->values[self::keyToString($key)] = array_values($value);
+        $headers->values[self::keyToString($key)] = array_values($values);
 
         return $headers;
     }
 
     /**
-     * @template T of string
+     * @template T
      * @param non-empty-string|HeaderKey<T> $key
-     * @param ($key is HeaderKey<*> ? T : string) ...$value
+     * @param ($key is HeaderKey<T> ? T : string) ...$values
      */
-    public function withAdded(string|HeaderKey $key, mixed ...$value): self
+    public function withAdded(string|HeaderKey $key, mixed ...$values): self
     {
+        if ($key instanceof HeaderKey) {
+            $values = array_map(
+                /** @phpstan-ignore argument.type */
+                static fn(mixed $value): string => $key->encode($value),
+                $values,
+            );
+        }
+
         $headers = clone $this;
         $headers->values[$key = self::keyToString($key)] = [
             ...$this->values[$key] ?? [],
-            ...array_values($value),
+            ...array_values($values),
         ];
 
         return $headers;
@@ -63,11 +77,11 @@ final class Headers implements
     }
 
     /**
-     * @template T of string
+     * @template T
      * @param non-empty-string|HeaderKey<T> $key
      * @return ($key is HeaderKey<*> ? ($key is OptionalHeaderKey<*> ? T : ?T) : ?string) returns the first value associated with the given key
      */
-    public function get(string|HeaderKey $key): ?string
+    public function get(string|HeaderKey $key): mixed
     {
         $value = $this->values[self::keyToString($key)] ?? [];
 
@@ -75,17 +89,32 @@ final class Headers implements
             return $key->default($this);
         }
 
-        return $value[0] ?? null;
+        $value = $value[0] ?? null;
+
+        if ($value !== null && $key instanceof HeaderKey) {
+            $value = $key->decode($value);
+        }
+
+        return $value;
     }
 
     /**
-     * @template T of string
+     * @template T
      * @param non-empty-string|HeaderKey<T> $key
      * @return ($key is HeaderKey<*> ? list<T> : list<string>) returns all values associated with the given key
      */
     public function values(string|HeaderKey $key): array
     {
-        return $this->values[self::keyToString($key)] ?? [];
+        $values = $this->values[self::keyToString($key)] ?? [];
+
+        if ($key instanceof HeaderKey) {
+            $values = array_map(
+                static fn(string $value): mixed => $key->decode($value),
+                $values,
+            );
+        }
+
+        return $values;
     }
 
     /**
@@ -94,11 +123,6 @@ final class Headers implements
     public function exists(string|HeaderKey $key): bool
     {
         return isset($this->values[self::keyToString($key)]);
-    }
-
-    public function status(): Status
-    {
-        return Status::tryFrom((int) $this->get(StatusCode::Header)) ?: Status::Unknown;
     }
 
     public function getIterator(): \Traversable
@@ -120,13 +144,18 @@ final class Headers implements
     }
 
     /**
-     * @param non-empty-string|HeaderKey<*> $key
      * @return non-empty-string
      */
-    private function keyToString(string|HeaderKey $key): string
+    private function keyToString(mixed $key): string
     {
-        if ($key instanceof HeaderKey) {
+        if ($key instanceof \BackedEnum) {
             $key = (string) $key->value;
+        } elseif ($key instanceof \Stringable || \is_string($key)) {
+            $key = (string) $key;
+        } else {
+            throw new \InvalidArgumentException(
+                \sprintf('Header key must be string, instance of \Stringable or \BackedEnum, but "%s" given.', get_debug_type($key)),
+            );
         }
 
         /** @var non-empty-string */

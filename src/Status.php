@@ -10,6 +10,7 @@ namespace Thesis\Nats;
 enum Status: int
 {
     case Control = 100;
+    case OK = 200;
     case BadRequest = 400;
     case NoMessages = 404;
     case ReqTimeout = 408;

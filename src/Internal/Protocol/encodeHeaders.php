@@ -15,7 +15,8 @@ function encodeHeaders(Headers $headers): string
 {
     $buffer = 'NATS/1.0';
     if ($headers->exists(StatusCode::Header)) {
-        $buffer .= " {$headers->get(StatusCode::Header)}";
+        $status = $headers->get(StatusCode::Header)->value;
+        $buffer .= " {$status}";
         $headers = $headers->without(StatusCode::Header);
     }
 

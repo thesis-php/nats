@@ -9,6 +9,7 @@ use Amp\Future;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\RequestHasNoResponders;
+use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
@@ -76,7 +77,7 @@ final class Handler
         /** @var DeferredFuture<Delivery> $deferred */
         $deferred = new DeferredFuture();
         $this->futures[$replyTo->token] = static function (Delivery $delivery) use ($deferred): void {
-            if ($delivery->message->headers?->status() === Status::NoResponders) {
+            if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoResponders) {
                 $deferred->error(new RequestHasNoResponders());
             } else {
                 $deferred->complete($delivery);

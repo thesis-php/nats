@@ -6,6 +6,17 @@ namespace Thesis\Nats;
 
 /**
  * @api
- * @template-covariant ValueType of string
+ * @template ValueType = string
  */
-interface HeaderKey extends \BackedEnum {}
+interface HeaderKey
+{
+    /**
+     * @param ValueType $value
+     */
+    public function encode(mixed $value): string;
+
+    /**
+     * @return ValueType
+     */
+    public function decode(string $value): mixed;
+}

@@ -6,7 +6,7 @@ namespace Thesis\Nats;
 
 /**
  * @api
- * @template-covariant ValueType of string
+ * @template ValueType = string
  * @template-extends HeaderKey<ValueType>
  */
 interface OptionalHeaderKey extends HeaderKey
@@ -14,5 +14,5 @@ interface OptionalHeaderKey extends HeaderKey
     /**
      * @return ValueType
      */
-    public function default(Headers $headers): string;
+    public function default(Headers $headers): mixed;
 }

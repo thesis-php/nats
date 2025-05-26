@@ -6,6 +6,7 @@ namespace Thesis\Nats\Internal\Protocol;
 
 use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Headers;
+use Thesis\Nats\Status;
 
 /**
  * @internal
@@ -23,7 +24,7 @@ function decodeHeaders(string $encoded): Headers
     $lines = explode("\r\n", trim($encoded));
 
     if (($status = parseStatus(array_shift($lines))) !== null) {
-        $headers = $headers->with(StatusCode::Header, $status);
+        $headers = $headers->with(StatusCode::Header, Status::tryFrom((int) $status) ?? Status::Unknown);
     }
 
     foreach ($lines as $line) {
