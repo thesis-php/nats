@@ -4,14 +4,27 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
+use Thesis\Nats\Exception\StreamDoesNotMatch;
 use Thesis\Nats\Exception\StreamNotFound;
+use Thesis\Nats\Exception\WrongLastMessageId;
+use Thesis\Nats\Exception\WrongLastSequence;
+use Thesis\Nats\Header\ExpectedLastMsgID;
+use Thesis\Nats\Header\ExpectedLastSeq;
+use Thesis\Nats\Header\ExpectedLastSubjSeq;
+use Thesis\Nats\Header\ExpectedStream;
+use Thesis\Nats\Header\MsgId;
+use Thesis\Nats\Header\MsgTtl;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\StreamConfig;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Time\TimeSpan;
+use function Amp\delay;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(JetStream::class)]
@@ -113,12 +126,11 @@ final class JetStreamTest extends NatsTestCase
         $client = $this->client();
         $js = $client->jetStream();
 
-        $stream = generateUniqueId(10);
         $subject = generateUniqueId(10);
 
-        $js->createOrUpdateStream(new StreamConfig($stream, subjects: [$subject]));
+        $stream = $js->createOrUpdateStream(new StreamConfig(generateUniqueId(10), subjects: [$subject]));
 
-        $info = $js->streamInfo($stream);
+        $info = $stream->actualInfo();
 
         self::assertSame([$subject], $info->config->subjects);
 
@@ -137,7 +149,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertTrue($stream->delete()->success);
 
         self::expectException(StreamNotFound::class);
-        $js->streamInfo($streamName);
+        $stream->actualInfo();
     }
 
     public function testPurgeStream(): void
@@ -301,7 +313,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumer = $stream->createConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $consumerInfo = $js->consumerInfo($stream->name, $consumerName);
+        $consumerInfo = $consumer->actualInfo();
 
         self::assertEquals($consumer->info->config, $consumerInfo->config);
 
@@ -320,7 +332,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertTrue($consumer->delete()->success);
 
         self::expectException(ConsumerNotFound::class);
-        $js->consumerInfo($stream->name, $consumer->name);
+        $consumer->actualInfo();
     }
 
     public function testPauseResumeConsumer(): void
@@ -422,5 +434,224 @@ final class JetStreamTest extends NatsTestCase
         self::assertEquals($consumers, $consumerNames);
 
         $client->disconnect();
+    }
+
+    public function testPublishWrongLastStreamSequence(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        self::expectException(WrongLastSequence::class);
+        $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(ExpectedLastSeq::Header, 1),
+        ));
+    }
+
+    public function testPublishWrongLastSubjectSequence(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        self::expectException(WrongLastSequence::class);
+        $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(ExpectedLastSubjSeq::Header, 1),
+        ));
+    }
+
+    public function testPublishWrongLastMsgId(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        self::expectException(WrongLastMessageId::class);
+        $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(ExpectedLastMsgID::header(), '123'),
+        ));
+    }
+
+    public function testPublishStreamDoesNotMatch(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        self::expectException(StreamDoesNotMatch::class);
+        $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(ExpectedStream::header(), 'xxx'),
+        ));
+    }
+
+    public function testPublishMsgExpired(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            allowMessageTtl: true,
+        ));
+
+        $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(MsgTtl::Header, TimeSpan::fromSeconds(1)),
+        ));
+
+        self::assertSame(1, $stream->actualInfo()->state->messages);
+        delay(1);
+        self::assertSame(0, $stream->actualInfo()->state->messages);
+    }
+
+    public function testPublishDuplicate(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        $response = $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(MsgId::header(), '123'),
+        ));
+
+        self::assertSame(1, $response->seq);
+        self::assertNull($response->duplicate);
+
+        for ($i = 0; $i < 5; ++$i) {
+            $response = $js->publish("{$subject}.xxx", new Message(
+                headers: (new Headers())
+                    ->with(MsgId::header(), '123'),
+            ));
+
+            self::assertSame(1, $response->seq);
+            self::assertTrue($response->duplicate);
+        }
+
+        $response = $js->publish("{$subject}.xxx", new Message(
+            headers: (new Headers())
+                ->with(MsgId::header(), '124'),
+        ));
+
+        self::assertSame(2, $response->seq);
+        self::assertNull($response->duplicate);
+    }
+
+    public function testPublishConsume(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        $publishedMessages = [];
+
+        for ($i = 0; $i < 5; ++$i) {
+            $payload = "Message#{$i}";
+            $publishedMessages[] = $payload;
+
+            $response = $js->publish("{$subject}.xxx", new Message(
+                payload: $payload,
+                headers: (new Headers())
+                    ->with(MsgId::header(), "id:{$i}"),
+            ));
+
+            self::assertSame($i + 1, $response->seq);
+        }
+
+        $js->publish("{$subject}.xxx", new Message(payload: 'quit'));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
+
+        self::assertSame(6, $consumer->actualInfo()->numPending);
+
+        $messages = [];
+
+        /** @var DeferredFuture<null> $deferred */
+        $deferred = new DeferredFuture();
+
+        $cancel = $consumer->consume(
+            handler: static function (JetStreamDelivery $delivery) use (&$messages, $deferred): void {
+                $delivery->ack();
+
+                if ($delivery->message->payload === 'quit') {
+                    $deferred->complete();
+
+                    return;
+                }
+
+                $messages[] = $delivery->message->payload;
+            },
+        );
+
+        $deferred->getFuture()->await();
+        $cancel();
+
+        self::assertSame($publishedMessages, $messages);
+        self::assertSame(0, $consumer->actualInfo()->numPending);
     }
 }
