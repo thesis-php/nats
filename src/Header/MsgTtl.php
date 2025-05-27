@@ -19,11 +19,17 @@ enum MsgTtl: string implements HeaderKey
 
     public function encode(mixed $value): string
     {
-        return (string) $value->toNanoseconds();
+        return match ($secs = $value->toSeconds()) {
+            -1 => 'never',
+            default => (string) $secs,
+        };
     }
 
     public function decode(string $value): TimeSpan
     {
-        return TimeSpan::fromNanoseconds((int) $value);
+        return match ($value) {
+            'never' => TimeSpan::fromSeconds(-1),
+            default => TimeSpan::fromSeconds((int) $value),
+        };
     }
 }

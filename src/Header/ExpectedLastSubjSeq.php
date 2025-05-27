@@ -4,24 +4,26 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Header;
 
+use Thesis\Nats\HeaderKey;
+
 /**
  * Contains the expected last sequence number on the subject and can be used to apply optimistic concurrency control at subject level.
  * Server will reject the message if it is not the public const string.
  *
  * @api
+ * @template-implements HeaderKey<int>
  */
-final readonly class ExpectedLastSubjSeq
+enum ExpectedLastSubjSeq: string implements HeaderKey
 {
-    private const string HEADER = 'Nats-Expected-Last-Subject-Sequence';
+    case Header = 'Nats-Expected-Last-Subject-Sequence';
 
-    /**
-     * @return Value<numeric-string>
-     */
-    public static function header(): Value
+    public function encode(mixed $value): string
     {
-        /** @var Value<numeric-string> */
-        return new Value(self::HEADER);
+        return (string) $value;
     }
 
-    private function __construct() {}
+    public function decode(string $value): int
+    {
+        return (int) $value;
+    }
 }

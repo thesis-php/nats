@@ -51,7 +51,7 @@ final class HeadersTest extends TestCase
         self::assertEquals(TimeSpan::fromSeconds(2), $headers->get(Header\MsgTtl::Header));
         self::assertEquals(
             [
-                'Nats-TTL' => ['2000000000'],
+                'Nats-TTL' => ['2'],
                 'Nats-Status-Code' => ['400'],
             ],
             [...$headers],
@@ -61,7 +61,7 @@ final class HeadersTest extends TestCase
         self::assertSame('123', $headers->get(Header\MsgId::header()));
         self::assertEquals(
             [
-                'Nats-TTL' => ['2000000000'],
+                'Nats-TTL' => ['2'],
                 'Nats-Status-Code' => ['400'],
                 'Nats-Msg-Id' => ['123'],
             ],
