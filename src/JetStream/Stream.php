@@ -24,6 +24,14 @@ final readonly class Stream
     /**
      * @throws NatsException
      */
+    public function actualInfo(): Api\StreamInfo
+    {
+        return $this->js->streamInfo($this->name);
+    }
+
+    /**
+     * @throws NatsException
+     */
     public function delete(): Api\StreamDeleted
     {
         return $this->js->deleteStream($this->name);
