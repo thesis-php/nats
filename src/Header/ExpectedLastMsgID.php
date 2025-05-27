@@ -10,16 +10,18 @@ namespace Thesis\Nats\Header;
  *
  * @api
  */
-enum ExpectedLastMsgID: string
+final readonly class ExpectedLastMsgID
 {
-    case Header = 'Nats-Expected-Last-Msg-Id';
+    private const string HEADER = 'Nats-Expected-Last-Msg-Id';
 
     /**
-     * @return Primitive<non-empty-string>
+     * @return Value<non-empty-string>
      */
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        /** @var Primitive<non-empty-string> */
-        return new Primitive(self::Header);
+        /** @var Value<non-empty-string> */
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }

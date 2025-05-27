@@ -13,16 +13,18 @@ use Thesis\Nats\JetStream\Api\StreamConfig;
  *
  * @api
  */
-enum MsgId: string
+final readonly class MsgId
 {
-    case Header = 'Nats-Msg-Id';
+    private const string HEADER = 'Nats-Msg-Id';
 
     /**
-     * @return Primitive<non-empty-string>
+     * @return Value<non-empty-string>
      */
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        /** @var Primitive<non-empty-string> */
-        return new Primitive(self::Header);
+        /** @var Value<non-empty-string> */
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }

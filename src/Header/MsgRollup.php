@@ -9,16 +9,18 @@ namespace Thesis\Nats\Header;
  *
  * @api
  */
-enum MsgRollup: string
+final readonly class MsgRollup
 {
-    case Header = 'Nats-Rollup';
+    private const string HEADER = 'Nats-Rollup';
 
     /**
-     * @return Primitive<'all'|'sub'>
+     * @return Value<'all'|'sub'>
      */
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        /** @var Primitive<'all'|'sub'> */
-        return new Primitive(self::Header);
+        /** @var Value<'all'|'sub'> */
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }

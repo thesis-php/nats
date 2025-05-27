@@ -10,16 +10,18 @@ namespace Thesis\Nats\Header;
  *
  * @api
  */
-enum ExpectedLastSubjSeq: string
+final readonly class ExpectedLastSubjSeq
 {
-    case Header = 'Nats-Expected-Last-Subject-Sequence';
+    private const string HEADER = 'Nats-Expected-Last-Subject-Sequence';
 
     /**
-     * @return Primitive<numeric-string>
+     * @return Value<numeric-string>
      */
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        /** @var Primitive<numeric-string> */
-        return new Primitive(self::Header);
+        /** @var Value<numeric-string> */
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }

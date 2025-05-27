@@ -67,5 +67,7 @@ final class HeadersTest extends TestCase
             ],
             [...$headers],
         );
+
+        self::assertNull($headers->get('x'));
     }
 }

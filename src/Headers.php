@@ -83,13 +83,11 @@ final class Headers implements
      */
     public function get(string|HeaderKey $key): mixed
     {
-        $value = $this->values[self::keyToString($key)] ?? [];
+        $value = ($this->values[self::keyToString($key)] ?? [])[0] ?? null;
 
-        if ($value === [] && $key instanceof OptionalHeaderKey) {
+        if ($value === null && $key instanceof OptionalHeaderKey) {
             return $key->default($this);
         }
-
-        $value = $value[0] ?? null;
 
         if ($value !== null && $key instanceof HeaderKey) {
             $value = $key->decode($value);

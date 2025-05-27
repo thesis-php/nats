@@ -10,12 +10,14 @@ namespace Thesis\Nats\Header;
  *
  * @api
  */
-enum ExpectedStream: string
+final readonly class ExpectedStream
 {
-    case Header = 'Nats-Expected-Stream';
+    private const string HEADER = 'Nats-Expected-Stream';
 
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        return new Primitive(self::Header);
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }

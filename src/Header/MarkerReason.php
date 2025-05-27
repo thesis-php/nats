@@ -9,12 +9,14 @@ namespace Thesis\Nats\Header;
  *
  * @api
  */
-enum MarkerReason: string
+final readonly class MarkerReason
 {
-    case Header = 'Nats-Marker-Reason';
+    private const string HEADER = 'Nats-Marker-Reason';
 
-    public static function header(): Primitive
+    public static function header(): Value
     {
-        return new Primitive(self::Header);
+        return new Value(self::HEADER);
     }
+
+    private function __construct() {}
 }
