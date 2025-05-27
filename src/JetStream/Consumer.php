@@ -35,6 +35,14 @@ final class Consumer
     ) {}
 
     /**
+     * @throws NatsException
+     */
+    public function actualInfo(): Api\ConsumerInfo
+    {
+        return $this->js->consumerInfo($this->stream, $this->name);
+    }
+
+    /**
      * @param callable(Delivery): void $handler
      * @return callable(): void
      * @throws NatsException
