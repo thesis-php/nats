@@ -36,6 +36,18 @@ final readonly class JetStream
     }
 
     /**
+     * @param non-empty-string $subject
+     * @throws NatsException
+     */
+    public function publish(string $subject, Message $message): Api\AckResponse
+    {
+        return $this->mapResponse(
+            response: $this->client->request($subject, $message),
+            type: Api\AckResponse::class,
+        );
+    }
+
+    /**
      * @throws NatsException
      */
     public function accountInfo(): Api\AccountInfo
@@ -337,20 +349,31 @@ final readonly class JetStream
     }
 
     /**
-     * @template T
+     * @template T of object
      * @param Api\Request<T> $request
      * @return T
      * @throws NatsException
      */
     private function request(Api\Request $request): mixed
     {
-        $response = $this->client->request(
-            subject: $this->router->route($request->endpoint()),
-            message: new Message(
-                payload: $request->payload() !== null ? $this->encoder->encode($request->payload()) : null,
+        return $this->mapResponse(
+            response: $this->client->request(
+                subject: $this->router->route($request->endpoint()),
+                message: new Message(
+                    payload: $request->payload() !== null ? $this->encoder->encode($request->payload()) : null,
+                ),
             ),
+            type: $request->type(),
         );
+    }
 
+    /**
+     * @template T of object
+     * @param class-string<T> $type
+     * @return T
+     */
+    private function mapResponse(Delivery $response, string $type): object
+    {
         $payload = $response->message->payload ?? '{}';
         if ($payload === '') {
             throw new NoServerResponse();
@@ -358,7 +381,7 @@ final readonly class JetStream
 
         /** @var Result<T> $result */
         $result = $this->serializer->deserialize(
-            type: Result::type($request->type()),
+            type: Result::type($type),
             data: new Mapping\FixStructureSource($this->encoder->decode($payload)),
         );
 

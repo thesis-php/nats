@@ -9,18 +9,18 @@ use Thesis\Nats\NatsException;
 
 /**
  * @internal
- * @template ResponseType
+ * @template ResponseType of object
  */
 final readonly class Result
 {
     /**
-     * @param non-empty-string $type
+     * @param ?non-empty-string $type
      * @param null|ResponseType $response
      */
     public function __construct(
-        public string $type,
+        public ?string $type = null,
         public ?Error $error = null,
-        public mixed $response = null,
+        public ?object $response = null,
     ) {}
 
     /**

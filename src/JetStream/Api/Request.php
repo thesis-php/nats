@@ -6,7 +6,7 @@ namespace Thesis\Nats\JetStream\Api;
 
 /**
  * @api
- * @template-covariant ResponseType
+ * @template-covariant ResponseType of object
  */
 interface Request
 {
@@ -18,7 +18,7 @@ interface Request
     public function payload(): mixed;
 
     /**
-     * @return non-empty-string
+     * @return class-string<ResponseType>
      */
     public function type(): string;
 }
