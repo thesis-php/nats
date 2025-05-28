@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\Cancellation;
+use Amp\Pipeline;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
@@ -91,6 +92,40 @@ final class Client
         }
 
         $connection->execute(Internal\Command::pub($subject, $message, $replyTo));
+    }
+
+    /**
+     * @param non-empty-string $subject
+     * @param ?non-empty-string $queueGroup
+     * @return Iterator<Delivery>
+     * @throws NatsException
+     */
+    public function subscribeIterator(
+        string $subject,
+        ?string $queueGroup = null,
+        ?Cancellation $cancellation = null,
+    ): Iterator {
+        /** @var Pipeline\Queue<Delivery> $queue */
+        $queue = new Pipeline\Queue();
+
+        $subscriptionId = $this->subscribe(
+            subject: $subject,
+            handler: $queue->push(...),
+            queueGroup: $queueGroup,
+            cancellation: $cancellation,
+        );
+
+        return new Internal\QueueIterator(
+            iterator: $queue->iterate(),
+            complete: function (?Cancellation $cancellation = null) use ($subscriptionId, $queue): void {
+                $this->unsubscribe($subscriptionId, $cancellation);
+                $queue->complete();
+            },
+            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($subscriptionId, $queue): void {
+                $this->unsubscribe($subscriptionId, $cancellation);
+                $queue->error($e);
+            },
+        );
     }
 
     /**

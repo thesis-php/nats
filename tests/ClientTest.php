@@ -30,6 +30,21 @@ final class ClientTest extends NatsTestCase
         $client->disconnect();
     }
 
+    public function testPublishSubscribeIterator(): void
+    {
+        $client = $this->client();
+
+        $deliveries = $client->subscribeIterator('events.*');
+        $client->publish('events.happens', new Message('ok'));
+
+        foreach ($deliveries as $delivery) {
+            self::assertEquals('events.happens', $delivery->subject);
+            self::assertEquals('ok', $delivery->message->payload);
+
+            $deliveries->complete();
+        }
+    }
+
     public function testRequestReply(): void
     {
         $client = $this->client();
