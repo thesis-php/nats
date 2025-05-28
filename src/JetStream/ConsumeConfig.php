@@ -46,7 +46,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
                 'batch' => $this->batch,
                 'max_bytes' => $this->maxBytes,
                 'no_wait' => $this->noWait,
-                'heartbeat' => $this->heartbeat?->toNanoseconds(),
+                'idle_heartbeat' => $this->heartbeat?->toNanoseconds(),
                 'min_pending' => $this->minPending,
                 'min_ack_pending' => $this->minAckPending,
                 'pin_id' => $this->pinId,
