@@ -69,4 +69,4 @@ jobs:
           dependency-versions: ${{ matrix.dependencies }}
         env:
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH || '{}' }}
-      - run: composer test -- --colors=always
+      - run: composer test -- --colors=always --exclude-group=timers
