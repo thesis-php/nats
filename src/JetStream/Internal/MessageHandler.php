@@ -4,82 +4,85 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Internal;
 
-use Revolt\EventLoop;
+use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
+use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
-use Thesis\Nats\Message;
+use Thesis\Time\TimeSpan;
 
 /**
  * @internal
  */
 final readonly class MessageHandler
 {
-    private Sync\Barrier $barrier;
-
     private Acks $acks;
 
+    private Heartbeat\Monitor $heartbeats;
+
+    private PullSupervisor $pulls;
+
     /**
-     * @param callable(JetStreamDelivery): void $handler
+     * @param Pipeline\Queue<JetStreamDelivery> $queue
      * @param non-empty-string $subject
      * @param non-empty-string $replyTo
      */
     public function __construct(
-        private mixed $handler,
+        private Pipeline\Queue $queue,
         Client $client,
         Encoder $json,
         ConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
-        $barrier = new Sync\Barrier($config->batch);
-        $barrier->idle();
-
-        $this->barrier = $barrier;
         $this->acks = new Acks($client);
+        $this->heartbeats = new Heartbeat\Monitor(
+            interval: $config->heartbeat ?? TimeSpan::fromSeconds(-1),
+        );
+        $this->pulls = new PullSupervisor(
+            client: $client,
+            json: $json,
+            config: $config,
+            subject: $subject,
+            replyTo: $replyTo,
+        );
 
-        EventLoop::queue(static function () use (
-            $barrier,
-            $client,
-            $json,
-            $config,
-            $subject,
-            $replyTo,
-        ): void {
-            foreach ($barrier as $_) {
-                $client->publish(
-                    subject: $subject,
-                    message: new Message($json->encode($config)),
-                    replyTo: $replyTo,
-                );
-            }
-
-            $barrier->close();
-        });
+        if ($config->heartbeat?->toSeconds() > 0) {
+            $this->heartbeats->monitor(function (): void {
+                $this->queue->error(new NoServerResponse());
+            });
+        }
     }
 
     public function __invoke(NatsDelivery $delivery): void
     {
         $replyTo = $delivery->replyTo;
 
-        if ($replyTo !== null) {
-            ($this->handler)(new JetStreamDelivery(
-                message: $delivery->message,
-                subject: $delivery->subject,
-                metadata: Metadata::parse($replyTo),
-                replyTo: $replyTo,
-                acks: $this->acks,
-            ));
+        if ($replyTo === null && $delivery->message->payload === null) {
+            $this->heartbeats->reset();
+        }
 
-            $this->barrier->arrive();
+        if ($replyTo !== null) {
+            $this->queue->push(
+                new JetStreamDelivery(
+                    message: $delivery->message,
+                    subject: $delivery->subject,
+                    metadata: Metadata::parse($replyTo),
+                    replyTo: $replyTo,
+                    acks: $this->acks,
+                ),
+            );
+
+            $this->pulls->request();
         }
     }
 
     public function stop(): void
     {
-        $this->barrier->close();
+        $this->pulls->stop();
+        $this->heartbeats->stop();
     }
 }

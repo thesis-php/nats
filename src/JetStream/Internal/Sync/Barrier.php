@@ -34,16 +34,16 @@ final class Barrier implements \IteratorAggregate
         $this->iterator = $queue->iterate();
     }
 
-    public function idle(): void
+    public function dispatch(): void
     {
         $this->queue->push(null);
+        $this->counter = 0;
     }
 
     public function arrive(): void
     {
         if (++$this->counter >= $this->count) {
-            $this->queue->push(null);
-            $this->counter = 0;
+            $this->dispatch();
         }
     }
 

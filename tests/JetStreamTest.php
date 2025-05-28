@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
@@ -22,7 +21,6 @@ use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\StreamConfig;
-use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
@@ -623,33 +621,21 @@ final class JetStreamTest extends NatsTestCase
             self::assertSame($i + 1, $response->seq);
         }
 
-        $js->publish("{$subject}.xxx", new Message(payload: 'quit'));
-
         $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame(6, $consumer->actualInfo()->numPending);
+        self::assertSame(5, $consumer->actualInfo()->numPending);
 
+        $counter = 0;
         $messages = [];
 
-        /** @var DeferredFuture<null> $deferred */
-        $deferred = new DeferredFuture();
+        $deliveries = $consumer->consume();
 
-        $cancel = $consumer->consume(
-            handler: static function (JetStreamDelivery $delivery) use (&$messages, $deferred): void {
-                $delivery->ack();
-
-                if ($delivery->message->payload === 'quit') {
-                    $deferred->complete();
-
-                    return;
-                }
-
-                $messages[] = $delivery->message->payload;
-            },
-        );
-
-        $deferred->getFuture()->await();
-        $cancel();
+        foreach ($deliveries as $delivery) {
+            $messages[] = $delivery->message->payload;
+            if (++$counter === 5) {
+                $deliveries->complete();
+            }
+        }
 
         self::assertSame($publishedMessages, $messages);
         self::assertSame(0, $consumer->actualInfo()->numPending);
