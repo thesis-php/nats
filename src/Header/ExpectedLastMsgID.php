@@ -15,13 +15,11 @@ final readonly class ExpectedLastMsgID
     private const string HEADER = 'Nats-Expected-Last-Msg-Id';
 
     /**
-     * @return Value<non-empty-string>
+     * @return ScalarKey<non-empty-string>
      */
-    public static function header(): Value
+    public static function header(): ScalarKey
     {
-        /** @var Value<non-empty-string> */
-        return new Value(self::HEADER);
+        /** @var ScalarKey<non-empty-string> */
+        return ScalarKey::nonEmptyString(self::HEADER);
     }
-
-    private function __construct() {}
 }

@@ -22,53 +22,26 @@ final class Headers implements
 
     /**
      * @template T
-     * @param non-empty-string|HeaderKey<T> $key
-     * @param ($key is HeaderKey<T> ? T : string) ...$values
+     * @param HeaderKey<T> $key
+     * @param T ...$values
      */
-    public function with(string|HeaderKey $key, mixed ...$values): self
+    public function with(HeaderKey $key, mixed ...$values): self
     {
-        if ($key instanceof HeaderKey) {
-            $values = array_map(
-                /** @phpstan-ignore argument.type */
-                static fn(mixed $value): string => $key->encode($value),
-                $values,
-            );
-        }
+        $headerKey = self::keyToString($key);
 
         $headers = clone $this;
-        $headers->values[self::keyToString($key)] = array_values($values);
+        $headers->values[$headerKey] = array_values([
+            ...$this->values[$headerKey] ?? [],
+            ...array_map(
+                static fn(mixed $value): string => $key->encode($value),
+                $values,
+            ),
+        ]);
 
         return $headers;
     }
 
-    /**
-     * @template T
-     * @param non-empty-string|HeaderKey<T> $key
-     * @param ($key is HeaderKey<T> ? T : string) ...$values
-     */
-    public function withAdded(string|HeaderKey $key, mixed ...$values): self
-    {
-        if ($key instanceof HeaderKey) {
-            $values = array_map(
-                /** @phpstan-ignore argument.type */
-                static fn(mixed $value): string => $key->encode($value),
-                $values,
-            );
-        }
-
-        $headers = clone $this;
-        $headers->values[$key = self::keyToString($key)] = [
-            ...$this->values[$key] ?? [],
-            ...array_values($values),
-        ];
-
-        return $headers;
-    }
-
-    /**
-     * @param non-empty-string|HeaderKey<*> $key
-     */
-    public function without(string|HeaderKey $key): self
+    public function without(HeaderKey $key): self
     {
         $headers = clone $this;
         unset($headers->values[self::keyToString($key)]);
@@ -78,10 +51,10 @@ final class Headers implements
 
     /**
      * @template T
-     * @param non-empty-string|HeaderKey<T> $key
-     * @return ($key is HeaderKey<*> ? ($key is OptionalHeaderKey<*> ? T : ?T) : ?string) returns the first value associated with the given key
+     * @param HeaderKey<T> $key
+     * @return ($key is OptionalHeaderKey<T> ? T : ?T) returns the first value associated with the given key
      */
-    public function get(string|HeaderKey $key): mixed
+    public function get(HeaderKey $key): mixed
     {
         $value = ($this->values[self::keyToString($key)] ?? [])[0] ?? null;
 
@@ -89,7 +62,7 @@ final class Headers implements
             return $key->default($this);
         }
 
-        if ($value !== null && $key instanceof HeaderKey) {
+        if ($value !== null) {
             $value = $key->decode($value);
         }
 
@@ -98,27 +71,18 @@ final class Headers implements
 
     /**
      * @template T
-     * @param non-empty-string|HeaderKey<T> $key
-     * @return ($key is HeaderKey<*> ? list<T> : list<string>) returns all values associated with the given key
+     * @param HeaderKey<T> $key
+     * @return list<T> returns all values associated with the given key
      */
-    public function values(string|HeaderKey $key): array
+    public function values(HeaderKey $key): array
     {
-        $values = $this->values[self::keyToString($key)] ?? [];
-
-        if ($key instanceof HeaderKey) {
-            $values = array_map(
-                static fn(string $value): mixed => $key->decode($value),
-                $values,
-            );
-        }
-
-        return $values;
+        return array_map(
+            static fn(string $value): mixed => $key->decode($value),
+            $this->values[self::keyToString($key)] ?? [],
+        );
     }
 
-    /**
-     * @param non-empty-string|HeaderKey<*> $key
-     */
-    public function exists(string|HeaderKey $key): bool
+    public function exists(HeaderKey $key): bool
     {
         return isset($this->values[self::keyToString($key)]);
     }
@@ -144,19 +108,22 @@ final class Headers implements
     /**
      * @return non-empty-string
      */
-    private function keyToString(mixed $key): string
+    private static function keyToString(mixed $key): string
     {
         if ($key instanceof \BackedEnum) {
             $key = (string) $key->value;
-        } elseif ($key instanceof \Stringable || \is_string($key)) {
+        } elseif ($key instanceof \Stringable) {
             $key = (string) $key;
         } else {
             throw new \InvalidArgumentException(
-                \sprintf('Header key must be string, instance of \Stringable or \BackedEnum, but "%s" given.', get_debug_type($key)),
+                \sprintf('The "%s" must be instance of \BackedEnum or implements \Stringable, but "%s" given.', HeaderKey::class, get_debug_type($key)),
             );
         }
 
-        /** @var non-empty-string */
+        if ($key === '') {
+            throw new \InvalidArgumentException('The header key cannot be empty.');
+        }
+
         return $key;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Protocol;
 
+use Thesis\Nats\Header\ScalarKey;
 use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Status;
@@ -36,7 +37,7 @@ function decodeHeaders(string $encoded): Headers
         [$key, $value] = $keypair;
 
         if ($key !== '') {
-            $headers = $headers->withAdded($key, $value);
+            $headers = $headers->with(ScalarKey::string($key), $value);
         }
     }
 

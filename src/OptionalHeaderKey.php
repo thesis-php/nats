@@ -6,7 +6,7 @@ namespace Thesis\Nats;
 
 /**
  * @api
- * @template ValueType = string
+ * @template ValueType
  * @template-extends HeaderKey<ValueType>
  */
 interface OptionalHeaderKey extends HeaderKey

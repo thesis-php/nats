@@ -6,6 +6,7 @@ namespace Thesis\Nats;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Thesis\Nats\Header\ScalarKey;
 use Thesis\Time\TimeSpan;
 
 #[CoversClass(Headers::class)]
@@ -15,32 +16,26 @@ final class HeadersTest extends TestCase
     {
         $headers = new Headers();
 
-        self::assertFalse($headers->exists('x'));
+        self::assertFalse($headers->exists(ScalarKey::string('x')));
 
-        $headers = $headers->with('x', 'y');
+        $headers = $headers->with(ScalarKey::string('x'), 'y');
         self::assertCount(1, $headers);
         self::assertSame(['x' => ['y']], [...$headers]);
-        self::assertSame('y', $headers->get('x'));
-        self::assertSame(['y'], $headers->values('x'));
-        self::assertTrue($headers->exists('x'));
+        self::assertSame('y', $headers->get(ScalarKey::string('x')));
+        self::assertSame(['y'], $headers->values(ScalarKey::string('x')));
+        self::assertTrue($headers->exists(ScalarKey::string('x')));
 
-        $headers = $headers->withAdded('x', 'z');
+        $headers = $headers->with(ScalarKey::string('x'), 'z');
         self::assertCount(1, $headers);
         self::assertSame(['x' => ['y', 'z']], [...$headers]);
-        self::assertSame('y', $headers->get('x'));
-        self::assertSame(['y', 'z'], $headers->values('x'));
+        self::assertSame('y', $headers->get(ScalarKey::string('x')));
+        self::assertSame(['y', 'z'], $headers->values(ScalarKey::string('x')));
 
-        $headers = $headers->with('x', 'y');
-        self::assertCount(1, $headers);
-        self::assertSame(['x' => ['y']], [...$headers]);
-        self::assertSame('y', $headers->get('x'));
-        self::assertSame(['y'], $headers->values('x'));
-
-        $headers = $headers->without('x');
+        $headers = $headers->without(ScalarKey::string('x'));
         self::assertCount(0, $headers);
         self::assertSame([], [...$headers]);
-        self::assertNull($headers->get('x'));
-        self::assertCount(0, $headers->values('x'));
+        self::assertNull($headers->get(ScalarKey::string('x')));
+        self::assertCount(0, $headers->values(ScalarKey::string('x')));
 
         self::assertSame(Status::OK, $headers->get(Header\StatusCode::Header));
 
@@ -68,6 +63,6 @@ final class HeadersTest extends TestCase
             [...$headers],
         );
 
-        self::assertNull($headers->get('x'));
+        self::assertNull($headers->get(ScalarKey::string('x')));
     }
 }

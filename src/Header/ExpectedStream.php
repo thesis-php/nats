@@ -14,10 +14,8 @@ final readonly class ExpectedStream
 {
     private const string HEADER = 'Nats-Expected-Stream';
 
-    public static function header(): Value
+    public static function header(): ScalarKey
     {
-        return new Value(self::HEADER);
+        return ScalarKey::string(self::HEADER);
     }
-
-    private function __construct() {}
 }

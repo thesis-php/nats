@@ -14,13 +14,11 @@ final readonly class MsgRollup
     private const string HEADER = 'Nats-Rollup';
 
     /**
-     * @return Value<'all'|'sub'>
+     * @return ScalarKey<'all'|'sub'>
      */
-    public static function header(): Value
+    public static function header(): ScalarKey
     {
-        /** @var Value<'all'|'sub'> */
-        return new Value(self::HEADER);
+        /** @var ScalarKey<'all'|'sub'> */
+        return ScalarKey::nonEmptyString(self::HEADER);
     }
-
-    private function __construct() {}
 }

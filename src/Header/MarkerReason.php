@@ -13,10 +13,8 @@ final readonly class MarkerReason
 {
     private const string HEADER = 'Nats-Marker-Reason';
 
-    public static function header(): Value
+    public static function header(): ScalarKey
     {
-        return new Value(self::HEADER);
+        return ScalarKey::string(self::HEADER);
     }
-
-    private function __construct() {}
 }
