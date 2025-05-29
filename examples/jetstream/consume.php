@@ -10,7 +10,7 @@ use Thesis\Time\TimeSpan;
 use function Amp\async;
 use function Amp\trapSignal;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@localhost:4222?no_responders=true'));
+$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
 $jetstream = $client->jetStream();
 
 foreach ($jetstream->streamNames('events.*') as $streamName) {
@@ -19,6 +19,7 @@ foreach ($jetstream->streamNames('events.*') as $streamName) {
 
 $stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
     name: 'EventsStream',
+    description: 'Testing Stream',
     subjects: ['events.*'],
 ));
 

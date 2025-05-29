@@ -1,4 +1,11 @@
 services:
+  php:
+    build:
+      dockerfile: docker/php/Dockerfile
+    volumes:
+      - .:/app:cached
+    command: sh -c 'trap "exit 0" TERM; tail -f /dev/null & wait'
+
   nats-1:
     image: nats
     command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222

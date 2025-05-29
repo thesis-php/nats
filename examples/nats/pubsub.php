@@ -8,7 +8,7 @@ require_once __DIR__ . '/strings.php';
 use Thesis\Nats;
 use function Amp\trapSignal;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@localhost:4222'));
+$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'));
 
 $client->subscribe('words.*', static function (Nats\Delivery $delivery): void {
     $consonants = countConsonants($delivery->message->payload ?: '');

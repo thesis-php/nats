@@ -9,7 +9,7 @@ use Thesis\Nats;
 use function Amp\async;
 use function Amp\Future\await;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@localhost:4222?no_responders=true'));
+$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
 
 $client->subscribe('words.*', static function (Nats\Delivery $delivery): void {
     $delivery->reply(new Nats\Message(strrev($delivery->message->payload ?: '')));
@@ -19,7 +19,7 @@ $futures = [];
 
 $start = microtime(true);
 
-for ($i = 0; $i < 10_000; ++$i) {
+for ($i = 0; $i < 1_000; ++$i) {
     $futures[] = async(
         static fn(): string => $client
             ->request("words.{$i}", new Nats\Message("{$i}:" . randomString()))
