@@ -17,6 +17,10 @@ use Thesis\Nats\Header\ExpectedLastSubjSeq;
 use Thesis\Nats\Header\ExpectedStream;
 use Thesis\Nats\Header\MsgId;
 use Thesis\Nats\Header\MsgTtl;
+use Thesis\Nats\Header\Sequence;
+use Thesis\Nats\Header\Stream;
+use Thesis\Nats\Header\Subject;
+use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
@@ -639,5 +643,53 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame($publishedMessages, $messages);
         self::assertSame(0, $consumer->actualInfo()->numPending);
+    }
+
+    public function testPublishGet(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        $publishSubject = "{$subject}.xxx";
+
+        for ($i = 0; $i < 2; ++$i) {
+            $js->publish($publishSubject, new Message(
+                payload: "Message#{$i}",
+                headers: (new Headers())
+                    ->with(MsgId::header(), "id:{$i}"),
+            ));
+        }
+
+        $msg1 = $stream->getMessage(1);
+        self::assertNotNull($msg1);
+        self::assertNotNull($msg1->headers);
+        self::assertSame($publishSubject, $msg1->headers->get(Subject::header()));
+        self::assertSame(1, $msg1->headers->get(Sequence::header()));
+        self::assertSame($stream->name, $msg1->headers->get(Stream::header()));
+        self::assertSame('id:0', $msg1->headers->get(MsgId::header()));
+        self::assertInstanceOf(\DateTimeImmutable::class, $msg1->headers->get(Timestamp::Header));
+        self::assertSame('Message#0', $msg1->payload);
+
+        $msg2 = $stream->getMessage(2);
+        self::assertNotNull($msg2);
+        self::assertNotNull($msg2->headers);
+        self::assertSame($publishSubject, $msg2->headers->get(Subject::header()));
+        self::assertSame(2, $msg2->headers->get(Sequence::header()));
+        self::assertSame($stream->name, $msg2->headers->get(Stream::header()));
+        self::assertSame('id:1', $msg2->headers->get(MsgId::header()));
+        self::assertInstanceOf(\DateTimeImmutable::class, $msg2->headers->get(Timestamp::Header));
+        self::assertSame('Message#1', $msg2->payload);
+        self::assertEquals($msg2, $stream->getLastMessageForSubject($publishSubject));
+
+        self::assertNull($stream->getMessage(3));
+        self::assertNull($stream->getMessage(1, 'xxx'));
     }
 }

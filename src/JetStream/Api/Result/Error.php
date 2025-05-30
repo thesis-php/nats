@@ -6,6 +6,7 @@ namespace Thesis\Nats\JetStream\Api\Result;
 
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
+use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Exception\StreamDoesNotMatch;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Exception\WrongLastMessageId;
@@ -22,6 +23,7 @@ final readonly class Error
     private const int STREAM_DOES_NOT_MATCH = 10060;
     private const int WRONG_LAST_MESSAGE_ID = 10070;
     private const int WRONG_LAST_SEQUENCE = 10071;
+    private const int MESSAGE_NOT_FOUND = 10037;
 
     public function __construct(
         public int $code,
@@ -38,6 +40,7 @@ final readonly class Error
             self::STREAM_DOES_NOT_MATCH => new StreamDoesNotMatch($this->description),
             self::WRONG_LAST_MESSAGE_ID => new WrongLastMessageId($this->description),
             self::WRONG_LAST_SEQUENCE => new WrongLastSequence($this->description),
+            self::MESSAGE_NOT_FOUND => new MessageNotFound($this->description),
             default => new \RuntimeException("Nats error: '{$this->description} ({$this->errCode}) received'."),
         };
     }

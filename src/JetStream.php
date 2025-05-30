@@ -42,7 +42,7 @@ final readonly class JetStream
     public function publish(string $subject, Message $message): Api\AckResponse
     {
         return $this->mapResponse(
-            response: $this->client->request($subject, $message),
+            message: $this->client->request($subject, $message)->message,
             type: Api\AckResponse::class,
         );
     }
@@ -283,6 +283,37 @@ final readonly class JetStream
     }
 
     /**
+     * @internal
+     * @param non-empty-string $endpoint
+     */
+    public function rawRequest(string $endpoint, mixed $payload = null): Message
+    {
+        return $this->client
+            ->request(
+                subject: $this->router->route($endpoint),
+                message: new Message(
+                    payload: $payload !== null ? $this->encoder->encode($payload) : null,
+                ),
+            )
+            ->message;
+    }
+
+    /**
+     * @internal
+     * @template T of object
+     * @param Api\Request<T> $request
+     * @return T
+     * @throws NatsException
+     */
+    public function request(Api\Request $request): mixed
+    {
+        return $this->mapResponse(
+            message: $this->rawRequest($request->endpoint(), $request->payload()),
+            type: $request->type(),
+        );
+    }
+
+    /**
      * @param non-empty-string $stream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
@@ -350,31 +381,12 @@ final readonly class JetStream
 
     /**
      * @template T of object
-     * @param Api\Request<T> $request
-     * @return T
-     * @throws NatsException
-     */
-    private function request(Api\Request $request): mixed
-    {
-        return $this->mapResponse(
-            response: $this->client->request(
-                subject: $this->router->route($request->endpoint()),
-                message: new Message(
-                    payload: $request->payload() !== null ? $this->encoder->encode($request->payload()) : null,
-                ),
-            ),
-            type: $request->type(),
-        );
-    }
-
-    /**
-     * @template T of object
      * @param class-string<T> $type
      * @return T
      */
-    private function mapResponse(Delivery $response, string $type): object
+    private function mapResponse(Message $message, string $type): object
     {
-        $payload = $response->message->payload ?? '{}';
+        $payload = $message->payload ?? '{}';
         if ($payload === '') {
             throw new NoServerResponse();
         }

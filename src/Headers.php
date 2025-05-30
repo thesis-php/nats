@@ -20,6 +20,20 @@ final class Headers implements
         private array $values = [],
     ) {}
 
+    public function merge(self $other): self
+    {
+        $headers = clone $this;
+
+        foreach ($other->values as $key => $values) {
+            $headers->values[$key] = [
+                ...$this->values[$key] ?? [],
+                ...$values,
+            ];
+        }
+
+        return $headers;
+    }
+
     /**
      * @template T
      * @param HeaderKey<T> $key

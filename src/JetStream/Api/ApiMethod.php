@@ -16,6 +16,9 @@ enum ApiMethod: string
     case PurgeStream = 'STREAM.PURGE.%s';
     case StreamInfo = 'STREAM.INFO.%s';
     case StreamList = 'STREAM.LIST';
+    case StreamMsgGet = 'STREAM.MSG.GET.%s';
+    case DirectMsgGet = 'DIRECT.GET.%s';
+    case DirectMsgGetLastBySubject = 'DIRECT.GET.%s.%s';
     case StreamNames = 'STREAM.NAMES';
     case CreateConsumer = 'CONSUMER.CREATE.%s.%s';
     case DeleteConsumer = 'CONSUMER.DELETE.%s.%s';
