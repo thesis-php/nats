@@ -15,8 +15,9 @@ final class KeyValueTest extends NatsTestCase
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
         self::assertNull($kv->get('invalid'));
+        self::assertNotNull($js->keyValue($bucket));
     }
 
     public function testPutGetKeyValue(): void

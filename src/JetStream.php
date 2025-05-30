@@ -96,6 +96,24 @@ final readonly class JetStream
 
     /**
      * @param non-empty-string $name
+     */
+    public function stream(string $name): ?JetStream\Stream
+    {
+        try {
+            $info = $this->streamInfo($name);
+        } catch (StreamNotFound) {
+            return null;
+        }
+
+        return new JetStream\Stream(
+            info: $info,
+            name: $name,
+            js: $this,
+        );
+    }
+
+    /**
+     * @param non-empty-string $name
      * @throws NatsException
      */
     public function deleteStream(string $name): Api\StreamDeleted
@@ -334,6 +352,26 @@ final readonly class JetStream
             prefix: "\$KV.{$config->bucket}.",
             jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
         );
+    }
+
+    /**
+     * @param non-empty-string $bucket
+     */
+    public function keyValue(string $bucket): ?KeyValue\Bucket
+    {
+        $stream = $this->stream("KV_{$bucket}");
+
+        if ($stream !== null) {
+            return new KeyValue\Bucket(
+                name: $bucket,
+                js: $this,
+                stream: $stream,
+                prefix: "\$KV.{$bucket}.",
+                jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
+            );
+        }
+
+        return null;
     }
 
     /**
