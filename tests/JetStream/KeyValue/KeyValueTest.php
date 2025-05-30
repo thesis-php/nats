@@ -72,4 +72,29 @@ final class KeyValueTest extends NatsTestCase
 
         self::assertEquals($in, $out);
     }
+
+    public function testKeyValueList(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $prefix = generateUniqueId(5);
+        $in = [];
+
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+
+        $out = array_map(
+            static fn(BucketInfo $info): string => $info->name,
+            array_filter(
+                [...$js->keyValueList()],
+                static fn(BucketInfo $info): bool => str_starts_with($info->name, $prefix),
+            ),
+        );
+
+        sort($in);
+        sort($out);
+
+        self::assertEquals($in, $out);
+    }
 }

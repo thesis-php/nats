@@ -397,6 +397,26 @@ final readonly class JetStream
     }
 
     /**
+     * @return iterable<KeyValue\BucketInfo>
+     * @throws NatsException
+     */
+    public function keyValueList(): iterable
+    {
+        /** @var Api\StreamInfo $info */
+        foreach ($this->paginatedRequest(new Api\StreamListRequest('$KV.*.>')) as $info) {
+            if (str_starts_with($info->config->name, 'KV_')) {
+                /** @var non-empty-string $name */
+                $name = ltrim($info->config->name, 'KV_');
+
+                yield new KeyValue\BucketInfo(
+                    name: $name,
+                    info: $info,
+                );
+            }
+        }
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
