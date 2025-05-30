@@ -48,4 +48,28 @@ final class KeyValueTest extends NatsTestCase
         self::assertSame(1, $entry->sequence);
         self::assertGreaterThanOrEqual($ts->getTimestamp(), $entry->created->getTimestamp());
     }
+
+    public function testKeyValueNames(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $prefix = generateUniqueId(5);
+        $in = [];
+
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+        $js->createOrUpdateKeyValue(new BucketConfig($in[] = $prefix . generateUniqueId(10)));
+
+        $out = array_values(
+            array_filter(
+                [...$js->keyValueNames()],
+                static fn(string $bucket): bool => str_starts_with($bucket, $prefix),
+            ),
+        );
+
+        sort($in);
+        sort($out);
+
+        self::assertEquals($in, $out);
+    }
 }

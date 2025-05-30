@@ -384,6 +384,19 @@ final readonly class JetStream
     }
 
     /**
+     * @return iterable<non-empty-string>
+     * @throws NatsException
+     */
+    public function keyValueNames(): iterable
+    {
+        foreach ($this->paginatedRequest(new Api\StreamNamesRequest('$KV.*.>')) as $bucket) {
+            if (($name = ltrim($bucket, 'KV_')) !== '') {
+                yield $name;
+            }
+        }
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
