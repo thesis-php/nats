@@ -692,4 +692,52 @@ final class JetStreamTest extends NatsTestCase
         self::assertNull($stream->getMessage(3));
         self::assertNull($stream->getMessage(1, 'xxx'));
     }
+
+    public function testPublishDelete(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        $js->publish("{$subject}.xxx", new Message(
+            payload: 'Message',
+        ));
+
+        $msg1 = $stream->getMessage(1);
+        self::assertNotNull($msg1);
+
+        $stream->deleteMessage(1);
+        self::assertNull($stream->getMessage(1));
+    }
+
+    public function testPublishSecureDelete(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        $js->publish("{$subject}.xxx", new Message(
+            payload: 'Message',
+        ));
+
+        $msg1 = $stream->getMessage(1);
+        self::assertNotNull($msg1);
+
+        $stream->secureDeleteMessage(1);
+        self::assertNull($stream->getMessage(1));
+    }
 }

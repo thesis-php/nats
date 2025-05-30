@@ -117,6 +117,31 @@ final readonly class Stream
     }
 
     /**
+     * @param non-negative-int $seq
+     * @throws NatsException
+     */
+    public function deleteMessage(int $seq): Api\MessageDeleted
+    {
+        return $this->js->request(new Api\DeleteMessageRequest(
+            stream: $this->name,
+            seq: $seq,
+            noErase: true,
+        ));
+    }
+
+    /**
+     * @param non-negative-int $seq
+     * @throws NatsException
+     */
+    public function secureDeleteMessage(int $seq): Api\MessageDeleted
+    {
+        return $this->js->request(new Api\DeleteMessageRequest(
+            stream: $this->name,
+            seq: $seq,
+        ));
+    }
+
+    /**
      * @param ?non-negative-int $seq
      * @param ?non-empty-string $nextBySubject
      * @param ?non-empty-string $lastBySubject
