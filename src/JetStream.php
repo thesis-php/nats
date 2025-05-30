@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
+use Thesis\Nats\JetStream\KeyValue;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
@@ -280,6 +282,58 @@ final readonly class JetStream
     public function consumerList(string $stream): iterable
     {
         yield from $this->paginatedRequest(new Api\ConsumerListRequest($stream));
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createOrUpdateKeyValue(KeyValue\BucketConfig $config): KeyValue\Bucket
+    {
+        $allowMessageTtl = false;
+        $subjectDeleteMarkerTtl = null;
+
+        if ($config->limitMarkerTtl !== null) {
+            $info = $this->accountInfo();
+
+            if ($info->api->level < 1) {
+                throw FeatureIsNotSupported::forLimitMarkerTtl();
+            }
+
+            $allowMessageTtl = true;
+            $subjectDeleteMarkerTtl = $config->limitMarkerTtl;
+        }
+
+        $stream = $this->createOrUpdateStream(new Api\StreamConfig(
+            name: "KV_{$config->bucket}",
+            description: $config->description,
+            subjects: ["\$KV.{$config->bucket}.>"],
+            discard: Api\DiscardPolicy::New,
+            maxConsumers: -1,
+            maxMessages: -1,
+            maxBytes: $config->maxBytes,
+            maxAge: $config->ttl,
+            maxMessagesPerSubject: $config->history,
+            maxMessageSize: $config->maxValueSize,
+            storageType: $config->storageType,
+            replicas: $config->replicas,
+            duplicateWindow: $config->ttl,
+            placement: $config->placement,
+            denyDelete: true,
+            allowRollup: true,
+            compression: $config->compression ? Api\StoreCompression::S2 : Api\StoreCompression::None,
+            rePublish: $config->rePublish,
+            allowDirect: true,
+            allowMessageTtl: $allowMessageTtl,
+            subjectDeleteMarkerTtl: $subjectDeleteMarkerTtl,
+        ));
+
+        return new KeyValue\Bucket(
+            name: $config->bucket,
+            js: $this,
+            stream: $stream,
+            prefix: "\$KV.{$config->bucket}.",
+            jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
+        );
     }
 
     /**
