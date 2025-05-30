@@ -356,6 +356,15 @@ final readonly class JetStream
 
     /**
      * @param non-empty-string $bucket
+     * @throws NatsException
+     */
+    public function deleteKeyValue(string $bucket): void
+    {
+        $this->deleteStream("KV_{$bucket}");
+    }
+
+    /**
+     * @param non-empty-string $bucket
      */
     public function keyValue(string $bucket): ?KeyValue\Bucket
     {

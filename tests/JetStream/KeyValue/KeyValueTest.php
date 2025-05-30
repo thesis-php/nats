@@ -20,6 +20,17 @@ final class KeyValueTest extends NatsTestCase
         self::assertNotNull($js->keyValue($bucket));
     }
 
+    public function testDeleteKeyValue(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
+        self::assertNotNull($js->keyValue($bucket));
+
+        $js->deleteKeyValue($bucket);
+        self::assertNull($js->keyValue($bucket));
+    }
+
     public function testPutGetKeyValue(): void
     {
         $js = $this->client()->jetStream();
