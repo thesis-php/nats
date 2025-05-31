@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\KeyValue;
 
 use Thesis\Nats\Header;
+use Thesis\Nats\Headers;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\Message;
+use Thesis\Nats\NatsException;
 
 /**
  * @api
@@ -43,6 +45,10 @@ final readonly class Bucket
             return null;
         }
 
+        if (\in_array($message->headers->get(Header\KvOperation::header()), [Header\KvOperation::OP_DEL, Header\KvOperation::OP_PURGE], true)) {
+            return null;
+        }
+
         return new Entry(
             bucket: $this->stream->name,
             key: $key,
@@ -69,5 +75,32 @@ final readonly class Bucket
         return $this->js
             ->publish($subject, new Message($value))
             ->seq;
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @param ?non-negative-int $revision
+     * @throws NatsException
+     */
+    public function delete(string $key, ?int $revision = null): void
+    {
+        $subject = '';
+
+        if ($this->jsPrefix !== null) {
+            $subject .= $this->jsPrefix;
+        }
+
+        $subject .= "{$this->prefix}{$key}";
+
+        $headers = (new Headers())
+            ->with(Header\KvOperation::header(), Header\KvOperation::OP_DEL);
+
+        if ($revision !== null) {
+            $headers = $headers->with(Header\ExpectedLastSubjSeq::Header, $revision);
+        }
+
+        $this->js->publish($subject, new Message(
+            headers: $headers,
+        ));
     }
 }
