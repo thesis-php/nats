@@ -9,6 +9,7 @@ use Thesis\Nats\Headers;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
+use Thesis\Time\TimeSpan;
 
 /**
  * @api
@@ -64,16 +65,8 @@ final readonly class Bucket
      */
     public function put(string $key, ?string $value = null): int
     {
-        $subject = '';
-
-        if ($this->jsPrefix !== null) {
-            $subject .= $this->jsPrefix;
-        }
-
-        $subject .= "{$this->prefix}{$key}";
-
         return $this->js
-            ->publish($subject, new Message($value))
+            ->publish($this->prefixedSubject($key), new Message($value))
             ->seq;
     }
 
@@ -84,14 +77,6 @@ final readonly class Bucket
      */
     public function delete(string $key, ?int $revision = null): void
     {
-        $subject = '';
-
-        if ($this->jsPrefix !== null) {
-            $subject .= $this->jsPrefix;
-        }
-
-        $subject .= "{$this->prefix}{$key}";
-
         $headers = (new Headers())
             ->with(Header\KvOperation::header(), Header\KvOperation::OP_DEL);
 
@@ -99,8 +84,51 @@ final readonly class Bucket
             $headers = $headers->with(Header\ExpectedLastSubjSeq::Header, $revision);
         }
 
-        $this->js->publish($subject, new Message(
+        $this->js->publish($this->prefixedSubject($key), new Message(
             headers: $headers,
         ));
+    }
+
+    /**
+     * @param non-empty-string $key
+     * @param ?non-negative-int $revision
+     */
+    public function purge(
+        string $key,
+        ?int $revision = null,
+        ?TimeSpan $ttl = null,
+    ): void {
+        $headers = (new Headers())
+            ->with(Header\KvOperation::header(), Header\KvOperation::OP_PURGE)
+            ->with(Header\MsgRollup::header(), Header\MsgRollup::ROLLUP_SUBJECT);
+
+        if ($revision !== null) {
+            $headers = $headers->with(Header\ExpectedLastSubjSeq::Header, $revision);
+        }
+
+        if ($ttl !== null) {
+            $headers = $headers->with(Header\MsgTtl::Header, $ttl);
+        }
+
+        $this->js->publish($this->prefixedSubject($key), new Message(
+            headers: $headers,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $cmd
+     * @return non-empty-string
+     */
+    private function prefixedSubject(string $cmd): string
+    {
+        $subject = '';
+
+        if ($this->jsPrefix !== null) {
+            $subject .= $this->jsPrefix;
+        }
+
+        $subject .= "{$this->prefix}{$cmd}";
+
+        return $subject;
     }
 }

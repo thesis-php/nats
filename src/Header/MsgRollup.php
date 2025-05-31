@@ -12,13 +12,15 @@ namespace Thesis\Nats\Header;
 final readonly class MsgRollup
 {
     private const string HEADER = 'Nats-Rollup';
+    public const string ROLLUP_SUBJECT = 'sub';
+    public const string ROLLUP_ALL = 'all';
 
     /**
-     * @return ScalarKey<'all'|'sub'>
+     * @return ScalarKey<self::ROLLUP_*>
      */
     public static function header(): ScalarKey
     {
-        /** @var ScalarKey<'all'|'sub'> */
+        /** @var ScalarKey<self::ROLLUP_*> */
         return ScalarKey::nonEmptyString(self::HEADER);
     }
 }
