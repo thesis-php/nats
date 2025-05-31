@@ -72,6 +72,32 @@ final readonly class Bucket
 
     /**
      * @param non-empty-string $key
+     * @param non-negative-int $revision
+     * @return non-negative-int
+     */
+    public function update(
+        string $key,
+        int $revision,
+        ?string $value = null,
+        ?TimeSpan $ttl = null,
+    ): int {
+        $headers = (new Headers())
+            ->with(Header\ExpectedLastSubjSeq::Header, $revision);
+
+        if ($ttl !== null) {
+            $headers = $headers->with(Header\MsgTtl::Header, $ttl);
+        }
+
+        return $this->js
+            ->publish($this->prefixedSubject($key), new Message(
+                payload: $value,
+                headers: $headers,
+            ))
+            ->seq;
+    }
+
+    /**
+     * @param non-empty-string $key
      * @param ?non-negative-int $revision
      * @throws NatsException
      */

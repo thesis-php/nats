@@ -12,6 +12,7 @@ final readonly class Entry
     /**
      * @param non-empty-string $bucket
      * @param non-empty-string $key
+     * @param non-negative-int $sequence
      */
     public function __construct(
         public string $bucket,

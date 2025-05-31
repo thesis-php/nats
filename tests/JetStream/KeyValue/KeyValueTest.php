@@ -127,4 +127,23 @@ final class KeyValueTest extends NatsTestCase
         $kv->purge('x');
         self::assertNull($kv->get('x'));
     }
+
+    public function testUpdateBucketKeyValue(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+
+        self::assertSame(1, $kv->put('x', 'y'));
+
+        $entry = $kv->get('x');
+        self::assertNotNull($entry);
+        self::assertSame('y', $entry->value);
+
+        $kv->update('x', $entry->sequence, 'z');
+
+        $entry = $kv->get('x');
+        self::assertNotNull($entry);
+        self::assertSame('z', $entry->value);
+    }
 }

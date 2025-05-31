@@ -12,10 +12,11 @@ final class Sequence
     private const string HEADER = 'Nats-Sequence';
 
     /**
-     * @return ScalarKey<int>
+     * @return ScalarKey<non-negative-int>
      */
     public static function header(): ScalarKey
     {
+        /** @var ScalarKey<non-negative-int> */
         return ScalarKey::int(self::HEADER);
     }
 }
