@@ -28,7 +28,7 @@ final class Client
     /** @var ?Sync\Once<Rpc\Handler> */
     private ?Sync\Once $rpc = null;
 
-    /** @var array<non-empty-string, callable(Delivery, self): void> */
+    /** @var array<non-empty-string, callable(Delivery, self, non-empty-string): void> */
     private array $subscribers = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
@@ -130,7 +130,7 @@ final class Client
 
     /**
      * @param non-empty-string $subject
-     * @param callable(Delivery, self): void $handler
+     * @param callable(Delivery, self, non-empty-string): void $handler
      * @param ?non-empty-string $queueGroup
      * @return non-empty-string
      * @throws NatsException
@@ -212,6 +212,7 @@ final class Client
                 ),
             ),
             $this,
+            $event->sid,
         );
     }
 
