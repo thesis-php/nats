@@ -10,6 +10,9 @@ php:
 kv-list:
 	docker run --rm --network host bitnami/natscli:latest --server localhost:4222 --user user --password Pswd1 kv ls
 
+object-list:
+	docker run --rm --network host bitnami/natscli:latest --server localhost:4222 --user user --password Pswd1 object ls
+
 stream-list:
 	docker run --rm --network host bitnami/natscli:latest --server localhost:4222 --user user --password Pswd1 stream ls
 

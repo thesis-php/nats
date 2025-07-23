@@ -12,6 +12,7 @@ use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
 use Thesis\Nats\JetStream\KeyValue;
+use Thesis\Nats\JetStream\ObjectStore;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
@@ -416,6 +417,39 @@ final readonly class JetStream
                 );
             }
         }
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createOrUpdateObjectStore(ObjectStore\StoreConfig $config): ObjectStore\Store
+    {
+        $stream = $this->createOrUpdateStream(new Api\StreamConfig(
+            name: "OBJ_{$config->store}",
+            description: $config->description,
+            subjects: [
+                "\$O.{$config->store}.C.>",
+                "\$O.{$config->store}.M.>",
+            ],
+            discard: Api\DiscardPolicy::New,
+            maxBytes: $config->maxBytes ?? -1,
+            maxAge: $config->ttl,
+            storageType: $config->storageType,
+            replicas: max($config->replicas, 1),
+            duplicateWindow: $config->ttl,
+            placement: $config->placement,
+            allowRollup: true,
+            compression: $config->compression ? Api\StoreCompression::S2 : Api\StoreCompression::None,
+            allowDirect: true,
+            metadata: $config->metadata,
+        ));
+
+        return new ObjectStore\Store(
+            name: $config->store,
+            nats: $this->nats,
+            js: $this,
+            stream: $stream,
+        );
     }
 
     /**

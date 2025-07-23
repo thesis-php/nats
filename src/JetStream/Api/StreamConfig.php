@@ -92,7 +92,7 @@ final readonly class StreamConfig implements \JsonSerializable
                 'allow_direct' => $this->allowDirect,
                 'mirror_direct' => $this->mirrorDirect,
                 'consumer_limits' => $this->consumerLimits,
-                'metadata' => $this->metadata,
+                'metadata' => $this->metadata ?: null,
                 'allow_msg_ttl' => $this->allowMessageTtl,
                 'subject_delete_marker_ttl' => $this->subjectDeleteMarkerTtl?->toNanoseconds(),
             ],
