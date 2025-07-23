@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
+use Amp\Pipeline;
 use Thesis\Nats\Client;
+use Thesis\Nats\Delivery;
+use Thesis\Nats\Exception\ObjectIsInvalid;
 use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Headers;
@@ -32,6 +35,84 @@ final readonly class Store
         private Encoder $json,
         private Serializer $serializer,
     ) {}
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function get(string $name): ?StoredObject
+    {
+        $info = $this->info($name);
+        if ($info === null || $info->deleted) {
+            return null;
+        }
+
+        if ($info->options?->link !== null) {
+            $bucket = $info->options->link->bucket;
+
+            if ($bucket === '') {
+                throw new ObjectIsInvalid('Link bucket name is empty.');
+            }
+
+            $name = $info->options->link->name ?? '';
+
+            if ($name === '') {
+                throw new ObjectIsInvalid('Object name is empty.');
+            }
+
+            if ($bucket === $this->name) {
+                return $this->get($name);
+            }
+
+            return $this->js
+                ->objectStore($bucket)
+                ?->get($name);
+        }
+
+        /** @var Pipeline\Queue<non-empty-string> $queue */
+        $queue = new Pipeline\Queue();
+        $object = new StoredObject($info, $queue->iterate());
+
+        if ($info->size === 0) {
+            $queue->complete();
+
+            return $object;
+        }
+
+        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+            deliverSubject: $id = Id\generateInboxId(),
+            filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
+        ));
+
+        $this->nats->subscribe($id, static function (
+            Delivery $delivery,
+            Client $nats,
+            string $sid,
+        ) use ($queue): void {
+            $reply = $delivery->replyTo;
+            if ($reply === null) {
+                $queue->error(new ObjectIsInvalid('No reply in Delivery.'));
+                $nats->unsubscribe($sid);
+
+                return;
+            }
+
+            $metadata = JetStream\Metadata::parse($reply);
+
+            $payload = $delivery->message->payload;
+
+            if ($payload !== null && $payload !== '') {
+                $queue->push($payload);
+            }
+
+            if ($metadata->pending === 0) {
+                $queue->complete();
+                $nats->unsubscribe($sid);
+            }
+        });
+
+        return $object;
+    }
 
     /**
      * @param Reader|non-empty-string $object

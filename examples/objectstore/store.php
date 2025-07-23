@@ -11,11 +11,12 @@ $client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'));
 $jetstream = $client->jetStream();
 $jetstream->deleteObjectStore('images');
 
-$object = $jetstream->createOrUpdateObjectStore(new Nats\JetStream\ObjectStore\StoreConfig('images'));
+$store = $jetstream->createOrUpdateObjectStore(new Nats\JetStream\ObjectStore\StoreConfig('images'));
 
-$info = $object->put(
+$info = $store->put(
     new ObjectMeta(name: 'image1'),
-    str_repeat('x', 10),
+    str_repeat('x', 20) . str_repeat('y', 10) . str_repeat('z', 50),
 );
 
-dump($info);
+$object = $store->get('image1');
+dump((string) $object);
