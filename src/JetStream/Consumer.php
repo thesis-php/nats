@@ -32,7 +32,7 @@ final class Consumer
         public readonly string $name,
         public readonly string $stream,
         private readonly JetStream $js,
-        private readonly Client $client,
+        private readonly Client $nats,
         private readonly Router $router,
         private readonly Encoder $json,
     ) {}
@@ -60,14 +60,14 @@ final class Consumer
 
         $messageHandler = new Internal\MessageHandler(
             queue: $queue,
-            client: $this->client,
+            nats: $this->nats,
             json: $this->json,
             config: $config,
             subject: $this->router->route(Api\ApiMethod::ConsumerMessageNext->compile($this->stream, $this->name)),
             replyTo: $id,
         );
 
-        $sid = $this->client->subscribe(
+        $sid = $this->nats->subscribe(
             subject: $id,
             handler: $messageHandler,
             cancellation: $cancellation,
@@ -141,7 +141,7 @@ final class Consumer
     public function unsubscribeAll(): void
     {
         foreach ($this->subscribers as $sid => $messageHandler) {
-            $this->client->unsubscribe($sid);
+            $this->nats->unsubscribe($sid);
             unset($this->subscribers[$sid]);
 
             $messageHandler->stop();
@@ -154,7 +154,7 @@ final class Consumer
      */
     private function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
     {
-        $this->client->unsubscribe($sid, $cancellation);
+        $this->nats->unsubscribe($sid, $cancellation);
 
         $subscriber = $this->subscribers[$sid] ?? null;
         $subscriber?->stop();

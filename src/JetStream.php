@@ -29,7 +29,7 @@ final readonly class JetStream
      * @param ?non-empty-string $domain
      */
     public function __construct(
-        private Client $client,
+        private Client $nats,
         private Serializer $serializer = new ValinorSerializer(),
         private Encoder $encoder = new NativeEncoder(),
         ?string $domain = null,
@@ -44,7 +44,7 @@ final readonly class JetStream
     public function publish(string $subject, Message $message): Api\AckResponse
     {
         return $this->mapResponse(
-            message: $this->client->request($subject, $message)->message,
+            message: $this->nats->request($subject, $message)->message,
             type: Api\AckResponse::class,
         );
     }
@@ -347,6 +347,7 @@ final readonly class JetStream
 
         return new KeyValue\Bucket(
             name: $config->bucket,
+            nats: $this->nats,
             js: $this,
             stream: $stream,
             prefix: "\$KV.{$config->bucket}.",
@@ -373,6 +374,7 @@ final readonly class JetStream
         if ($stream !== null) {
             return new KeyValue\Bucket(
                 name: $bucket,
+                nats: $this->nats,
                 js: $this,
                 stream: $stream,
                 prefix: "\$KV.{$bucket}.",
@@ -422,7 +424,7 @@ final readonly class JetStream
      */
     public function rawRequest(string $endpoint, mixed $payload = null): Message
     {
-        return $this->client
+        return $this->nats
             ->request(
                 subject: $this->router->route($endpoint),
                 message: new Message(
@@ -475,7 +477,7 @@ final readonly class JetStream
             name: $info->name,
             stream: $info->streamName,
             js: $this,
-            client: $this->client,
+            nats: $this->nats,
             router: $this->router,
             json: $this->encoder,
         );

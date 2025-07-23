@@ -12,13 +12,14 @@ final readonly class Entry
     /**
      * @param non-empty-string $bucket
      * @param non-empty-string $key
-     * @param non-negative-int $sequence
+     * @param non-negative-int $revision
      */
     public function __construct(
         public string $bucket,
         public string $key,
         public \DateTimeImmutable $created,
-        public int $sequence,
+        public int $revision,
         public ?string $value = null,
+        public int $delta = 0,
     ) {}
 }

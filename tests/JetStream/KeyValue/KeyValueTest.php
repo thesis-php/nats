@@ -6,6 +6,7 @@ namespace Thesis\Nats\JetStream\KeyValue;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\NatsTestCase;
+use function Amp\async;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(Bucket::class)]
@@ -45,7 +46,7 @@ final class KeyValueTest extends NatsTestCase
         self::assertSame("KV_{$kv->name}", $entry->bucket);
         self::assertSame('x', $entry->key);
         self::assertEquals('y', $entry->value);
-        self::assertSame(1, $entry->sequence);
+        self::assertSame(1, $entry->revision);
         self::assertGreaterThanOrEqual($ts->getTimestamp(), $entry->created->getTimestamp());
     }
 
@@ -140,10 +141,161 @@ final class KeyValueTest extends NatsTestCase
         self::assertNotNull($entry);
         self::assertSame('y', $entry->value);
 
-        $kv->update('x', $entry->sequence, 'z');
+        $kv->update('x', $entry->revision, 'z');
 
         $entry = $kv->get('x');
         self::assertNotNull($entry);
         self::assertSame('z', $entry->value);
+    }
+
+    public function testWatchAllKeys(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+
+        $changes = [];
+
+        $entries = $kv->watch();
+
+        $future = async(static function () use (&$changes, $entries): void {
+            $count = 0;
+
+            /** @var Entry $entry */
+            foreach ($entries as $entry) {
+                $changes["{$entry->key}:{$entry->revision}"] = $entry->value;
+
+                if (++$count >= 3) {
+                    return;
+                }
+            }
+        });
+
+        $kv->put('x', 'y');
+        $kv->put('a', 'b');
+        $kv->put('x', 'w');
+
+        $future->await();
+        $entries->complete();
+
+        self::assertSame(
+            [
+                'x:1' => 'y',
+                'a:2' => 'b',
+                'x:3' => 'w',
+            ],
+            $changes,
+        );
+    }
+
+    public function testWatchKey(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+
+        $changes = [];
+
+        $entries = $kv->watch('x');
+
+        $future = async(static function () use (&$changes, $entries): void {
+            $count = 0;
+
+            /** @var Entry $entry */
+            foreach ($entries as $entry) {
+                $changes["{$entry->key}:{$entry->revision}"] = $entry->value;
+
+                if (++$count >= 2) {
+                    return;
+                }
+            }
+        });
+
+        $kv->put('x', 'y');
+        $kv->put('a', 'b');
+        $kv->put('x', 'w');
+
+        $future->await();
+        $entries->complete();
+
+        self::assertSame(
+            [
+                'x:1' => 'y',
+                'x:3' => 'w',
+            ],
+            $changes,
+        );
+    }
+
+    public function testWatchKeyDeleted(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+
+        $changes = [];
+
+        $entries = $kv->watch('x');
+
+        $future = async(static function () use (&$changes, $entries): void {
+            $count = 0;
+
+            /** @var Entry $entry */
+            foreach ($entries as $entry) {
+                $changes["{$entry->key}:{$entry->revision}"] = $entry->value;
+
+                if (++$count >= 2) {
+                    return;
+                }
+            }
+        });
+
+        $kv->put('x', 'y');
+        $kv->put('a', 'b');
+        $kv->delete('x');
+
+        $future->await();
+        $entries->complete();
+
+        self::assertSame(
+            [
+                'x:1' => 'y',
+                'x:3' => null,
+            ],
+            $changes,
+        );
+    }
+
+    public function testWatchIgnoreDeletes(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+
+        $changes = [];
+
+        $entries = $kv->watch('x', new WatchConfig(ignoreDeletes: true));
+
+        $future = async(static function () use (&$changes, $entries): void {
+            /** @var Entry $entry */
+            foreach ($entries as $entry) {
+                $changes["{$entry->key}:{$entry->revision}"] = $entry->value;
+                break;
+            }
+        });
+
+        $kv->put('x', 'y');
+        $kv->put('a', 'b');
+        $kv->delete('x');
+
+        $future->await();
+        $entries->complete();
+
+        self::assertSame(
+            [
+                'x:1' => 'y',
+            ],
+            $changes,
+        );
     }
 }

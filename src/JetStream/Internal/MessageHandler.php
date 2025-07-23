@@ -32,18 +32,18 @@ final readonly class MessageHandler
      */
     public function __construct(
         private Pipeline\Queue $queue,
-        Client $client,
+        Client $nats,
         Encoder $json,
         ConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
-        $this->acks = new Acks($client);
+        $this->acks = new Acks($nats);
         $this->heartbeats = new Heartbeat\Monitor(
             interval: $config->heartbeat ?? TimeSpan::fromSeconds(-1),
         );
         $this->pulls = new PullSupervisor(
-            client: $client,
+            nats: $nats,
             json: $json,
             config: $config,
             subject: $subject,

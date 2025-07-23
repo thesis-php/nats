@@ -4,18 +4,29 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\KeyValue;
 
+use Amp\Cancellation;
+use Amp\Pipeline;
+use Thesis\Nats\Client;
+use Thesis\Nats\Delivery;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
+use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\QueueIterator;
 use Thesis\Nats\JetStream;
+use Thesis\Nats\JetStream\Api\DeliverPolicy;
+use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Time\TimeSpan;
+use function Amp\weakClosure;
 
 /**
  * @api
  */
 final readonly class Bucket
 {
+    private const string ALL_KEYS = '>';
+
     /**
      * @param non-empty-string $name
      * @param non-empty-string $prefix
@@ -23,6 +34,7 @@ final readonly class Bucket
      */
     public function __construct(
         public string $name,
+        private Client $nats,
         private JetStream $js,
         private JetStream\Stream $stream,
         private string $prefix,
@@ -54,7 +66,7 @@ final readonly class Bucket
             bucket: $this->stream->name,
             key: $key,
             created: $message->headers->get(Header\Timestamp::Header) ?? new \DateTimeImmutable(),
-            sequence: $message->headers->get(Header\Sequence::header()) ?? 1,
+            revision: $message->headers->get(Header\Sequence::header()) ?? 1,
             value: $message->payload,
         );
     }
@@ -139,6 +151,83 @@ final readonly class Bucket
         $this->js->publish($this->prefixedSubject($key), new Message(
             headers: $headers,
         ));
+    }
+
+    /**
+     * @param list<non-empty-string>|non-empty-string $keys
+     * @return QueueIterator<Entry>
+     */
+    public function watch(
+        string|array $keys = [],
+        WatchConfig $config = new WatchConfig(),
+        ?Cancellation $cancellation = null,
+    ): QueueIterator {
+        if (!\is_array($keys)) {
+            $keys = [$keys];
+        }
+
+        if ($keys === []) {
+            $keys = [self::ALL_KEYS];
+        }
+
+        foreach ($keys as $idx => $key) {
+            $keys[$idx] = "{$this->prefix}{$key}";
+        }
+
+        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+            description: 'kv watch consumer',
+            deliverPolicy: DeliverPolicy::New,
+            deliverSubject: $id = Id\generateInboxId(),
+            replayPolicy: ReplayPolicy::Instant,
+            headersOnly: $config->headersOnly,
+            filterSubjects: $keys,
+        ));
+
+        /** @var Pipeline\Queue<Entry> $queue */
+        $queue = new Pipeline\Queue();
+
+        $sid = $this->nats->subscribe(
+            subject: $id,
+            handler: weakClosure(function (Delivery $delivery) use ($queue, $config): void {
+                $reply = $delivery->replyTo;
+                if ($reply === null) {
+                    return;
+                }
+
+                $key = substr($delivery->subject, \strlen($this->prefix));
+                if ($key === '') {
+                    return;
+                }
+
+                $op = $delivery->message->headers?->get(Header\KvOperation::header());
+
+                if (!$config->ignoreDeletes || !\in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
+                    $metadata = JetStream\Metadata::parse($reply);
+
+                    $queue->push(new Entry(
+                        bucket: $this->name,
+                        key: $key,
+                        created: $metadata->timestamp,
+                        revision: max($metadata->streamSequence, 0),
+                        value: $delivery->message->payload,
+                        delta: $metadata->pending,
+                    ));
+                }
+            }),
+            cancellation: $cancellation,
+        );
+
+        return new QueueIterator(
+            iterator: $queue->iterate(),
+            complete: function (?Cancellation $cancellation = null) use ($sid, $queue): void {
+                $this->nats->unsubscribe($sid, $cancellation);
+                $queue->complete();
+            },
+            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($sid, $queue): void {
+                $this->nats->unsubscribe($sid, $cancellation);
+                $queue->error($e);
+            },
+        );
     }
 
     /**

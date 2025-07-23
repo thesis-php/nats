@@ -68,7 +68,7 @@ final class Client
         }
 
         return new JetStream(
-            client: $this,
+            nats: $this,
             serializer: $this->serializer,
             domain: $domain ?: $this->config->jetStreamDomain,
         );

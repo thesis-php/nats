@@ -16,7 +16,7 @@ use Thesis\Time\TimeSpan;
 final readonly class Acks
 {
     public function __construct(
-        private Client $client,
+        private Client $nats,
     ) {}
 
     /**
@@ -26,8 +26,8 @@ final readonly class Acks
     public function ack(string $replyTo, bool $sync = false, ?Cancellation $cancellation = null): void
     {
         $handler = match ($sync) {
-            true => $this->client->request(...),
-            default => $this->client->publish(...),
+            true => $this->nats->request(...),
+            default => $this->nats->publish(...),
         };
 
         $handler($replyTo, new Message('+ACK'), cancellation: $cancellation);
@@ -44,7 +44,7 @@ final readonly class Acks
             $body .= \sprintf(' {"delay": %d}', $delay->toNanoseconds());
         }
 
-        $this->client->publish($replyTo, new Message($body), cancellation: $cancellation);
+        $this->nats->publish($replyTo, new Message($body), cancellation: $cancellation);
     }
 
     /**
@@ -53,7 +53,7 @@ final readonly class Acks
      */
     public function inProgress(string $replyTo, ?Cancellation $cancellation = null): void
     {
-        $this->client->publish($replyTo, new Message('+WPI'), cancellation: $cancellation);
+        $this->nats->publish($replyTo, new Message('+WPI'), cancellation: $cancellation);
     }
 
     /**
@@ -68,6 +68,6 @@ final readonly class Acks
             $body .= " {$reason}";
         }
 
-        $this->client->publish($replyTo, new Message($body), cancellation: $cancellation);
+        $this->nats->publish($replyTo, new Message($body), cancellation: $cancellation);
     }
 }

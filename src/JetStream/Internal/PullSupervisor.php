@@ -22,7 +22,7 @@ final readonly class PullSupervisor
      * @param non-empty-string $replyTo
      */
     public function __construct(
-        Client $client,
+        Client $nats,
         Encoder $json,
         ConsumeConfig $config,
         string $subject,
@@ -35,14 +35,14 @@ final readonly class PullSupervisor
 
         EventLoop::queue(static function () use (
             $barrier,
-            $client,
+            $nats,
             $json,
             $config,
             $subject,
             $replyTo,
         ): void {
             foreach ($barrier as $_) {
-                $client->publish(
+                $nats->publish(
                     subject: $subject,
                     message: new Message($json->encode($config)),
                     replyTo: $replyTo,
