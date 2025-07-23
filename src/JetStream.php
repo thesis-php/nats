@@ -453,6 +453,15 @@ final readonly class JetStream
     }
 
     /**
+     * @param non-empty-string $bucket
+     * @throws NatsException
+     */
+    public function deleteObjectStore(string $bucket): void
+    {
+        $this->deleteStream("OBJ_{$bucket}");
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
