@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace JetStream\ObjectStore;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
 use Thesis\Nats\JetStream\ObjectStore\ObjectStoreInfo;
 use Thesis\Nats\JetStream\ObjectStore\Store;
 use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
@@ -73,5 +74,21 @@ final class ObjectStoreTest extends NatsTestCase
         $js->deleteObjectStore($name);
 
         self::assertNull($js->objectStore($name));
+    }
+
+    public function testPutObjectStore(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+
+        $info = $store->put(new ObjectMeta(name: 'xfile'), str_repeat('x', 10));
+        self::assertSame(10, $info->size);
+        self::assertSame(1, $info->chunks);
+
+        $storedInfo = $store->info('xfile');
+        self::assertSame($info->nuid, $storedInfo?->nuid);
+
+        $js->deleteObjectStore($name);
     }
 }

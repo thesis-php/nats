@@ -362,7 +362,10 @@ final readonly class JetStream
      */
     public function deleteKeyValue(string $bucket): void
     {
-        $this->deleteStream("KV_{$bucket}");
+        try {
+            $this->deleteStream("KV_{$bucket}");
+        } catch (StreamNotFound) {
+        }
     }
 
     /**
@@ -449,6 +452,8 @@ final readonly class JetStream
             nats: $this->nats,
             js: $this,
             stream: $stream,
+            json: $this->encoder,
+            serializer: $this->serializer,
         );
     }
 
@@ -458,7 +463,10 @@ final readonly class JetStream
      */
     public function deleteObjectStore(string $bucket): void
     {
-        $this->deleteStream("OBJ_{$bucket}");
+        try {
+            $this->deleteStream("OBJ_{$bucket}");
+        } catch (StreamNotFound) {
+        }
     }
 
     /**
@@ -474,6 +482,8 @@ final readonly class JetStream
                 nats: $this->nats,
                 js: $this,
                 stream: $stream,
+                json: $this->encoder,
+                serializer: $this->serializer,
             );
         }
 

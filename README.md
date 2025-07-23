@@ -7,6 +7,7 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 - [NATS RPC](examples/nats/request.php)
 - [NATS JetStream](examples/jetstream/consume.php)
 - [NATS KV](examples/keyvalue/bucket.php)
+- [NATS ObjectStore](examples/objectstore/store.php)
 
 ## Installation
 
