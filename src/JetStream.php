@@ -494,6 +494,26 @@ final readonly class JetStream
     }
 
     /**
+     * @return iterable<ObjectStore\ObjectStoreInfo>
+     * @throws NatsException
+     */
+    public function objectStoreList(): iterable
+    {
+        /** @var Api\StreamInfo $info */
+        foreach ($this->paginatedRequest(new Api\StreamListRequest('$O.*.C.>')) as $info) {
+            if (str_starts_with($info->config->name, 'OBJ_')) {
+                /** @var non-empty-string $name */
+                $name = ltrim($info->config->name, 'OBJ_');
+
+                yield new ObjectStore\ObjectStoreInfo(
+                    name: $name,
+                    info: $info,
+                );
+            }
+        }
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
