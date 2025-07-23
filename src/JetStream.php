@@ -462,6 +462,25 @@ final readonly class JetStream
     }
 
     /**
+     * @param non-empty-string $store
+     */
+    public function objectStore(string $store): ?ObjectStore\Store
+    {
+        $stream = $this->stream("OBJ_{$store}");
+
+        if ($stream !== null) {
+            return new ObjectStore\Store(
+                name: $store,
+                nats: $this->nats,
+                js: $this,
+                stream: $stream,
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
