@@ -481,6 +481,19 @@ final readonly class JetStream
     }
 
     /**
+     * @return iterable<non-empty-string>
+     * @throws NatsException
+     */
+    public function objectStoreNames(): iterable
+    {
+        foreach ($this->paginatedRequest(new Api\StreamNamesRequest('$O.*.C.>')) as $store) {
+            if (($name = ltrim($store, 'OBJ_')) !== '') {
+                yield $name;
+            }
+        }
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
