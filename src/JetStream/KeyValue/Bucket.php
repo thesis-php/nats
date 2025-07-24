@@ -166,13 +166,10 @@ final readonly class Bucket
             $keys = [$keys];
         }
 
-        if ($keys === []) {
-            $keys = [self::ALL_KEYS];
-        }
-
-        foreach ($keys as $idx => $key) {
-            $keys[$idx] = "{$this->prefix}{$key}";
-        }
+        $keys = array_map(
+            fn(string $key): string => "{$this->prefix}{$key}",
+            $keys !== [] ? $keys : [self::ALL_KEYS],
+        );
 
         $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
             description: 'kv watch consumer',
@@ -180,7 +177,7 @@ final readonly class Bucket
             deliverSubject: $id = Id\generateInboxId(),
             replayPolicy: ReplayPolicy::Instant,
             headersOnly: $config->headersOnly,
-            filterSubjects: array_values($keys), // @phpstan-ignore-line
+            filterSubjects: $keys,
         ));
 
         /** @var Pipeline\Queue<Entry> $queue */
