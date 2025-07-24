@@ -56,7 +56,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertSame($streamName, $stream->info->config->name);
         self::assertSame([$subject], $stream->info->config->subjects);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testUpdateStream(): void
@@ -76,7 +76,7 @@ final class JetStreamTest extends NatsTestCase
         $info = $js->updateStream(new StreamConfig($streamName, subjects: [$subject1, $subject2]));
         self::assertSame([$subject1, $subject2], $info->config->subjects);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testUpdateUnknownStream(): void
@@ -100,7 +100,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame([$subject], $stream->info->config->subjects);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testCreateOrUpdateExistStream(): void
@@ -120,7 +120,7 @@ final class JetStreamTest extends NatsTestCase
         $stream = $js->createOrUpdateStream(new StreamConfig($streamName, subjects: [$subject1, $subject2]));
         self::assertSame([$subject1, $subject2], $stream->info->config->subjects);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testStreamInfo(): void
@@ -136,7 +136,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame([$subject], $info->config->subjects);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testDeleteStream(): void
@@ -166,7 +166,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertTrue($response->success);
         self::assertSame(0, $response->purged);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testStreamNames(): void
@@ -181,7 +181,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame([$stream], [...$js->streamNames($subject)]);
 
-        $client->disconnect();
+        $js->deleteStream($stream);
     }
 
     public function testStreamList(): void
@@ -199,7 +199,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame([$subject], $list[0]->config->subjects);
 
-        $client->disconnect();
+        $js->deleteStream($stream);
     }
 
     public function testCreateConsumerOnUnknownStream(): void
@@ -226,7 +226,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
         self::assertSame(0, $consumer->info->numPending);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testUpdateConsumer(): void
@@ -249,7 +249,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertNull($consumer->info->config->description);
         self::assertSame('Test Consumer', $updatedInfo->config->description);
 
-        $client->disconnect();
+        $js->deleteStream($stream);
     }
 
     public function testUpdateUnknownConsumer(): void
@@ -261,8 +261,12 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createStream(new StreamConfig($stream));
 
-        self::expectException(ConsumerDoesNotExist::class);
-        $js->updateConsumer($stream, new ConsumerConfig(durableName: generateUniqueId(10)));
+        try {
+            self::expectException(ConsumerDoesNotExist::class);
+            $js->updateConsumer($stream, new ConsumerConfig(durableName: generateUniqueId(10)));
+        } finally {
+            $js->deleteStream($stream);
+        }
     }
 
     public function testCreateOrUpdateNewConsumer(): void
@@ -280,7 +284,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
         self::assertSame(0, $consumer->info->numPending);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testCreateOrUpdateExistConsumer(): void
@@ -301,7 +305,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertNull($createdConsumer->info->config->description);
         self::assertSame('Test Consumer', $updatedConsumer->info->config->description);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testConsumerInfo(): void
@@ -319,7 +323,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertEquals($consumer->info->config, $consumerInfo->config);
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testDeleteConsumer(): void
@@ -333,8 +337,12 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertTrue($consumer->delete()->success);
 
-        self::expectException(ConsumerNotFound::class);
-        $consumer->actualInfo();
+        try {
+            self::expectException(ConsumerNotFound::class);
+            $consumer->actualInfo();
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testPauseResumeConsumer(): void
@@ -360,7 +368,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertNull($response->pauseRemaining);
         self::assertEquals('0001-01-01 00:00:00', $response->pauseUntil->format('Y-m-d H:i:s'));
 
-        $client->disconnect();
+        $stream->delete();
     }
 
     public function testConsumerNames(): void
@@ -394,7 +402,7 @@ final class JetStreamTest extends NatsTestCase
         self::assertCount(2, $consumerNames);
         self::assertEquals($consumers, $consumerNames);
 
-        $client->disconnect();
+        $js->deleteStream($stream);
     }
 
     public function testConsumerList(): void
@@ -435,7 +443,7 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertEquals($consumers, $consumerNames);
 
-        $client->disconnect();
+        $js->deleteStream($stream);
     }
 
     public function testPublishWrongLastStreamSequence(): void
@@ -455,11 +463,15 @@ final class JetStreamTest extends NatsTestCase
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        self::expectException(WrongLastSequence::class);
-        $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
-                ->with(ExpectedLastSeq::Header, 1),
-        ));
+        try {
+            self::expectException(WrongLastSequence::class);
+            $js->publish("{$subject}.xxx", new Message(
+                headers: (new Headers())
+                    ->with(ExpectedLastSeq::Header, 1),
+            ));
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testPublishWrongLastSubjectSequence(): void
@@ -479,11 +491,15 @@ final class JetStreamTest extends NatsTestCase
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        self::expectException(WrongLastSequence::class);
-        $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
-                ->with(ExpectedLastSubjSeq::Header, 1),
-        ));
+        try {
+            self::expectException(WrongLastSequence::class);
+            $js->publish("{$subject}.xxx", new Message(
+                headers: (new Headers())
+                    ->with(ExpectedLastSubjSeq::Header, 1),
+            ));
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testPublishWrongLastMsgId(): void
@@ -503,11 +519,15 @@ final class JetStreamTest extends NatsTestCase
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        self::expectException(WrongLastMessageId::class);
-        $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
-                ->with(ExpectedLastMsgID::header(), '123'),
-        ));
+        try {
+            self::expectException(WrongLastMessageId::class);
+            $js->publish("{$subject}.xxx", new Message(
+                headers: (new Headers())
+                    ->with(ExpectedLastMsgID::header(), '123'),
+            ));
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testPublishStreamDoesNotMatch(): void
@@ -527,11 +547,15 @@ final class JetStreamTest extends NatsTestCase
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        self::expectException(StreamDoesNotMatch::class);
-        $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
-                ->with(ExpectedStream::header(), 'xxx'),
-        ));
+        try {
+            self::expectException(StreamDoesNotMatch::class);
+            $js->publish("{$subject}.xxx", new Message(
+                headers: (new Headers())
+                    ->with(ExpectedStream::header(), 'xxx'),
+            ));
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testPublishMsgExpired(): void
@@ -555,6 +579,8 @@ final class JetStreamTest extends NatsTestCase
         self::assertSame(1, $stream->actualInfo()->state->messages);
         delay(1);
         self::assertSame(0, $stream->actualInfo()->state->messages);
+
+        $stream->delete();
     }
 
     public function testPublishDuplicate(): void
@@ -564,7 +590,7 @@ final class JetStreamTest extends NatsTestCase
 
         $subject = generateUniqueId(10);
 
-        $js->createStream(new StreamConfig(
+        $stream = $js->createStream(new StreamConfig(
             name: generateUniqueId(10),
             subjects: ["{$subject}.*"],
             duplicateWindow: TimeSpan::fromSeconds(10),
@@ -595,6 +621,8 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame(2, $response->seq);
         self::assertNull($response->duplicate);
+
+        $stream->delete();
     }
 
     public function testPublishConsume(): void
@@ -643,6 +671,8 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertSame($publishedMessages, $messages);
         self::assertSame(0, $consumer->actualInfo()->numPending);
+
+        $stream->delete();
     }
 
     public function testPublishGet(): void
@@ -691,6 +721,8 @@ final class JetStreamTest extends NatsTestCase
 
         self::assertNull($stream->getMessage(3));
         self::assertNull($stream->getMessage(1, 'xxx'));
+
+        $stream->delete();
     }
 
     public function testPublishDelete(): void
@@ -715,6 +747,8 @@ final class JetStreamTest extends NatsTestCase
 
         $stream->deleteMessage(1);
         self::assertNull($stream->getMessage(1));
+
+        $stream->delete();
     }
 
     public function testPublishSecureDelete(): void
@@ -739,5 +773,7 @@ final class JetStreamTest extends NatsTestCase
 
         $stream->secureDeleteMessage(1);
         self::assertNull($stream->getMessage(1));
+
+        $stream->delete();
     }
 }

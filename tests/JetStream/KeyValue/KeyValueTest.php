@@ -19,6 +19,8 @@ final class KeyValueTest extends NatsTestCase
         $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
         self::assertNull($kv->get('invalid'));
         self::assertNotNull($js->keyValue($bucket));
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testDeleteKeyValue(): void
@@ -36,7 +38,7 @@ final class KeyValueTest extends NatsTestCase
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         $ts = new \DateTimeImmutable();
         self::assertSame(1, $kv->put('x', 'y'));
@@ -48,6 +50,8 @@ final class KeyValueTest extends NatsTestCase
         self::assertEquals('y', $entry->value);
         self::assertSame(1, $entry->revision);
         self::assertGreaterThanOrEqual($ts->getTimestamp(), $entry->created->getTimestamp());
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testKeyValueNames(): void
@@ -72,6 +76,10 @@ final class KeyValueTest extends NatsTestCase
         sort($out);
 
         self::assertEquals($in, $out);
+
+        foreach ($in as $name) {
+            $js->deleteKeyValue($name);
+        }
     }
 
     public function testKeyValueList(): void
@@ -97,13 +105,17 @@ final class KeyValueTest extends NatsTestCase
         sort($out);
 
         self::assertEquals($in, $out);
+
+        foreach ($in as $name) {
+            $js->deleteKeyValue($name);
+        }
     }
 
     public function testDeleteBucketKeyValue(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         self::assertSame(1, $kv->put('x', 'y'));
 
@@ -112,13 +124,15 @@ final class KeyValueTest extends NatsTestCase
 
         $kv->delete('x');
         self::assertNull($kv->get('x'));
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testPurgeBucketKeyValue(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         self::assertSame(1, $kv->put('x', 'y'));
 
@@ -127,13 +141,15 @@ final class KeyValueTest extends NatsTestCase
 
         $kv->purge('x');
         self::assertNull($kv->get('x'));
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testUpdateBucketKeyValue(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         self::assertSame(1, $kv->put('x', 'y'));
 
@@ -146,13 +162,15 @@ final class KeyValueTest extends NatsTestCase
         $entry = $kv->get('x');
         self::assertNotNull($entry);
         self::assertSame('z', $entry->value);
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testWatchAllKeys(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         $changes = [];
 
@@ -186,13 +204,15 @@ final class KeyValueTest extends NatsTestCase
             ],
             $changes,
         );
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testWatchKey(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         $changes = [];
 
@@ -225,13 +245,15 @@ final class KeyValueTest extends NatsTestCase
             ],
             $changes,
         );
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testWatchKeyDeleted(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         $changes = [];
 
@@ -264,13 +286,15 @@ final class KeyValueTest extends NatsTestCase
             ],
             $changes,
         );
+
+        $js->deleteKeyValue($bucket);
     }
 
     public function testWatchIgnoreDeletes(): void
     {
         $js = $this->client()->jetStream();
 
-        $kv = $js->createOrUpdateKeyValue(new BucketConfig(generateUniqueId(10)));
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
 
         $changes = [];
 
@@ -297,5 +321,7 @@ final class KeyValueTest extends NatsTestCase
             ],
             $changes,
         );
+
+        $js->deleteKeyValue($bucket);
     }
 }

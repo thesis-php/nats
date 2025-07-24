@@ -11,6 +11,8 @@ abstract class NatsTestCase extends TestCase
     /** @var non-empty-string */
     private string $dsn;
 
+    private ?Client $client = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -23,8 +25,15 @@ abstract class NatsTestCase extends TestCase
         $this->dsn = $dsn;
     }
 
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+
+        $this->client?->disconnect();
+    }
+
     final protected function client(): Client
     {
-        return new Client(Config::fromURI($this->dsn));
+        return $this->client = new Client(Config::fromURI($this->dsn));
     }
 }

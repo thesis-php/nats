@@ -39,6 +39,10 @@ final class ObjectStoreTest extends NatsTestCase
         sort($out);
 
         self::assertEquals($in, $out);
+
+        foreach ($in as $name) {
+            $js->deleteObjectStore($name);
+        }
     }
 
     public function testObjectStoreList(): void
@@ -64,6 +68,10 @@ final class ObjectStoreTest extends NatsTestCase
         sort($out);
 
         self::assertEquals($in, $out);
+
+        foreach ($in as $name) {
+            $js->deleteObjectStore($name);
+        }
     }
 
     public function testDeleteObjectStore(): void
@@ -160,5 +168,7 @@ final class ObjectStoreTest extends NatsTestCase
             ],
             $files,
         );
+
+        $js->deleteObjectStore($name);
     }
 }
