@@ -14,6 +14,8 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Store key values](#store-key-values)
   - [Watch KV](#watch-kv)
 - [NATS ObjectStore](https://docs.nats.io/nats-concepts/jetstream/obj_store)
+  - [Store objects](#store-objects-in-the-buckets)
+  - [Watch Object Store](#watch-object-store)
 
 ## Installation
 
@@ -337,7 +339,7 @@ $client->disconnect();
 
 JetStream, the persistence layer of NATS, not only allows for the higher qualities of service and features associated with 'streaming', but it also enables some functionalities not found in messaging systems like Object Store.
 
-#### Store objects in buckets
+#### Store objects in the buckets
 
 ```php
 <?php
