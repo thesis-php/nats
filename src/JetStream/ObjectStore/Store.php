@@ -152,9 +152,8 @@ final readonly class Store
             throw new \LogicException('Empty object provided.');
         }
 
-        $encodedName = self::base64encode($meta->name);
         $encodedDigest = self::base64encode($digest->finish());
-        $subject = "\$O.{$this->name}.M.{$encodedName}";
+        $subject = "\$O.{$this->name}.M." . self::base64encode($meta->name);
 
         $objectInfo = new ObjectInfo(
             name: $meta->name,
@@ -194,11 +193,37 @@ final readonly class Store
     /**
      * @param non-empty-string $name
      */
+    public function delete(string $name): void
+    {
+        $info = $this->info($name);
+        if ($info === null) {
+            return;
+        }
+
+        $info = $info
+            ->withTime(new \DateTimeImmutable('0001-01-01 00:00:00', new \DateTimeZone('UTC')))
+            ->asDeleted();
+
+        $this->js->publish(
+            subject: "\$O.{$info->bucket}.M." . self::base64encode($info->name),
+            message: new Message(
+                payload: $this->json->encode($info),
+                headers: (new Headers())
+                    ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
+            ),
+        );
+
+        $this->stream->purge(
+            subject: "\$O.{$this->name}.C.{$info->nuid}",
+        );
+    }
+
+    /**
+     * @param non-empty-string $name
+     */
     public function info(string $name): ?ObjectInfo
     {
-        $encoded = self::base64encode($name);
-
-        $msg = $this->stream->getLastMessageForSubject("\$O.{$this->name}.M.{$encoded}");
+        $msg = $this->stream->getLastMessageForSubject("\$O.{$this->name}.M." . self::base64encode($name));
 
         if ($msg !== null && $msg->payload !== null && $msg->payload !== '') {
             $data = $this->json->decode($msg->payload);

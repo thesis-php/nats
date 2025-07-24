@@ -76,7 +76,7 @@ final class ObjectStoreTest extends NatsTestCase
         self::assertNull($js->objectStore($name));
     }
 
-    public function testPutObjectStore(): void
+    public function testPutObject(): void
     {
         $js = $this->client()->jetStream();
 
@@ -88,6 +88,21 @@ final class ObjectStoreTest extends NatsTestCase
 
         $object = $store->get('xfile');
         self::assertSame($body, (string) $object);
+
+        $js->deleteObjectStore($name);
+    }
+
+    public function testDeleteObject(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+
+        $info = $store->put(new ObjectMeta(name: 'xfile'), $body = str_repeat('x', 10));
+        self::assertSame($info->nuid, $store->info('xfile')?->nuid);
+
+        $store->delete('xfile');
+        self::assertNull($store->info('xfile'));
 
         $js->deleteObjectStore($name);
     }

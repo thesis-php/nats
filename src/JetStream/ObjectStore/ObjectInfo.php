@@ -29,6 +29,48 @@ final readonly class ObjectInfo implements \JsonSerializable
     ) {}
 
     /**
+     * @internal
+     */
+    public function withTime(\DateTimeImmutable $mtime): self
+    {
+        return new self(
+            name: $this->name,
+            bucket: $this->bucket,
+            nuid: $this->nuid,
+            size: $this->size,
+            chunks: $this->chunks,
+            mtime: $mtime,
+            digest: $this->digest,
+            deleted: $this->deleted,
+            description: $this->description,
+            headers: $this->headers,
+            metadata: $this->metadata,
+            options: $this->options,
+        );
+    }
+
+    /**
+     * @internal
+     */
+    public function asDeleted(): self
+    {
+        return new self(
+            name: $this->name,
+            bucket: $this->bucket,
+            nuid: $this->nuid,
+            size: 0,
+            chunks: 0,
+            mtime: $this->mtime,
+            digest: '',
+            deleted: true,
+            description: $this->description,
+            headers: $this->headers,
+            metadata: $this->metadata,
+            options: $this->options,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function jsonSerialize(): array

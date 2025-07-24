@@ -180,7 +180,7 @@ final readonly class Bucket
             deliverSubject: $id = Id\generateInboxId(),
             replayPolicy: ReplayPolicy::Instant,
             headersOnly: $config->headersOnly,
-            filterSubjects: $keys,
+            filterSubjects: array_values($keys), // @phpstan-ignore-line
         ));
 
         /** @var Pipeline\Queue<Entry> $queue */
