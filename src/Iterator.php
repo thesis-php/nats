@@ -16,4 +16,10 @@ interface Iterator extends \IteratorAggregate
     public function complete(?Cancellation $cancellation = null): void;
 
     public function cancel(\Throwable $e, ?Cancellation $cancellation = null): void;
+
+    /**
+     * @param callable(T): void $handler
+     * @return callable(?\Throwable=, ?Cancellation=): void callback to cancel subscription
+     */
+    public function subscribe(callable $handler): callable;
 }

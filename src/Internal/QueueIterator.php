@@ -6,6 +6,7 @@ namespace Thesis\Nats\Internal;
 
 use Amp\Cancellation;
 use Amp\Pipeline\ConcurrentIterator;
+use Revolt\EventLoop;
 use Thesis\Nats\Iterator;
 
 /**
@@ -34,6 +35,30 @@ final readonly class QueueIterator implements Iterator
     public function cancel(\Throwable $e, ?Cancellation $cancellation = null): void
     {
         ($this->cancel)($e, $cancellation);
+    }
+
+    public function subscribe(callable $handler): callable
+    {
+        $iterator = $this->iterator;
+
+        EventLoop::queue(static function () use ($iterator, $handler): void {
+            foreach ($iterator as $value) {
+                $handler($value);
+            }
+        });
+
+        [$cancel, $complete] = [$this->cancel, $this->complete];
+
+        return static function (
+            ?\Throwable $e = null,
+            ?Cancellation $cancellation = null,
+        ) use ($cancel, $complete): void {
+            if ($e !== null) {
+                $cancel($e, $cancellation);
+            } else {
+                $complete($cancellation);
+            }
+        };
     }
 
     public function getIterator(): \Traversable
