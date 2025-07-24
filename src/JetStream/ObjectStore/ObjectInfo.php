@@ -17,9 +17,9 @@ final readonly class ObjectInfo implements \JsonSerializable
         public string $name,
         public string $bucket,
         public string $nuid,
-        public int $size,
-        public int $chunks,
-        public \DateTimeImmutable $mtime,
+        public int $size = 0,
+        public int $chunks = 0,
+        public \DateTimeImmutable $mtime = new \DateTimeImmutable(),
         public ?string $digest = null,
         public ?bool $deleted = null,
         public ?string $description = null,
@@ -27,6 +27,23 @@ final readonly class ObjectInfo implements \JsonSerializable
         public ?array $metadata = null,
         public ?ObjectMetaOptions $options = null,
     ) {}
+
+    /**
+     * @internal
+     * @phpstan-assert-if-true !null $this->options
+     */
+    public function isLink(): bool
+    {
+        return $this->options?->link !== null;
+    }
+
+    /**
+     * @internal
+     */
+    public function withoutTime(): self
+    {
+        return $this->withTime(new \DateTimeImmutable('0001-01-01 00:00:00', new \DateTimeZone('UTC')));
+    }
 
     /**
      * @internal
@@ -84,6 +101,7 @@ final readonly class ObjectInfo implements \JsonSerializable
                 'metadata' => $this->metadata ?: null,
                 'options' => [
                     'max_chunk_size' => $this->options?->maxChunkSize,
+                    'link' => $this->options?->link,
                 ],
                 'nuid' => $this->nuid,
                 'size' => $this->size,

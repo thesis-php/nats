@@ -98,11 +98,24 @@ final class ObjectStoreTest extends NatsTestCase
 
         $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
 
-        $info = $store->put(new ObjectMeta(name: 'xfile'), $body = str_repeat('x', 10));
+        $info = $store->put(new ObjectMeta(name: 'xfile'), str_repeat('x', 10));
         self::assertSame($info->nuid, $store->info('xfile')?->nuid);
 
         $store->delete('xfile');
         self::assertNull($store->info('xfile'));
+
+        $js->deleteObjectStore($name);
+    }
+
+    public function testAddLink(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+        $info = $store->put(new ObjectMeta(name: 'xfile'), $body = str_repeat('x', 10));
+
+        $store->addLink('yfile', $info);
+        self::assertSame($body, (string) $store->get('yfile'));
 
         $js->deleteObjectStore($name);
     }

@@ -47,8 +47,8 @@ final readonly class Store
             return null;
         }
 
-        if ($info->options?->link !== null) {
-            $bucket = $info->options->link->bucket;
+        if ($info->isLink()) {
+            $bucket = $info->options->link->bucket ?? '';
 
             if ($bucket === '') {
                 throw new ObjectIsInvalid('Link bucket name is empty.');
@@ -201,7 +201,7 @@ final readonly class Store
         }
 
         $info = $info
-            ->withTime(new \DateTimeImmutable('0001-01-01 00:00:00', new \DateTimeZone('UTC')))
+            ->withoutTime()
             ->asDeleted();
 
         $this->js->publish(
@@ -236,6 +236,49 @@ final readonly class Store
         }
 
         return null;
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function addLink(string $name, ObjectInfo $object): ObjectInfo
+    {
+        if ($object->deleted) {
+            throw new ObjectIsInvalid('Not allowed to link to a deleted object.');
+        }
+
+        if ($object->isLink()) {
+            throw new ObjectIsInvalid('Not allowed to link to another link.');
+        }
+
+        $target = $this->info($name);
+        if ($target !== null && !$target->isLink()) {
+            throw new ObjectIsInvalid('Object is already exists.');
+        }
+
+        $info = new ObjectInfo(
+            name: $name,
+            bucket: $this->name,
+            nuid: Id\generateUniqueId(),
+            options: new ObjectMetaOptions(
+                link: new ObjectLink(
+                    bucket: $object->bucket,
+                    name: $object->name,
+                ),
+            ),
+        );
+
+        $this->js->publish(
+            subject: "\$O.{$info->bucket}.M." . self::base64encode($info->name),
+            message: new Message(
+                payload: $this->json->encode($info->withoutTime()),
+                headers: (new Headers())
+                    ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
+            ),
+        );
+
+        return $info;
     }
 
     private function base64encode(string $name): string
