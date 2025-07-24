@@ -55,6 +55,44 @@ final readonly class StreamConfig implements \JsonSerializable
         public ?TimeSpan $subjectDeleteMarkerTtl = null,
     ) {}
 
+    public function seal(): self
+    {
+        return new self(
+            name: $this->name,
+            description: $this->description,
+            subjects: $this->subjects,
+            retention: $this->retention,
+            discard: $this->discard,
+            maxConsumers: $this->maxConsumers,
+            maxMessages: $this->maxMessages,
+            maxBytes: $this->maxBytes,
+            discardNewPerSubject: $this->discardNewPerSubject,
+            maxAge: $this->maxAge,
+            maxMessagesPerSubject: $this->maxMessagesPerSubject,
+            maxMessageSize: $this->maxMessageSize,
+            storageType: $this->storageType,
+            replicas: $this->replicas,
+            noAck: $this->noAck,
+            duplicateWindow: $this->duplicateWindow,
+            placement: $this->placement,
+            mirror: $this->mirror,
+            sources: $this->sources,
+            sealed: true,
+            denyDelete: $this->denyDelete,
+            denyPurge: $this->denyPurge,
+            allowRollup: $this->allowRollup,
+            compression: $this->compression,
+            firstSeq: $this->firstSeq,
+            subjectTransform: $this->subjectTransform,
+            rePublish: $this->rePublish,
+            allowDirect: $this->allowDirect,
+            mirrorDirect: $this->mirrorDirect,
+            consumerLimits: $this->consumerLimits,
+            metadata: $this->metadata,
+            subjectDeleteMarkerTtl: $this->subjectDeleteMarkerTtl,
+        );
+    }
+
     /**
      * @return array<non-empty-string, mixed>
      */

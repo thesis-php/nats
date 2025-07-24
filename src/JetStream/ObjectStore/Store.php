@@ -281,6 +281,15 @@ final readonly class Store
         return $info;
     }
 
+    /**
+     * @throws NatsException
+     */
+    public function seal(): void
+    {
+        $info = $this->stream->actualInfo();
+        $this->js->updateStream($info->config->seal());
+    }
+
     private function base64encode(string $name): string
     {
         return rtrim(strtr(base64_encode($name), '+/', '-_'), '=');
