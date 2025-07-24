@@ -34,12 +34,17 @@ final readonly class Connect implements Frame, \JsonSerializable
         public string $name,
         public string $version,
         public string $lang = 'php',
+        #[\SensitiveParameter]
         public ?string $authToken = null,
+        #[\SensitiveParameter]
         public ?string $user = null,
+        #[\SensitiveParameter]
         public ?string $pass = null,
         public ?Proto $protocol = null,
         public ?bool $echo = null,
+        #[\SensitiveParameter]
         public ?string $sig = null,
+        #[\SensitiveParameter]
         public ?string $jwt = null,
         public ?bool $noResponders = null,
         public bool $headers = true,

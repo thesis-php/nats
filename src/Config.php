@@ -55,7 +55,7 @@ final readonly class Config
      * @param non-empty-string $uri
      * @throws \InvalidArgumentException
      */
-    public static function fromURI(string $uri): self
+    public static function fromURI(#[\SensitiveParameter] string $uri): self
     {
         $components = parse_url($uri);
 
@@ -165,7 +165,7 @@ final readonly class Config
      *     jetstream_domain?: non-empty-string,
      * } $options
      */
-    public static function fromArray(array $options): self
+    public static function fromArray(#[\SensitiveParameter] array $options): self
     {
         return new self(
             urls: $options['urls'] ?? [self::DEFAULT_URL],
