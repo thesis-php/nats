@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
+use Amp\Cancellation;
 use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
@@ -12,12 +13,16 @@ use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\QueueIterator;
+use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
+use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Serialization\Serializer;
+use function Amp\weakClosure;
 
 /**
  * @api
@@ -236,6 +241,56 @@ final readonly class Store
         }
 
         return null;
+    }
+
+    /**
+     * @return Iterator<ObjectInfo>
+     */
+    public function watch(
+        WatchConfig $config = new WatchConfig(),
+        ?Cancellation $cancellation = null,
+    ): Iterator {
+        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+            description: 'object store consumer',
+            deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
+            deliverSubject: $id = Id\generateInboxId(),
+            filterSubject: "\$O.{$this->name}.M.>",
+        ));
+
+        /** @var Pipeline\Queue<ObjectInfo> $queue */
+        $queue = new Pipeline\Queue();
+
+        $sid = $this->nats->subscribe(
+            subject: $id,
+            handler: weakClosure(function (Delivery $delivery) use ($queue, $config): void {
+                $payload = $delivery->message->payload ?? '{}';
+                if ($payload === '') {
+                    return;
+                }
+
+                $info = $this->serializer->deserialize(
+                    ObjectInfo::class,
+                    $this->json->decode($payload),
+                );
+
+                if (!$config->ignoreDeletes || !$info->deleted) {
+                    $queue->push($info);
+                }
+            }),
+            cancellation: $cancellation,
+        );
+
+        return new QueueIterator(
+            iterator: $queue->iterate(),
+            complete: function (?Cancellation $cancellation = null) use ($sid, $queue): void {
+                $this->nats->unsubscribe($sid, $cancellation);
+                $queue->complete();
+            },
+            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($sid, $queue): void {
+                $this->nats->unsubscribe($sid, $cancellation);
+                $queue->error($e);
+            },
+        );
     }
 
     /**

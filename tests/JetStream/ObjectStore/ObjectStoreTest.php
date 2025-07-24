@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace JetStream\ObjectStore;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use Thesis\Nats\JetStream\ObjectStore\ObjectInfo;
 use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
 use Thesis\Nats\JetStream\ObjectStore\ObjectStoreInfo;
 use Thesis\Nats\JetStream\ObjectStore\Store;
 use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
 use Thesis\Nats\NatsTestCase;
+use function Amp\async;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(Store::class)]
@@ -118,5 +120,45 @@ final class ObjectStoreTest extends NatsTestCase
         self::assertSame($body, (string) $store->get('yfile'));
 
         $js->deleteObjectStore($name);
+    }
+
+    public function testWatch(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+
+        $files = [];
+
+        $objects = $store->watch();
+
+        $future = async(static function () use (&$files, $objects): void {
+            $count = 0;
+
+            /** @var ObjectInfo $object */
+            foreach ($objects as $object) {
+                $files[$object->name] = $object->size;
+
+                if (++$count >= 3) {
+                    return;
+                }
+            }
+        });
+
+        $store->put(new ObjectMeta('file1'), $body1 = str_repeat('x', 10));
+        $store->put(new ObjectMeta('file2'), $body2 = str_repeat('y', 20));
+        $store->put(new ObjectMeta('file3'), $body3 = str_repeat('z', 120));
+
+        $future->await();
+        $objects->complete();
+
+        self::assertSame(
+            [
+                'file1' => \strlen($body1),
+                'file2' => \strlen($body2),
+                'file3' => \strlen($body3),
+            ],
+            $files,
+        );
     }
 }
