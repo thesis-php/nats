@@ -12,6 +12,7 @@ use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\QueueIterator;
+use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
@@ -155,13 +156,13 @@ final readonly class Bucket
 
     /**
      * @param list<non-empty-string>|non-empty-string $keys
-     * @return QueueIterator<Entry>
+     * @return Iterator<Entry>
      */
     public function watch(
         string|array $keys = [],
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
-    ): QueueIterator {
+    ): Iterator {
         if (!\is_array($keys)) {
             $keys = [$keys];
         }
