@@ -36,7 +36,7 @@ final readonly class PurgeStreamRequest implements Request
             [
                 'seq' => $this->sequence,
                 'keep' => $this->keep,
-                'subject' => $this->subject,
+                'filter' => $this->subject,
             ],
             static fn(mixed $value) => $value !== null,
         );
