@@ -29,11 +29,11 @@ final class StringReader implements Reader
         return $this->cursor >= $this->length;
     }
 
-    public function read(int $length): string
+    public function read(int $length): ?string
     {
         $chunk = substr($this->data, $this->cursor, $length);
         $this->cursor += $length;
 
-        return $chunk;
+        return $chunk ?: null;
     }
 }
