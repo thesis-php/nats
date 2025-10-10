@@ -112,7 +112,7 @@ final class ObjectStoreTest extends NatsTestCase
         self::assertSame($info->nuid, $store->info('xfile')?->nuid);
 
         $store->delete('xfile');
-        self::assertNull($store->info('xfile'));
+        self::assertTrue($store->info('xfile')?->deleted);
 
         $js->deleteObjectStore($name);
     }
