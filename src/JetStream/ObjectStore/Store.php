@@ -107,7 +107,13 @@ final readonly class Store
             $payload = $delivery->message->payload;
 
             if ($payload !== null && $payload !== '') {
-                $queue->push($payload);
+                try {
+                    $queue->push($payload);
+                } catch (Pipeline\DisposedException) { // Object was destroyed and ConcurrentIterator::__destruct was called.
+                    $nats->unsubscribe($sid);
+
+                    return;
+                }
             }
 
             if ($metadata->pending === 0) {
