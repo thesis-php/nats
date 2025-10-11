@@ -27,7 +27,7 @@ final readonly class CounterStore
     public function __construct(
         public string $name,
         private JetStream $js,
-        public JetStream\Stream $stream,
+        private JetStream\Stream $stream,
         private string $prefix,
         private \Closure $publishPrefix,
     ) {}
