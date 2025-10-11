@@ -11,6 +11,7 @@ use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
+use Thesis\Nats\JetStream\Counter;
 use Thesis\Nats\JetStream\KeyValue;
 use Thesis\Nats\JetStream\ObjectStore;
 use Thesis\Nats\Json\Encoder;
@@ -524,6 +525,45 @@ final readonly class JetStream
     }
 
     /**
+     * @throws NatsException
+     */
+    public function createOrUpdateCounter(Counter\CounterConfig $config): Counter\CounterStore
+    {
+        $stream = $this->createOrUpdateStream(new Api\StreamConfig(
+            name: "CNT_{$config->name}",
+            description: $config->description,
+            subjects: ["\$CNT.{$config->name}.>"],
+            storageType: $config->storageType,
+            replicas: max($config->replicas, 1),
+            allowDirect: true,
+            allowMessageCounter: true,
+        ));
+
+        return new Counter\CounterStore(
+            name: $config->name,
+            js: $this,
+            stream: $stream,
+            prefix: $prefix = "\$CNT.{$config->name}.",
+            publishPrefix: $this->publishPrefix(
+                prefix: $prefix,
+                jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
+            ),
+        );
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function deleteCounter(string $name): void
+    {
+        try {
+            $this->deleteStream("CNT_{$name}");
+        } catch (StreamNotFound) {
+        }
+    }
+
+    /**
      * @internal
      * @param non-empty-string $endpoint
      */
@@ -639,5 +679,25 @@ final readonly class JetStream
         );
 
         return $result->response();
+    }
+
+    /**
+     * @param non-empty-string $prefix
+     * @param ?non-empty-string $jsPrefix
+     * @return \Closure(non-empty-string): non-empty-string
+     */
+    private function publishPrefix(string $prefix, ?string $jsPrefix = null): \Closure
+    {
+        return static function (string $cmd) use ($prefix, $jsPrefix): string {
+            $subject = '';
+
+            if ($jsPrefix !== null) {
+                $subject .= $jsPrefix;
+            }
+
+            $subject .= "{$prefix}{$cmd}";
+
+            return $subject;
+        };
     }
 }

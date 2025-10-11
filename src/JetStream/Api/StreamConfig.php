@@ -53,6 +53,7 @@ final readonly class StreamConfig implements \JsonSerializable
         public ?array $metadata = null,
         public ?bool $allowMessageTtl = null,
         public ?TimeSpan $subjectDeleteMarkerTtl = null,
+        public ?bool $allowMessageCounter = null,
     ) {}
 
     public function seal(): self
@@ -133,6 +134,7 @@ final readonly class StreamConfig implements \JsonSerializable
                 'metadata' => $this->metadata ?: null,
                 'allow_msg_ttl' => $this->allowMessageTtl,
                 'subject_delete_marker_ttl' => $this->subjectDeleteMarkerTtl?->toNanoseconds(),
+                'allow_msg_counter' => $this->allowMessageCounter,
             ],
             static fn(mixed $value): bool => $value !== null,
         );

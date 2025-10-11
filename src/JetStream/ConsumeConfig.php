@@ -31,6 +31,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
         public ?int $minAckPending = null,
         public ?string $pinId = null,
         public ?string $group = null,
+        public bool $completeOnNoMessages = false,
     ) {
         $this->expires = $expires ?? TimeSpan::fromSeconds(self::DEFAULT_PULL_EXPIRES_SECS);
     }
