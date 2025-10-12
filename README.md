@@ -16,6 +16,10 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 - [NATS ObjectStore](https://docs.nats.io/nats-concepts/jetstream/obj_store)
   - [Store objects](#store-objects-in-the-buckets)
   - [Watch Object Store](#watch-object-store)
+- [NATS CRDT](#nats-crdt)
+  - [Add Counter](#add-counter)
+  - [Get Counter](#get-counter)
+  - [Get Counters](#get-counters)
 
 ## Installation
 
@@ -416,6 +420,87 @@ delay(0.5);
 $cancel();
 
 $client->disconnect();
+```
+
+## NATS CRDT
+
+Distributed Counter CRDT. A Stream can opt in to supporting Counters which will allow any subject to be a counter. All subjects in the stream must be counters.
+See [ADR-49](https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-49.md) for details.
+
+#### Add Counter
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Counter\CounterConfig;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+    name: 'atomics',
+));
+
+dump($counter->add('x', 1)); // 1
+dump($counter->add('x', 2)); // 3
+```
+
+#### Get Counter
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Counter\CounterConfig;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+    name: 'atomics',
+));
+
+dump($counter->add('x', 1)); // 1
+dump($counter->get('x')?->value); // 1
+```
+
+#### Get Counters
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Counter\CounterConfig;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$jetstream->deleteCounter('atomics');
+
+$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+    name: 'atomics',
+));
+
+$counter->add('x', 1);
+$counter->add('y', 1);
+$counter->add('z', 1);
+
+foreach ($counter->getMultiple() as $entry) {
+    echo "{$entry->subject}: {$entry->value}\n";
+}
 ```
 
 ## License
