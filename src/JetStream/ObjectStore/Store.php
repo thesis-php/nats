@@ -288,13 +288,9 @@ final readonly class Store
 
         return new QueueIterator(
             iterator: $queue->iterate(),
-            complete: function (?Cancellation $cancellation = null) use ($sid, $queue): void {
+            queue: $queue,
+            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
                 $this->nats->unsubscribe($sid, $cancellation);
-                $queue->complete();
-            },
-            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($sid, $queue): void {
-                $this->nats->unsubscribe($sid, $cancellation);
-                $queue->error($e);
             },
         );
     }

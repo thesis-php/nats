@@ -8,10 +8,12 @@ use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Exception\NoServerResponse;
+use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
+use Thesis\Nats\Status;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -34,7 +36,7 @@ final readonly class MessageHandler
         private Pipeline\Queue $queue,
         Client $nats,
         Encoder $json,
-        ConsumeConfig $config,
+        private ConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
@@ -59,6 +61,12 @@ final readonly class MessageHandler
 
     public function __invoke(NatsDelivery $delivery): void
     {
+        if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoMessages && $this->config->completeOnNoMessages) {
+            $this->stop();
+
+            return;
+        }
+
         $replyTo = $delivery->replyTo;
 
         if ($replyTo === null && $delivery->message->payload === null) {
@@ -82,6 +90,10 @@ final readonly class MessageHandler
 
     public function stop(): void
     {
+        if (!$this->queue->isComplete()) {
+            $this->queue->complete();
+        }
+
         $this->pulls->stop();
         $this->heartbeats->stop();
     }

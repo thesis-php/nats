@@ -6,6 +6,7 @@ namespace Thesis\Nats\Internal;
 
 use Amp\Cancellation;
 use Amp\Pipeline\ConcurrentIterator;
+use Amp\Pipeline\Queue;
 use Revolt\EventLoop;
 use Thesis\Nats\Iterator;
 
@@ -18,23 +19,31 @@ final readonly class QueueIterator implements Iterator
 {
     /**
      * @param ConcurrentIterator<T> $iterator
-     * @param \Closure(?Cancellation=): void $complete
-     * @param \Closure(\Throwable, ?Cancellation=): void $cancel
+     * @param Queue<T> $queue
+     * @param \Closure(?Cancellation=): void $unsubscribe
      */
     public function __construct(
         private ConcurrentIterator $iterator,
-        private \Closure $complete,
-        private \Closure $cancel,
+        private Queue $queue,
+        private \Closure $unsubscribe,
     ) {}
 
     public function complete(?Cancellation $cancellation = null): void
     {
-        ($this->complete)($cancellation);
+        ($this->unsubscribe)($cancellation);
+
+        if (!$this->queue->isComplete()) {
+            $this->queue->complete();
+        }
     }
 
     public function cancel(\Throwable $e, ?Cancellation $cancellation = null): void
     {
-        ($this->cancel)($e, $cancellation);
+        ($this->unsubscribe)($cancellation);
+
+        if (!$this->queue->isComplete()) {
+            $this->queue->error($e);
+        }
     }
 
     public function subscribe(callable $handler): callable
@@ -47,7 +56,7 @@ final readonly class QueueIterator implements Iterator
             }
         });
 
-        [$cancel, $complete] = [$this->cancel, $this->complete];
+        [$cancel, $complete] = [$this->cancel(...), $this->complete(...)];
 
         return static function (
             ?\Throwable $e = null,

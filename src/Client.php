@@ -117,13 +117,9 @@ final class Client
 
         return new Internal\QueueIterator(
             iterator: $queue->iterate(),
-            complete: function (?Cancellation $cancellation = null) use ($subscriptionId, $queue): void {
+            queue: $queue,
+            unsubscribe: function (?Cancellation $cancellation = null) use ($subscriptionId): void {
                 $this->unsubscribe($subscriptionId, $cancellation);
-                $queue->complete();
-            },
-            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($subscriptionId, $queue): void {
-                $this->unsubscribe($subscriptionId, $cancellation);
-                $queue->error($e);
             },
         );
     }

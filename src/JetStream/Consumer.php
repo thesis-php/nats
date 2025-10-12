@@ -77,13 +77,9 @@ final class Consumer
 
         return new QueueIterator(
             iterator: $queue->iterate(),
-            complete: function (?Cancellation $cancellation = null) use ($sid, $queue): void {
+            queue: $queue,
+            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
                 $this->unsubscribe($sid, $cancellation);
-                $queue->complete();
-            },
-            cancel: function (\Throwable $e, ?Cancellation $cancellation = null) use ($sid, $queue): void {
-                $this->unsubscribe($sid, $cancellation);
-                $queue->error($e);
             },
         );
     }
