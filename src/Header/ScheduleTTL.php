@@ -21,6 +21,6 @@ enum ScheduleTTL: string implements HeaderKey
 
     public function decode(string $value): string
     {
-        return $value;
+        return $value ?: throw new \UnexpectedValueException("Invalid schedule ttl format: {$value}");
     }
 }
