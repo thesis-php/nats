@@ -17,6 +17,8 @@ use Thesis\Nats\Header\ExpectedLastSubjSeq;
 use Thesis\Nats\Header\ExpectedStream;
 use Thesis\Nats\Header\MsgId;
 use Thesis\Nats\Header\MsgTtl;
+use Thesis\Nats\Header\ScheduleNext;
+use Thesis\Nats\Header\Scheduler;
 use Thesis\Nats\Header\Sequence;
 use Thesis\Nats\Header\Stream;
 use Thesis\Nats\Header\Subject;
@@ -24,9 +26,11 @@ use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
+use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Time\TimeSpan;
 use function Amp\delay;
+use function Amp\now;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(JetStream::class)]
@@ -773,6 +777,49 @@ final class JetStreamTest extends NatsTestCase
 
         $stream->secureDeleteMessage(1);
         self::assertNull($stream->getMessage(1));
+
+        $stream->delete();
+    }
+
+    public function testScheduleSingleMessage(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: [
+                'recurrents',
+                'scheduler.recurrents.*',
+            ],
+            allowMsgSchedules: true,
+        ));
+
+        $js->publish('scheduler.recurrents.1', new Message(
+            payload: '{"id":1}',
+            headers: (new Headers())
+                ->with(Header\Schedule::Header, new \DateTimeImmutable('+2 seconds'))
+                ->with(Header\ScheduleTarget::header(), 'recurrents'),
+        ));
+
+        $consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(
+            durableName: 'RecurrentsConsumer',
+            deliverPolicy: DeliverPolicy::New,
+            ackPolicy: AckPolicy::None,
+            filterSubjects: ['recurrents'],
+        ));
+
+        $ts = now();
+        $deliveries = $consumer->consume();
+
+        foreach ($deliveries as $delivery) {
+            self::assertTrue(now() - $ts > 0.5);
+            self::assertSame('{"id":1}', $delivery->message->payload);
+            self::assertNotNull($delivery->message->headers);
+            self::assertSame('scheduler.recurrents.1', $delivery->message->headers->get(Scheduler::header()));
+            self::assertSame('purge', $delivery->message->headers->get(ScheduleNext::header()));
+            $deliveries->complete();
+        }
 
         $stream->delete();
     }
