@@ -523,12 +523,13 @@ use Thesis\Nats;
 use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
+use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 
 $client = new Nats\Client(Nats\Config::default());
 $jetstream = $client->jetStream();
 
-$stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
+$stream = $jetstream->createStream(new StreamConfig(
     name: 'RecurrentsStream',
     subjects: [
         'recurrents',
