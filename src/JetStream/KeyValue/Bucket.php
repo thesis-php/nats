@@ -80,7 +80,7 @@ final readonly class Bucket
     {
         return $this->js
             ->publish($this->prefixedSubject($key), new Message($value))
-            ->seq;
+            ->seq ?? throw new \LogicException('Sequence expected on kv publish');
     }
 
     /**
@@ -106,7 +106,7 @@ final readonly class Bucket
                 payload: $value,
                 headers: $headers,
             ))
-            ->seq;
+            ->seq ?? throw new \LogicException('Sequence expected on kv update');
     }
 
     /**

@@ -22,6 +22,9 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Get Counters](#get-counters)
 - [NATS Message Scheduler](#nats-message-scheduler)
   - [Single scheduled message](#single-scheduled-message)
+- [NATS JetStream Batch Publishing](#nats-jetstream-batch-publishing)
+  - [Publish using `PublishBatch`](#publish-using-publishbatch)
+  - [Publish using `JetStream`](#publish-batch-using-jetstream)
 
 ## Installation
 
@@ -559,6 +562,70 @@ foreach ($consumer->consume() as $delivery) {
         $delivery->message->headers?->get(Header\ScheduleNext::header()),
     ]);
 }
+```
+
+## NATS JetStream Batch Publishing
+
+The `AllowAtomicPublish` stream configuration option allows to atomically publish N messages into a stream.
+
+#### Publish using `PublishBatch`
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api\StreamConfig;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$stream = $jetstream->createStream(new StreamConfig(
+    name: 'Batches',
+    description: 'Batch Stream',
+    subjects: ['batch.*'],
+    allowAtomicPublish: true,
+));
+
+$batch = $jetstream->createPublishBatch();
+
+for ($i = 0; $i < 999; ++$i) {
+    $batch->publish('batch.orders', new Nats\Message("Order#{$i}"));
+}
+
+$batch->publish('batch.orders', new Nats\Message('Order#1000'), new Nats\PublishBatchOptions(commit: true));
+```
+
+#### Publish batch using JetStream
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api\StreamConfig;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$stream = $jetstream->createStream(new StreamConfig(
+    name: 'Batches',
+    description: 'Batch Stream',
+    subjects: ['batch.*'],
+    allowAtomicPublish: true,
+));
+
+$jetstream->publishBatch('batch.orders', [
+    new Nats\Message('Order#1'),
+    new Nats\Message('Order#2'),
+    new Nats\Message('Order#3'),
+]);
 ```
 
 ## License

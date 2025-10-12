@@ -6,8 +6,6 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 use Thesis\Nats;
 
-$date = new DateTimeImmutable();
-
 $client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
 $jetstream = $client->jetStream();
 
