@@ -10,15 +10,17 @@ namespace Thesis\Nats\JetStream\Api;
 final readonly class AckResponse
 {
     /**
-     * @param non-empty-string $stream
-     * @param non-negative-int $seq
+     * @param ?non-empty-string $stream
+     * @param ?non-negative-int $seq
      * @param ?numeric-string $val
      */
     public function __construct(
-        public string $stream,
-        public int $seq,
+        public ?string $stream = null,
+        public ?int $seq = null,
         public ?bool $duplicate = null,
         public ?string $domain = null,
         public ?string $val = null,
+        public ?string $batch = null,
+        public ?int $count = null,
     ) {}
 }

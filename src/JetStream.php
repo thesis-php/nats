@@ -52,6 +52,32 @@ final readonly class JetStream
     }
 
     /**
+     * @param non-empty-string $subject
+     * @param non-empty-list<Message> $messages
+     * @throws NatsException
+     */
+    public function publishBatch(string $subject, array $messages): void
+    {
+        $batch = $this->createPublishBatch();
+
+        $messageToCommit = array_pop($messages);
+
+        foreach ($messages as $message) {
+            $batch->publish($subject, $message);
+        }
+
+        $batch->publish($subject, $messageToCommit, new PublishBatchOptions(commit: true));
+    }
+
+    public function createPublishBatch(): PublishBatch
+    {
+        return new PublishBatch(
+            js: $this,
+            nc: $this->nats,
+        );
+    }
+
+    /**
      * @throws NatsException
      */
     public function accountInfo(): Api\AccountInfo
