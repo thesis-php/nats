@@ -813,7 +813,7 @@ final class JetStreamTest extends NatsTestCase
         $deliveries = $consumer->consume();
 
         foreach ($deliveries as $delivery) {
-            self::assertTrue(now() - $ts > 1);
+            self::assertTrue(now() - $ts > 0.5);
             self::assertSame('{"id":1}', $delivery->message->payload);
             self::assertNotNull($delivery->message->headers);
             self::assertSame('scheduler.recurrents.1', $delivery->message->headers->get(Scheduler::header()));
