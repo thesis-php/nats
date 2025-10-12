@@ -54,6 +54,7 @@ final readonly class StreamConfig implements \JsonSerializable
         public ?bool $allowMessageTtl = null,
         public ?TimeSpan $subjectDeleteMarkerTtl = null,
         public ?bool $allowMessageCounter = null,
+        public ?bool $allowMsgSchedules = null,
     ) {}
 
     public function seal(): self
@@ -90,7 +91,10 @@ final readonly class StreamConfig implements \JsonSerializable
             mirrorDirect: $this->mirrorDirect,
             consumerLimits: $this->consumerLimits,
             metadata: $this->metadata,
+            allowMessageTtl: $this->allowMessageTtl,
             subjectDeleteMarkerTtl: $this->subjectDeleteMarkerTtl,
+            allowMessageCounter: $this->allowMessageCounter,
+            allowMsgSchedules: $this->allowMsgSchedules,
         );
     }
 
@@ -135,6 +139,7 @@ final readonly class StreamConfig implements \JsonSerializable
                 'allow_msg_ttl' => $this->allowMessageTtl,
                 'subject_delete_marker_ttl' => $this->subjectDeleteMarkerTtl?->toNanoseconds(),
                 'allow_msg_counter' => $this->allowMessageCounter,
+                'allow_msg_schedules' => $this->allowMsgSchedules,
             ],
             static fn(mixed $value): bool => $value !== null,
         );

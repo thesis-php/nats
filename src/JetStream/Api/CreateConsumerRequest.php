@@ -40,11 +40,14 @@ final readonly class CreateConsumerRequest implements Request
      */
     public function payload(): array
     {
-        return [
-            'stream_name' => $this->stream,
-            'config' => $this->config,
-            'action' => $this->action ?? '',
-        ];
+        return array_filter(
+            [
+                'stream_name' => $this->stream,
+                'config' => $this->config,
+                'action' => $this->action ?? null,
+            ],
+            static fn(mixed $value): bool => $value !== null,
+        );
     }
 
     public function type(): string

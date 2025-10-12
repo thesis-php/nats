@@ -20,6 +20,8 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Add Counter](#add-counter)
   - [Get Counter](#get-counter)
   - [Get Counters](#get-counters)
+- [NATS Message Scheduler](#nats-message-scheduler)
+  - [Single scheduled message](#single-scheduled-message)
 
 ## Installation
 
@@ -500,6 +502,61 @@ $counter->add('z', 1);
 
 foreach ($counter->getMultiple() as $entry) {
     echo "{$entry->subject}: {$entry->value}\n";
+}
+```
+
+## NATS Message Scheduler
+
+Delayed Message Scheduling. The `AllowMsgSchedules` stream configuration option allows the scheduling of messages. Users can use this feature for delayed publishing/scheduling of messages.
+See [ADR-51](https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-51.md) for details.
+
+#### Single scheduled message
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\Header;
+use Thesis\Nats\JetStream\Api\AckPolicy;
+use Thesis\Nats\JetStream\Api\ConsumerConfig;
+use Thesis\Nats\JetStream\Api\DeliverPolicy;
+
+$client = new Nats\Client(Nats\Config::default());
+$jetstream = $client->jetStream();
+
+$stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
+    name: 'RecurrentsStream',
+    subjects: [
+        'recurrents',
+        'scheduler.recurrents.*',
+    ],
+    allowMsgSchedules: true,
+));
+
+$jetstream->publish('scheduler.recurrents.1', new Nats\Message(
+    payload: '{"id":1}',
+    headers: (new Nats\Headers())
+        ->with(Header\Schedule::Header, new \DateTimeImmutable('+5 seconds'))
+        ->with(Header\ScheduleTarget::header(), 'recurrents'),
+));
+
+$consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(
+    durableName: 'RecurrentsConsumer',
+    deliverPolicy: DeliverPolicy::New,
+    ackPolicy: AckPolicy::None,
+    filterSubjects: ['recurrents'],
+));
+
+foreach ($consumer->consume() as $delivery) {
+    dump([
+        $delivery->message->payload,
+        $delivery->message->headers?->get(Header\Scheduler::header()),
+        $delivery->message->headers?->get(Header\ScheduleNext::header()),
+    ]);
 }
 ```
 
