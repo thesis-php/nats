@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
 use Thesis\Nats\Exception\StreamDoesNotMatch;
@@ -844,31 +845,15 @@ final class JetStreamTest extends NatsTestCase
             ackPolicy: AckPolicy::Explicit
         ));
 
-        $iterator1 = $consumer->consume();
-        $iterator2 = $consumer->consume();
-        $iterator3 = $consumer->consume();
-        
-        $completed = [];
-        
-        $futures = [
-            async(function () use ($iterator1, &$completed): void {
-                foreach ($iterator1 as $_) {
-                }
-                $completed[] = 'iterator1';
-            }),
-            
-            async(function () use ($iterator2, &$completed): void {
-                foreach ($iterator2 as $_) {
-                }
-                $completed[] = 'iterator2';
-            }),
-            
-            async(function () use ($iterator3, &$completed): void {
-                foreach ($iterator3 as $_) {
-                }
-                $completed[] = 'iterator3';
-            })
-        ];
+        $completedCount = 0;
+        $futures = [];
+
+        for ($i = 0; $i < 3; ++$i) {
+            $futures[] = async(static function () use ($consumer, &$completedCount): void {
+                foreach ($consumer->consume() as $_) {}
+                $completedCount++;
+            });
+        }
 
         delay(0.01);
         
@@ -876,50 +861,12 @@ final class JetStreamTest extends NatsTestCase
         
         awaitAll($futures);
         
-        self::assertCount(3, $completed, 'All iterators should complete after unsubscribeAll');
+        self::assertSame(3, $completedCount, 'All iterators should complete after unsubscribeAll');
 
         $stream->delete();
     }
 
-    public function testConsumerUnsubscribeAllWithSingleSubscription(): void
-    {
-        $client = $this->client();
-        $js = $client->jetStream();
-
-        $subject = generateUniqueId(10);
-        $streamName = generateUniqueId(10);
-
-        $stream = $js->createStream(new StreamConfig(
-            name: $streamName,
-            subjects: ["{$subject}.*"]
-        ));
-
-        $consumer = $stream->createConsumer(new ConsumerConfig(
-            durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit
-        ));
-
-        $iterator = $consumer->consume();
-        
-        $completed = false;
-        
-        $future = async(function () use ($iterator, &$completed): void {
-            foreach ($iterator as $_) {
-            }
-            $completed = true;
-        });
-
-        delay(0.01);
-        
-        $consumer->unsubscribeAll();
-        
-        awaitAll([$future]);
-        
-        self::assertTrue($completed, 'Iterator should complete after unsubscribeAll');
-
-        $stream->delete();
-    }
-    #[\PHPUnit\Framework\Attributes\DoesNotPerformAssertions]
+    #[DoesNotPerformAssertions]
     public function testConsumerUnsubscribeAllWithNoSubscriptions(): void
     {
         $client = $this->client();
