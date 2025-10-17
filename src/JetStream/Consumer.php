@@ -20,7 +20,7 @@ use Thesis\Nats\NatsException;
  */
 final class Consumer
 {
-    /** @var array<non-empty-string, Internal\MessageHandler> */
+    /** @var array<non-empty-string|int, Internal\MessageHandler> */
     private array $subscribers = [];
 
     /**
@@ -137,7 +137,7 @@ final class Consumer
     public function unsubscribeAll(): void
     {
         foreach ($this->subscribers as $sid => $messageHandler) {
-            $this->nats->unsubscribe($sid);
+            $this->nats->unsubscribe((string) $sid);
             unset($this->subscribers[$sid]);
 
             $messageHandler->stop();
