@@ -837,12 +837,12 @@ final class JetStreamTest extends NatsTestCase
 
         $stream = $js->createStream(new StreamConfig(
             name: $streamName,
-            subjects: ["{$subject}.*"]
+            subjects: ["{$subject}.*"],
         ));
 
         $consumer = $stream->createConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit
+            ackPolicy: AckPolicy::Explicit,
         ));
 
         $completedCount = 0;
@@ -850,17 +850,17 @@ final class JetStreamTest extends NatsTestCase
 
         for ($i = 0; $i < 3; ++$i) {
             $futures[] = async(static function () use ($consumer, &$completedCount): void {
-                foreach ($consumer->consume() as $_) {}
-                $completedCount++;
+                foreach ($consumer->consume() as $_);
+                ++$completedCount;
             });
         }
 
         delay(0.01);
-        
+
         $consumer->unsubscribeAll();
-        
+
         awaitAll($futures);
-        
+
         self::assertSame(3, $completedCount, 'All iterators should complete after unsubscribeAll');
 
         $stream->delete();
@@ -878,7 +878,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumer = $stream->createConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit
+            ackPolicy: AckPolicy::Explicit,
         ));
 
         $consumer->unsubscribeAll();
