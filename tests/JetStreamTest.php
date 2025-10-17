@@ -29,7 +29,9 @@ use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Time\TimeSpan;
+use function Amp\async;
 use function Amp\delay;
+use function Amp\Future\awaitAll;
 use function Amp\now;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
@@ -845,49 +847,41 @@ final class JetStreamTest extends NatsTestCase
         $iterator1 = $consumer->consume();
         $iterator2 = $consumer->consume();
         $iterator3 = $consumer->consume();
+        
+        $completed = [];
+        
+        $futures = [
+            async(function () use ($iterator1, &$completed): void {
+                foreach ($iterator1 as $_) {
+                }
+                $completed[] = 'iterator1';
+            }),
+            
+            async(function () use ($iterator2, &$completed): void {
+                foreach ($iterator2 as $_) {
+                }
+                $completed[] = 'iterator2';
+            }),
+            
+            async(function () use ($iterator3, &$completed): void {
+                foreach ($iterator3 as $_) {
+                }
+                $completed[] = 'iterator3';
+            })
+        ];
 
-        $reflection = new \ReflectionClass($consumer);
-        $subscribersProperty = $reflection->getProperty('subscribers');
-        $subscribersProperty->setAccessible(true);
-        $subscribers = $subscribersProperty->getValue($consumer);
-
-        self::assertCount(3, $subscribers);
-
+        delay(0.01);
+        
         $consumer->unsubscribeAll();
-
-        $subscribersAfter = $subscribersProperty->getValue($consumer);
-        self::assertCount(0, $subscribersAfter);
+        
+        awaitAll($futures);
+        
+        self::assertCount(3, $completed, 'All iterators should complete after unsubscribeAll');
 
         $stream->delete();
     }
 
-    public function testConsumerUnsubscribeAllWithNoSubscriptions(): void
-    {
-        $client = $this->client();
-        $js = $client->jetStream();
-
-        $streamName = generateUniqueId(10);
-
-        $stream = $js->createStream(new StreamConfig($streamName));
-
-        $consumer = $stream->createConsumer(new ConsumerConfig(
-            durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit
-        ));
-
-        $consumer->unsubscribeAll();
-
-        $reflection = new \ReflectionClass($consumer);
-        $subscribersProperty = $reflection->getProperty('subscribers');
-        $subscribersProperty->setAccessible(true);
-        $subscribers = $subscribersProperty->getValue($consumer);
-
-        self::assertCount(0, $subscribers);
-
-        $stream->delete();
-    }
-
-    public function testConsumerUnsubscribeAllStopsMessageHandlers(): void
+    public function testConsumerUnsubscribeAllWithSingleSubscription(): void
     {
         $client = $this->client();
         $js = $client->jetStream();
@@ -906,25 +900,41 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $iterator = $consumer->consume();
+        
+        $completed = false;
+        
+        $future = async(function () use ($iterator, &$completed): void {
+            foreach ($iterator as $_) {
+            }
+            $completed = true;
+        });
 
-        $reflection = new \ReflectionClass($consumer);
-        $subscribersProperty = $reflection->getProperty('subscribers');
-        $subscribersProperty->setAccessible(true);
-        $subscribers = $subscribersProperty->getValue($consumer);
+        delay(0.01);
+        
+        $consumer->unsubscribeAll();
+        
+        awaitAll([$future]);
+        
+        self::assertTrue($completed, 'Iterator should complete after unsubscribeAll');
 
-        self::assertCount(1, $subscribers);
-        $messageHandler = array_values($subscribers)[0];
+        $stream->delete();
+    }
+    #[\PHPUnit\Framework\Attributes\DoesNotPerformAssertions]
+    public function testConsumerUnsubscribeAllWithNoSubscriptions(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
 
-        $messageHandlerReflection = new \ReflectionClass($messageHandler);
-        $queueProperty = $messageHandlerReflection->getProperty('queue');
-        $queueProperty->setAccessible(true);
-        $queue = $queueProperty->getValue($messageHandler);
+        $streamName = generateUniqueId(10);
 
-        self::assertFalse($queue->isComplete());
+        $stream = $js->createStream(new StreamConfig($streamName));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit
+        ));
 
         $consumer->unsubscribeAll();
-
-        self::assertTrue($queue->isComplete());
 
         $stream->delete();
     }
