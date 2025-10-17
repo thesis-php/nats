@@ -823,4 +823,109 @@ final class JetStreamTest extends NatsTestCase
 
         $stream->delete();
     }
+
+    public function testConsumerUnsubscribeAll(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"]
+        ));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit
+        ));
+
+        $iterator1 = $consumer->consume();
+        $iterator2 = $consumer->consume();
+        $iterator3 = $consumer->consume();
+
+        $reflection = new \ReflectionClass($consumer);
+        $subscribersProperty = $reflection->getProperty('subscribers');
+        $subscribersProperty->setAccessible(true);
+        $subscribers = $subscribersProperty->getValue($consumer);
+
+        self::assertCount(3, $subscribers);
+
+        $consumer->unsubscribeAll();
+
+        $subscribersAfter = $subscribersProperty->getValue($consumer);
+        self::assertCount(0, $subscribersAfter);
+
+        $stream->delete();
+    }
+
+    public function testConsumerUnsubscribeAllWithNoSubscriptions(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig($streamName));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit
+        ));
+
+        $consumer->unsubscribeAll();
+
+        $reflection = new \ReflectionClass($consumer);
+        $subscribersProperty = $reflection->getProperty('subscribers');
+        $subscribersProperty->setAccessible(true);
+        $subscribers = $subscribersProperty->getValue($consumer);
+
+        self::assertCount(0, $subscribers);
+
+        $stream->delete();
+    }
+
+    public function testConsumerUnsubscribeAllStopsMessageHandlers(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"]
+        ));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit
+        ));
+
+        $iterator = $consumer->consume();
+
+        $reflection = new \ReflectionClass($consumer);
+        $subscribersProperty = $reflection->getProperty('subscribers');
+        $subscribersProperty->setAccessible(true);
+        $subscribers = $subscribersProperty->getValue($consumer);
+
+        self::assertCount(1, $subscribers);
+        $messageHandler = array_values($subscribers)[0];
+
+        $messageHandlerReflection = new \ReflectionClass($messageHandler);
+        $queueProperty = $messageHandlerReflection->getProperty('queue');
+        $queueProperty->setAccessible(true);
+        $queue = $queueProperty->getValue($messageHandler);
+
+        self::assertFalse($queue->isComplete());
+
+        $consumer->unsubscribeAll();
+
+        self::assertTrue($queue->isComplete());
+
+        $stream->delete();
+    }
 }
