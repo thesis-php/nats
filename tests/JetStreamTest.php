@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
 use Thesis\Nats\Exception\StreamDoesNotMatch;
@@ -29,7 +30,9 @@ use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Time\TimeSpan;
+use function Amp\async;
 use function Amp\delay;
+use function Amp\Future\awaitAll;
 use function Amp\now;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
@@ -820,6 +823,65 @@ final class JetStreamTest extends NatsTestCase
             self::assertSame('purge', $delivery->message->headers->get(ScheduleNext::header()));
             $deliveries->complete();
         }
+
+        $stream->delete();
+    }
+
+    public function testConsumerUnsubscribeAll(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        $completedCount = 0;
+        $futures = [];
+
+        for ($i = 0; $i < 3; ++$i) {
+            $futures[] = async(static function () use ($consumer, &$completedCount): void {
+                foreach ($consumer->consume() as $_);
+                ++$completedCount;
+            });
+        }
+
+        delay(0.01);
+
+        $consumer->unsubscribeAll();
+
+        awaitAll($futures);
+
+        self::assertSame(3, $completedCount, 'All iterators should complete after unsubscribeAll');
+
+        $stream->delete();
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testConsumerUnsubscribeAllWithNoSubscriptions(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig($streamName));
+
+        $consumer = $stream->createConsumer(new ConsumerConfig(
+            durableName: generateUniqueId(10),
+            ackPolicy: AckPolicy::Explicit,
+        ));
+
+        $consumer->unsubscribeAll();
 
         $stream->delete();
     }
