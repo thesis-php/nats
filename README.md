@@ -566,7 +566,7 @@ foreach ($consumer->consume() as $delivery) {
 
 ## NATS JetStream Batch Publishing
 
-The `AllowAtomicPublish` stream configuration option allows to atomically publish N messages into a stream.
+The `AllowAtomicPublish` stream configuration option allows to atomically publish N messages into a stream. See [ADR-50](https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-50.md) for details.
 
 #### Publish using `PublishBatch`
 
