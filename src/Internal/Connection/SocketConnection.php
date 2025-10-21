@@ -6,6 +6,7 @@ namespace Thesis\Nats\Internal\Connection;
 
 use Amp\DeferredFuture;
 use Amp\Socket\Socket;
+use Exception;
 use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
@@ -33,7 +34,8 @@ final class SocketConnection implements Connection
     public function __construct(
         private readonly Config $config,
         private readonly Socket $socket,
-    ) {
+    )
+    {
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
@@ -70,8 +72,11 @@ final class SocketConnection implements Connection
             version: $this->config->version,
             user: $this->config->user,
             pass: $this->config->password,
+            sig: $this->generateSignature($frame->nonce, $this->config->nkey),
+            jwt: $this->config->jwt,
             noResponders: $this->config->noResponders,
             headers: $this->info->allowHeaders,
+            nkey: $this->config->nkey,
         ));
 
         if (($interval = $this->config->ping) !== null) {
@@ -159,5 +164,19 @@ final class SocketConnection implements Connection
         });
 
         $this->running = true;
+    }
+
+    /**
+     * @param non-empty-string $nonce
+     * @param ?non-empty-string $nkey
+     * @throws Exception
+     */
+    private function generateSignature(string $nonce, ?string $nkey): ?string
+    {
+        if (\is_null($nkey)) {
+            return null;
+        }
+
+        return Signer::sign($nonce, $nkey);
     }
 }

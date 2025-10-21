@@ -24,6 +24,8 @@ final readonly class Config
      * @param float $connectionTimeout in seconds
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
+     * @param ?non-empty-string $jwt JWT token for authentication
+     * @param ?non-empty-string $nkey NKey public key for signature authentication
      * @param ?positive-int $ping in milliseconds
      * @param positive-int $maxPings the maximum number of pings that we have not received a response to, after which the connection to the server will be closed
      * @param ?non-empty-string $jetStreamDomain
@@ -37,6 +39,10 @@ final readonly class Config
         public ?string $user = null,
         #[\SensitiveParameter]
         public ?string $password = null,
+        #[\SensitiveParameter]
+        public ?string $jwt = null,
+        #[\SensitiveParameter]
+        public ?string $nkey = null,
         public bool $tcpNoDelay = true,
         public bool $noResponders = false,
         public ?int $ping = self::DEFAULT_PING_INTERVAL,
@@ -135,6 +141,16 @@ final readonly class Config
             $password = $components['pass'];
         }
 
+        $jwt = null;
+        if (isset($query['jwt']) && \is_string($query['jwt']) && $query['jwt'] !== '') {
+            $jwt = $query['jwt'];
+        }
+
+        $nkey = null;
+        if (isset($query['nkey']) && \is_string($query['nkey']) && $query['nkey'] !== '') {
+            $nkey = $query['nkey'];
+        }
+
         return new self(
             urls: $urls,
             verbose: $verbose,
@@ -142,6 +158,8 @@ final readonly class Config
             connectionTimeout: $connectionTimeout,
             user: $user,
             password: $password,
+            jwt: $jwt,
+            nkey: $nkey,
             tcpNoDelay: $tcpNoDelay,
             noResponders: $noResponders,
             ping: $ping,
@@ -155,6 +173,8 @@ final readonly class Config
      *     urls?: non-empty-list<non-empty-string>,
      *     user?: non-empty-string,
      *     password?: non-empty-string,
+     *     jwt?: non-empty-string,
+     *     nkey?: non-empty-string,
      *     verbose?: bool,
      *     pedantic?: bool,
      *     connection_timeout?: positive-int,
@@ -174,6 +194,8 @@ final readonly class Config
             connectionTimeout: $options['connection_timeout'] ?? self::DEFAULT_CONNECTION_TIMEOUT,
             user: $options['user'] ?? null,
             password: $options['password'] ?? null,
+            jwt: $options['jwt'] ?? null,
+            nkey: $options['nkey'] ?? null,
             tcpNoDelay: $options['tcp_nodelay'] ?? true,
             noResponders: $options['no_responders'] ?? false,
             ping: $options['ping'] ?? self::DEFAULT_PING_INTERVAL,
