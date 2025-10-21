@@ -10,6 +10,8 @@ use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Rpc;
+use Thesis\Nats\Json\Encoder;
+use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 use Thesis\Sync;
@@ -36,6 +38,7 @@ final class Client
     public function __construct(
         private readonly Config $config,
         private readonly Serializer $serializer = new ValinorSerializer(),
+        private readonly Encoder $encoder = new NativeEncoder(),
     ) {
         $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
         $this->subscriptionIdGenerator = new Id\SubscriptionIdGenerator();
@@ -70,6 +73,7 @@ final class Client
         return new JetStream(
             nats: $this,
             serializer: $this->serializer,
+            encoder: $this->encoder,
             domain: $domain ?: $this->config->jetStreamDomain,
         );
     }
@@ -164,6 +168,23 @@ final class Client
             ->await($cancellation)
             ->request($subject, $message)
             ->await($cancellation);
+    }
+
+    public function createService(Micro\Config $config): Micro\Service
+    {
+        $identity = new Micro\ServiceIdentity(
+            name: $config->name,
+            id: Id\generateUniqueId(),
+            version: $config->version,
+            metadata: $config->metadata,
+        );
+
+        return new Micro\Service(
+            nc: $this,
+            identity: $identity,
+            config: $config,
+            encoder: $this->encoder,
+        );
     }
 
     /**
