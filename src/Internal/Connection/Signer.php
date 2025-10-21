@@ -1,10 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Thesis\Nats\Internal\Connection;
 
 use Exception;
 
-class Signer
+/**
+ * @internal
+ */
+final class Signer
 {
     /**
      * @throws Exception

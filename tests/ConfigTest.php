@@ -150,8 +150,63 @@ final class ConfigTest extends TestCase
             ),
         ],
     )]
+    #[TestWith(
+        [
+            'tcp://127.0.0.1:4222?jwt=eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.&nkey=SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            new Config(
+                jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+                nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            ),
+        ],
+    )]
+    #[TestWith(
+        [
+            'tcp://admin:secret@127.0.0.1:4222?jwt=eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.&nkey=SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY&verbose=false',
+            new Config(
+                verbose: false,
+                user: 'admin',
+                password: 'secret',
+                jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+                nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            ),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
+    }
+
+    public function testFromArrayWithJwtAndNkey(): void
+    {
+        $config = Config::fromArray([
+            'jwt' => 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+            'nkey' => 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            'verbose' => false,
+            'pedantic' => true,
+        ]);
+
+        $expected = new Config(
+            verbose: false,
+            pedantic: true,
+            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+            nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+        );
+
+        self::assertEquals($expected, $config);
+    }
+
+    public function testFromArrayWithoutJwtAndNkey(): void
+    {
+        $config = Config::fromArray([
+            'verbose' => false,
+            'pedantic' => true,
+        ]);
+
+        $expected = new Config(
+            verbose: false,
+            pedantic: true,
+        );
+
+        self::assertEquals($expected, $config);
     }
 }
