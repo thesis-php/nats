@@ -20,6 +20,7 @@
     "require": {
         "php": "^8.3",
         "ext-filter": "*",
+        "ext-sodium": "*",
         "amphp/amp": "^3.1",
         "amphp/parser": "^1.1",
         "amphp/pipeline": "^1.2",
