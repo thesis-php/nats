@@ -29,7 +29,7 @@ final class SocketConnectionJwtTest extends TestCase
             pass: $config->password,
             sig: null,
             jwt: $config->jwt,
-            nkey: null, // No NKey for JWT-only test
+            nkey: null,
         );
 
         $encoded = $connect->encode();
@@ -46,13 +46,11 @@ final class SocketConnectionJwtTest extends TestCase
         }
 
         $config = new Config(
-            nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
         );
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $privateKey);
+        $signature = Signer::sign($nonce, $config->nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -83,13 +81,11 @@ final class SocketConnectionJwtTest extends TestCase
 
         $config = new Config(
             jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
-            nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
         );
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $privateKey);
+        $signature = Signer::sign($nonce, $config->nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -147,19 +143,18 @@ final class SocketConnectionJwtTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
+        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nonce = 'integration-test-nonce';
-        $signature = Signer::sign($nonce, $privateKey);
+        $signature = Signer::sign($nonce, $nkey);
         
         self::assertNotNull($signature);
         self::assertIsString($signature);
         self::assertEquals(88, \strlen($signature));
 
-        $signature2 = Signer::sign($nonce, $privateKey);
+        $signature2 = Signer::sign($nonce, $nkey);
         self::assertEquals($signature, $signature2);
         
-        $signature3 = Signer::sign('different-nonce', $privateKey);
+        $signature3 = Signer::sign('different-nonce', $nkey);
         self::assertNotEquals($signature, $signature3);
     }
 
@@ -200,12 +195,10 @@ final class SocketConnectionJwtTest extends TestCase
             user: 'olduser',
             password: 'oldpass',
             jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
-            nkey: 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
         );
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
-        $signature = Signer::sign('test-nonce', $privateKey);
+        $signature = Signer::sign('test-nonce', $config->nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -231,9 +224,3 @@ final class SocketConnectionJwtTest extends TestCase
         self::assertStringContainsString('"pass":"oldpass"', $encoded);
     }
 }
-
-
-
-
-
-

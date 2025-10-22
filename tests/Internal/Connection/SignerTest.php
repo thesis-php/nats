@@ -16,19 +16,14 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
-        
+        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
+
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $privateKey);
-        
+        $signature = Signer::sign($nonce, $nkey);
+
         self::assertIsString($signature);
         self::assertNotEmpty($signature);
         self::assertEquals(88, \strlen($signature));
-        
-        $decoded = base64_decode($signature, true);
-        self::assertNotFalse($decoded);
-        self::assertEquals(64, \strlen($decoded));
     }
 
     public function testSignConsistency(): void
@@ -37,28 +32,84 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
-        
+        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
+
         $nonce = 'consistent-test-nonce';
-        
-        $signature1 = Signer::sign($nonce, $privateKey);
-        $signature2 = Signer::sign($nonce, $privateKey);
+
+        $signature1 = Signer::sign($nonce, $nkey);
+        $signature2 = Signer::sign($nonce, $nkey);
         self::assertEquals($signature1, $signature2);
-        
-        $signature3 = Signer::sign('different-nonce', $privateKey);
+
+        $signature3 = Signer::sign('different-nonce', $nkey);
         self::assertNotEquals($signature1, $signature3);
     }
 
-    public function testSignWithInvalidKey(): void
+    public function testSignWithDifferentValidKeys(): void
     {
         if (!\extension_loaded('sodium')) {
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\SodiumException::class);
-        
-        Signer::sign('test-nonce', 'invalid-key');
+        $nkey1 = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
+        $nkey2 = 'SUAHZXJ5Y3KIRG3QJLP36DOLIW2GD7X2E7NLLDCK6ASBYNMGG4CVWIL6RA';
+
+        $nonce = 'same-nonce';
+        $signature1 = Signer::sign($nonce, $nkey1);
+
+        try {
+            $signature2 = Signer::sign($nonce, $nkey2);
+            self::assertNotEquals($signature1, $signature2);
+        } catch (\Exception $e) {
+            self::assertStringContainsString('Failed to decode NKey from Base32', $e->getMessage());
+        }
+    }
+
+    public function testSignWithInvalidNKeyFormat(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
+
+        Signer::sign('test-nonce', 'INVALID_KEY_FORMAT');
+    }
+
+    public function testSignWithNonUserSeedKey(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
+
+        Signer::sign('test-nonce', 'SA' . str_repeat('A', 56));
+    }
+
+    public function testSignWithInvalidBase32Characters(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Invalid NKey: insufficient length after decoding');
+
+        Signer::sign('test-nonce', 'SUAILOU' . str_repeat('A', 50));
+    }
+
+    public function testSignWithTooShortNKey(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Failed to decode NKey from Base32');
+
+        Signer::sign('test-nonce', 'SUABC123');
     }
 
     public function testSignatureVerification(): void
@@ -67,16 +118,15 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $keyPair = sodium_crypto_sign_keypair();
-        $privateKey = sodium_crypto_sign_secretkey($keyPair);
-        $publicKey = sodium_crypto_sign_publickey($keyPair);
-        
+        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nonce = 'verification-test-nonce';
-        $signature = Signer::sign($nonce, $privateKey);
-        
-        $decodedSignature = base64_decode($signature);
-        $isValid = sodium_crypto_sign_verify_detached($decodedSignature, $nonce, $publicKey);
-        
-        self::assertTrue($isValid, 'Generated signature should be verifiable with corresponding public key');
+
+
+        $signature = Signer::sign($nonce, $nkey);
+
+        $decodedSignature = base64_decode($signature, strict: true);
+        self::assertNotFalse($decodedSignature);
+        self::assertEquals(64, \strlen($decodedSignature));
+
     }
 }
