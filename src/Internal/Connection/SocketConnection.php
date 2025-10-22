@@ -167,8 +167,6 @@ final class SocketConnection implements Connection
     }
 
     /**
-     * @param ?non-empty-string $nonce
-     * @param ?non-empty-string $nkey
      * @throws Exception
      */
     private function generateSignature(?string $nonce, ?string $nkey): ?string

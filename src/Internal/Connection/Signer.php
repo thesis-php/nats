@@ -25,6 +25,14 @@ final class Signer
             throw new \Exception('ext-sodium extension is required for NKey authentication');
         }
 
+        if ($nonce === '') {
+            throw new \Exception('Nonce cannot be empty');
+        }
+
+        if ($nkey === '') {
+            throw new \Exception('NKey cannot be empty');
+        }
+
         $binaryKey = self::decodeNKey($nkey);
 
         $signature = sodium_crypto_sign_detached($nonce, $binaryKey);
@@ -55,8 +63,16 @@ final class Signer
 
         $seed = substr($decoded, 2, 32);
         
+        if (strlen($seed) !== 32) {
+            throw new \Exception('Invalid seed: must be exactly 32 bytes');
+        }
+
         $keypair = sodium_crypto_sign_seed_keypair($seed);
         $privateKey = sodium_crypto_sign_secretkey($keypair);
+
+        if (strlen($privateKey) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
+            throw new \Exception('Invalid private key length');
+        }
 
         return $privateKey;
     }

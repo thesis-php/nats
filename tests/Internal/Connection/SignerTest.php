@@ -129,4 +129,29 @@ final class SignerTest extends TestCase
         self::assertEquals(64, \strlen($decodedSignature));
 
     }
+
+    public function testSignWithEmptyNonce(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Nonce cannot be empty');
+
+        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
+        Signer::sign('', $nkey);
+    }
+
+    public function testSignWithEmptyNKey(): void
+    {
+        if (!\extension_loaded('sodium')) {
+            self::markTestSkipped('Sodium extension is not available.');
+        }
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('NKey cannot be empty');
+
+        Signer::sign('test-nonce', '');
+    }
 }
