@@ -15,11 +15,11 @@ final class JwtAuthTest extends TestCase
     public function testConfigurationWithJwtOnly(): void
     {
         $jwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
-        
+
         $config = new Config(
             jwt: $jwt,
         );
-        
+
         self::assertEquals($jwt, $config->jwt);
         self::assertNull($config->nkey);
         self::assertNull($config->user);
@@ -29,11 +29,11 @@ final class JwtAuthTest extends TestCase
     public function testConfigurationWithNkeyOnly(): void
     {
         $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
-        
+
         $config = new Config(
             nkey: $nkey,
         );
-        
+
         self::assertEquals($nkey, $config->nkey);
         self::assertNull($config->jwt);
         self::assertNull($config->user);
@@ -44,12 +44,12 @@ final class JwtAuthTest extends TestCase
     {
         $jwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
         $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
-        
+
         $config = new Config(
             jwt: $jwt,
             nkey: $nkey,
         );
-        
+
         self::assertEquals($jwt, $config->jwt);
         self::assertEquals($nkey, $config->nkey);
         self::assertNull($config->user);
@@ -62,7 +62,7 @@ final class JwtAuthTest extends TestCase
             user: 'admin',
             password: 'secret',
         );
-        
+
         self::assertEquals('admin', $config->user);
         self::assertEquals('secret', $config->password);
         self::assertNull($config->jwt);
@@ -73,14 +73,14 @@ final class JwtAuthTest extends TestCase
     {
         $jwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
         $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
-        
+
         $config = new Config(
             user: 'admin',
             password: 'secret',
             jwt: $jwt,
             nkey: $nkey,
         );
-        
+
         self::assertEquals('admin', $config->user);
         self::assertEquals('secret', $config->password);
         self::assertEquals($jwt, $config->jwt);
@@ -90,9 +90,9 @@ final class JwtAuthTest extends TestCase
     public function testFromUriWithJwtPreservesOtherParameters(): void
     {
         $uri = 'tcp://admin:secret@127.0.0.1:4222?jwt=eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.&verbose=false&pedantic=true';
-        
+
         $config = Config::fromURI($uri);
-        
+
         self::assertEquals('admin', $config->user);
         self::assertEquals('secret', $config->password);
         self::assertEquals('eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.', $config->jwt);

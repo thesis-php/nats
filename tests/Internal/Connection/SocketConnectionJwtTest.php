@@ -33,7 +33,7 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
         self::assertStringNotContainsString('"nkey":', $encoded);
         self::assertStringNotContainsString('"sig":', $encoded);
@@ -66,10 +66,10 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
         self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\\/', '/', $encoded));
+        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
         self::assertStringNotContainsString('"jwt":', $encoded);
     }
 
@@ -101,11 +101,11 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
         self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
         self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\\/', '/', $encoded));
+        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
     }
 
     public function testConnectProtocolCreationWithoutJwtAndNkey(): void
@@ -129,7 +129,7 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"user":"admin"', $encoded);
         self::assertStringContainsString('"pass":"secret"', $encoded);
         self::assertStringNotContainsString('"jwt":', $encoded);
@@ -146,14 +146,14 @@ final class SocketConnectionJwtTest extends TestCase
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nonce = 'integration-test-nonce';
         $signature = Signer::sign($nonce, $nkey);
-        
+
         self::assertNotNull($signature);
         self::assertIsString($signature);
         self::assertEquals(88, \strlen($signature));
 
         $signature2 = Signer::sign($nonce, $nkey);
         self::assertEquals($signature, $signature2);
-        
+
         $signature3 = Signer::sign('different-nonce', $nkey);
         self::assertNotEquals($signature, $signature3);
     }
@@ -174,11 +174,10 @@ final class SocketConnectionJwtTest extends TestCase
             authToken: null,
             user: $config->user,
             pass: $config->password,
-
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"user":"testuser"', $encoded);
         self::assertStringContainsString('"pass":"testpass"', $encoded);
         self::assertStringNotContainsString('"jwt":', $encoded);
@@ -214,12 +213,12 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $encoded = $connect->encode();
-        
+
         self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
         self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
         self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\\/', '/', $encoded));
-        
+        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
+
         self::assertStringContainsString('"user":"olduser"', $encoded);
         self::assertStringContainsString('"pass":"oldpass"', $encoded);
     }
