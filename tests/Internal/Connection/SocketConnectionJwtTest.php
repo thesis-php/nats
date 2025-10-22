@@ -50,7 +50,9 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $config->nkey);
+        $nkey = $config->nkey;
+        self::assertNotNull($nkey);
+        $signature = Signer::sign($nonce, $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -85,7 +87,9 @@ final class SocketConnectionJwtTest extends TestCase
         );
 
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $config->nkey);
+        $nkey = $config->nkey;
+        self::assertNotNull($nkey);
+        $signature = Signer::sign($nonce, $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -147,8 +151,6 @@ final class SocketConnectionJwtTest extends TestCase
         $nonce = 'integration-test-nonce';
         $signature = Signer::sign($nonce, $nkey);
 
-        self::assertNotNull($signature);
-        self::assertIsString($signature);
         self::assertEquals(88, \strlen($signature));
 
         $signature2 = Signer::sign($nonce, $nkey);
@@ -197,7 +199,9 @@ final class SocketConnectionJwtTest extends TestCase
             nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
         );
 
-        $signature = Signer::sign('test-nonce', $config->nkey);
+        $nkey = $config->nkey;
+        self::assertNotNull($nkey);
+        $signature = Signer::sign('test-nonce', $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,

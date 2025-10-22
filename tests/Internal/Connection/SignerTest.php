@@ -21,7 +21,6 @@ final class SignerTest extends TestCase
         $nonce = 'test-nonce';
         $signature = Signer::sign($nonce, $nkey);
 
-        self::assertIsString($signature);
         self::assertNotEmpty($signature);
         self::assertEquals(88, \strlen($signature));
     }
