@@ -19,6 +19,7 @@ final class JwtNkeyIntegrationTest extends NatsTestCase
 
         $info = $js->accountInfo();
 
-        self::assertNotEmpty($info);
+        self::assertSame(-1, $info->limits->maxMemory);
+        self::assertSame(-1, $info->limits->maxStorage);
     }
 }
