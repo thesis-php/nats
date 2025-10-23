@@ -12,13 +12,13 @@ final readonly class EndpointInfo
     /**
      * @param non-empty-string $name
      * @param non-empty-string $subject
-     * @param ?non-empty-string $queueGroup
+     * @param non-empty-string $queueGroup
      * @param array<non-empty-string, string> $metadata
      */
     public function __construct(
         public string $name,
         public string $subject,
-        public ?string $queueGroup = null,
+        public string $queueGroup,
         public array $metadata = [],
     ) {}
 }

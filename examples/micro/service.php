@@ -15,9 +15,13 @@ $svc = $nc->createService(
     new Micro\Config('EchoService', '1.0.0'),
 );
 
-$svc->addEndpoint('scv.echo', function (Micro\Request $request): void {
+$group = $svc->addGroup('v1');
+
+$group->addEndpoint('scv.echo', function (Micro\Request $request): void {
     $request->respondJson($request->data);
 });
 
-dump($nc->request('scv.echo', new Nats\Message('Hello!')));
-dump($nc->request('scv.echo', new Nats\Message('Hello!')));
+dump($nc->request('v1.scv.echo', new Nats\Message('Hello!')));
+dump($nc->request('v1.scv.echo', new Nats\Message('Hello!')));
+
+dump($nc->request('$SRV.STATS.EchoService'));
