@@ -11,17 +11,12 @@ $nc = new Nats\Client(
     Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'),
 );
 
-$svc = $nc->createService(
-    new Micro\Config('EchoService', '1.0.0'),
-);
+$nc
+    ->createService(new Micro\ServiceConfig('EchoService', '1.0.0'))
+        ->addGroup(new Micro\GroupConfig('srv.api'))
+            ->addGroup(new Micro\GroupConfig('v1'))
+                ->addEndpoint(new Micro\EndpointConfig('echo'), static function (Micro\Request $request): void {
+                    $request->respond(new Micro\Response($request->data));
+                });
 
-$group = $svc->addGroup('v1');
-
-$group->addEndpoint('scv.echo', function (Micro\Request $request): void {
-    $request->respondJson($request->data);
-});
-
-dump($nc->request('v1.scv.echo', new Nats\Message('Hello!')));
-dump($nc->request('v1.scv.echo', new Nats\Message('Hello!')));
-
-dump($nc->request('$SRV.STATS.EchoService'));
+dump($nc->request('srv.api.v1.echo', new Nats\Message('ping'))->message->payload);
