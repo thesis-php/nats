@@ -27,7 +27,7 @@ final class Monitor
     }
 
     /**
-     * @param \Closure(float): void $handler
+     * @param \Closure(): void $handler
      */
     public function monitor(\Closure $handler): void
     {
@@ -38,7 +38,7 @@ final class Monitor
             $time = now() - $this->time;
 
             if ($time > $interval) {
-                $handler($time);
+                $handler();
             }
         });
     }
