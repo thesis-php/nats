@@ -12,8 +12,10 @@ use Thesis\Time\TimeSpan;
 final readonly class ConsumeConfig implements \JsonSerializable
 {
     private const int DEFAULT_PULL_EXPIRES_SECS = 30;
+    private const int DEFAULT_HEARTBEAT_SECS = 5;
 
     public TimeSpan $expires;
+    public TimeSpan $heartbeat;
 
     /**
      * @param positive-int $batch
@@ -26,7 +28,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
         public int $batch = 100,
         public ?int $maxBytes = null,
         public ?bool $noWait = null,
-        public ?TimeSpan $heartbeat = null,
+        ?TimeSpan $heartbeat = null,
         public ?int $minPending = null,
         public ?int $minAckPending = null,
         public ?string $pinId = null,
@@ -34,6 +36,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
         public bool $completeOnNoMessages = false,
     ) {
         $this->expires = $expires ?? TimeSpan::fromSeconds(self::DEFAULT_PULL_EXPIRES_SECS);
+        $this->heartbeat = $heartbeat ?? TimeSpan::fromSeconds(self::DEFAULT_HEARTBEAT_SECS);
     }
 
     /**
