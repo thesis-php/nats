@@ -7,7 +7,7 @@ namespace Thesis\Nats\Internal\Nkey;
 /**
  * @internal
  */
-final class Signer
+final readonly class Signer
 {
     /**
      * NATS Base32 alphabet (RFC 4648 Base32).
