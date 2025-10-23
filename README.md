@@ -25,6 +25,10 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 - [NATS JetStream Batch Publishing](#nats-jetstream-batch-publishing)
   - [Publish using `PublishBatch`](#publish-using-publishbatch)
   - [Publish using `JetStream`](#publish-batch-using-jetstream)
+- [Nats Service Api](#nats-service-api)
+  - [Micro Service](#micro-service) 
+  - [Endpoints](#service-endpoints)
+  - [Groups](#groups)
 
 ## Installation
 
@@ -626,6 +630,113 @@ $jetstream->publishBatch('batch.orders', [
     new Nats\Message('Order#2'),
     new Nats\Message('Order#3'),
 ]);
+```
+
+## Nats Service Api
+
+This is implementation of [ADR-32](https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-32.md).
+The core of the `Micro` component is the `Service`. A `Service` aggregates endpoints for handling application logic. Services are named and versioned. You create a Service using the `Client::createService()`, passing in the `Service` configuration.
+
+#### Micro Service
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
+```
+
+#### Service endpoints
+
+After a service is created, endpoints can be added. By default, an endpoint is available via its name.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
+
+$srv
+    ->addEndpoint(new Micro\EndpointConfig('srv.echo'), static function (Micro\Request $request): void {
+        $request->respond(new Micro\Response($request->data));
+    });
+
+dump($nc->request('srv.echo', new Nats\Message('ping'))->message->payload);
+```
+
+If the subject for the endpoint is more complex (e.g., contains a `*` or `>`), the subject can be specified separately from the name.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
+
+$srv
+    ->addEndpoint(new Micro\EndpointConfig('srv.echo', subject: 'srv.echo.*'), static function (Micro\Request $request): void {
+        $request->respond(new Micro\Response($request->subject));
+    });
+
+dump($nc->request('srv.echo.x', new Nats\Message('ping'))->message->payload);
+```
+
+#### Groups
+
+Endpoints can also be aggregated using groups. A group represents a common subject prefix used by all endpoints associated with it.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'),
+);
+
+$nc
+    ->createService(new Micro\ServiceConfig('EchoService', '1.0.0'))
+        ->addGroup(new Micro\GroupConfig('srv.api'))
+            ->addGroup(new Micro\GroupConfig('v1'))
+                ->addEndpoint(new Micro\EndpointConfig('echo'), static function (Micro\Request $request): void {
+                    $request->respond(new Micro\Response($request->data));
+                });
+
+dump($nc->request('srv.api.v1.echo', new Nats\Message('ping'))->message->payload);
 ```
 
 ## License
