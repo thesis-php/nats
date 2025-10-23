@@ -27,8 +27,8 @@ abstract class NatsTestCase extends TestCase
             self::markTestSkipped('THESIS_NATS_DSN must be set.');
         }
 
-        $dsn = getenv('THESIS_NATS_JWT_DSN');
-        if (!\is_string($dsn) || $dsn === '') {
+        $jwtDsn = getenv('THESIS_NATS_JWT_DSN');
+        if (!\is_string($jwtDsn) || $jwtDsn === '') {
             self::markTestSkipped('THESIS_NATS_JWT_DSN must be set.');
         }
 
