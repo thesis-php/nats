@@ -15,6 +15,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
     private const int DEFAULT_HEARTBEAT_SECS = 5;
 
     public TimeSpan $expires;
+
     public TimeSpan $heartbeat;
 
     /**
@@ -50,7 +51,7 @@ final readonly class ConsumeConfig implements \JsonSerializable
                 'batch' => $this->batch,
                 'max_bytes' => $this->maxBytes,
                 'no_wait' => $this->noWait,
-                'idle_heartbeat' => $this->heartbeat?->toNanoseconds(),
+                'idle_heartbeat' => $this->heartbeat->toNanoseconds(),
                 'min_pending' => $this->minPending,
                 'min_ack_pending' => $this->minAckPending,
                 'pin_id' => $this->pinId,
