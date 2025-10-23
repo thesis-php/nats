@@ -40,7 +40,7 @@ final class SignerTest extends TestCase
         self::assertEquals($signature1, $signature2);
 
         $signature3 = Signer::sign('different-nonce', $nkey);
-        self::assertNotEquals($signature1, $signature3);
+        self::assertNotSame($signature1, $signature3);
     }
 
     public function testSignWithDifferentValidKeys(): void
@@ -55,12 +55,8 @@ final class SignerTest extends TestCase
         $nonce = 'same-nonce';
         $signature1 = Signer::sign($nonce, $nkey1);
 
-        try {
-            $signature2 = Signer::sign($nonce, $nkey2);
-            self::assertNotEquals($signature1, $signature2);
-        } catch (\Exception $e) {
-            self::assertStringContainsString('Failed to decode NKey from Base32', $e->getMessage());
-        }
+        $signature2 = Signer::sign($nonce, $nkey2);
+        self::assertNotSame($signature1, $signature2);
     }
 
     public function testSignWithInvalidNKeyFormat(): void
@@ -69,8 +65,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
 
         Signer::sign('test-nonce', 'INVALID_KEY_FORMAT');
     }
@@ -81,8 +77,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
 
         Signer::sign('test-nonce', 'SA' . str_repeat('A', 56));
     }
@@ -93,8 +89,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid NKey: insufficient length after decoding');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('Invalid NKey: insufficient length after decoding');
 
         Signer::sign('test-nonce', 'SUAILOU' . str_repeat('A', 50));
     }
@@ -105,8 +101,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Failed to decode NKey from Base32');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('Failed to decode NKey from Base32');
 
         Signer::sign('test-nonce', 'SUABC123');
     }
@@ -135,8 +131,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Nonce cannot be empty');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('Nonce cannot be empty');
 
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         Signer::sign('', $nkey);
@@ -148,8 +144,8 @@ final class SignerTest extends TestCase
             self::markTestSkipped('Sodium extension is not available.');
         }
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('NKey cannot be empty');
+        self::expectException(\Exception::class);
+        self::expectExceptionMessage('NKey cannot be empty');
 
         Signer::sign('test-nonce', '');
     }

@@ -81,7 +81,7 @@ final class Signer
      */
     private static function base32Decode(string $input): string|false
     {
-        if (empty($input)) {
+        if ($input === '') {
             return false;
         }
 
