@@ -42,7 +42,7 @@ jobs:
             -p 4224:4222 \
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
             nats \
-            -c /etc/server.conf --name nats-3 -p 4222 -m 8222
+            -c /etc/server.conf --name nats-2 -p 4222 -m 8222
       - name: Start nats-jwt
         run: |
           docker run -d \
