@@ -43,6 +43,16 @@ jobs:
             -v ${{ github.workspace }}/docker/nats/server.conf:/etc/server.conf \
             nats \
             -c /etc/server.conf --name nats-2 -p 4222 -m 8222
+      - name: Start nats-jwt
+        run: |
+          docker run -d \
+            --name nats-jwt \
+            --network nats-net \
+            -p 4225:4222 \
+            -p 8225:8222 \
+            -v ${{ github.workspace }}/docker/nats/jwt-server.conf:/etc/jwt-server.conf \
+            nats:latest \
+            -c /etc/jwt-server.conf --name nats-jwt -p 4222 -m 8222
       - name: Wait for JetStream to be ready
         run: |
           for i in {1..15}; do

@@ -56,6 +56,42 @@ final class FrameTest extends TestCase
         'CONNECT {"verbose":false,"pedantic":true,"tls_required":false,"name":"thesis\/nats","lang":"php","version":"0.1.x-dev","headers":true}' . "\r\n",
     ])]
     #[TestWith([
+        new Connect(
+            verbose: false,
+            pedantic: true,
+            tlsRequired: false,
+            name: 'thesis/nats',
+            version: '0.1.x-dev',
+            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+        ),
+        'CONNECT {"verbose":false,"pedantic":true,"tls_required":false,"name":"thesis\/nats","lang":"php","version":"0.1.x-dev","jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.","headers":true}' . "\r\n",
+    ])]
+    #[TestWith([
+        new Connect(
+            verbose: false,
+            pedantic: true,
+            tlsRequired: false,
+            name: 'thesis/nats',
+            version: '0.1.x-dev',
+            sig: 'dGVzdC1zaWduYXR1cmUtZGF0YQ==',
+            nkey: 'UAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+        ),
+        'CONNECT {"verbose":false,"pedantic":true,"tls_required":false,"name":"thesis\/nats","lang":"php","version":"0.1.x-dev","sig":"dGVzdC1zaWduYXR1cmUtZGF0YQ==","headers":true,"nkey":"UAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY"}' . "\r\n",
+    ])]
+    #[TestWith([
+        new Connect(
+            verbose: false,
+            pedantic: true,
+            tlsRequired: false,
+            name: 'thesis/nats',
+            version: '0.1.x-dev',
+            sig: 'dGVzdC1zaWduYXR1cmUtZGF0YQ==',
+            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+            nkey: 'UAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY',
+        ),
+        'CONNECT {"verbose":false,"pedantic":true,"tls_required":false,"name":"thesis\/nats","lang":"php","version":"0.1.x-dev","sig":"dGVzdC1zaWduYXR1cmUtZGF0YQ==","jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.","headers":true,"nkey":"UAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY"}' . "\r\n",
+    ])]
+    #[TestWith([
         new Sub('events.*', '1'),
         "SUB events.* 1\r\n",
     ])]

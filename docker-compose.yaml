@@ -30,3 +30,11 @@ services:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
       - "4224:4222"
+
+  nats-jwt:
+    image: nats
+    command: -c /etc/jwt-server.conf --name nats-3 -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf
+    ports:
+      - "4225:4222"

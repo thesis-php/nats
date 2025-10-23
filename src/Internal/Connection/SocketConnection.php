@@ -10,6 +10,7 @@ use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
+use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol;
 
 /**
@@ -30,6 +31,8 @@ final class SocketConnection implements Connection
 
     private bool $running = false;
 
+    private readonly Signer $signer;
+
     public function __construct(
         private readonly Config $config,
         private readonly Socket $socket,
@@ -37,6 +40,7 @@ final class SocketConnection implements Connection
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
+        $this->signer = new Signer();
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
@@ -70,8 +74,11 @@ final class SocketConnection implements Connection
             version: $this->config->version,
             user: $this->config->user,
             pass: $this->config->password,
+            sig: $this->generateSignature($frame->nonce, $this->config->nkey),
+            jwt: $this->config->jwt,
             noResponders: $this->config->noResponders,
             headers: $this->info->allowHeaders,
+            nkey: $this->config->nkey,
         ));
 
         if (($interval = $this->config->ping) !== null) {
@@ -159,5 +166,21 @@ final class SocketConnection implements Connection
         });
 
         $this->running = true;
+    }
+
+    /**
+     * @throws \Exception
+     */
+    private function generateSignature(?string $nonce, ?string $nkey): ?string
+    {
+        if ($nonce === null) {
+            return null;
+        }
+
+        if ($nkey === null) {
+            return null;
+        }
+
+        return $this->signer->sign($nonce, $nkey);
     }
 }

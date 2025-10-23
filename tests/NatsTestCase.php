@@ -11,7 +11,12 @@ abstract class NatsTestCase extends TestCase
     /** @var non-empty-string */
     private string $dsn;
 
+    /** @var non-empty-string */
+    private string $jwtDsn;
+
     private ?Client $client = null;
+
+    private ?Client $jwtClient = null;
 
     protected function setUp(): void
     {
@@ -22,7 +27,14 @@ abstract class NatsTestCase extends TestCase
             self::markTestSkipped('THESIS_NATS_DSN must be set.');
         }
 
+        $jwtDsn = getenv('THESIS_NATS_JWT_DSN');
+        if (!\is_string($jwtDsn) || $jwtDsn === '') {
+            self::markTestSkipped('THESIS_NATS_JWT_DSN must be set.');
+        }
+
         $this->dsn = $dsn;
+
+        $this->jwtDsn = $jwtDsn;
     }
 
     protected function tearDown(): void
@@ -30,10 +42,16 @@ abstract class NatsTestCase extends TestCase
         parent::tearDown();
 
         $this->client?->disconnect();
+        $this->jwtClient?->disconnect();
     }
 
     final protected function client(): Client
     {
         return $this->client = new Client(Config::fromURI($this->dsn));
+    }
+
+    final protected function clientWithJwtAuth(): Client
+    {
+        return $this->jwtClient = new Client(Config::fromURI($this->jwtDsn));
     }
 }
