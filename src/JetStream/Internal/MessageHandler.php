@@ -51,7 +51,7 @@ final readonly class MessageHandler
             replyTo: $replyTo,
         );
 
-        if ($config->heartbeat->toSeconds() > 0) {
+        if ($config->heartbeat?->toSeconds() > 0) {
             $this->heartbeats->monitor($this->pulls->next(...));
         }
     }
