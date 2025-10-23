@@ -53,6 +53,11 @@ final readonly class PullSupervisor
         });
     }
 
+    public function next(): void
+    {
+        $this->barrier->dispatch();
+    }
+
     public function request(): void
     {
         $this->barrier->arrive();

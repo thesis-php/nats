@@ -7,7 +7,6 @@ namespace Thesis\Nats\JetStream\Internal;
 use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
-use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
@@ -54,7 +53,7 @@ final readonly class MessageHandler
 
         if ($config->heartbeat?->toSeconds() > 0) {
             $this->heartbeats->monitor(function (): void {
-                $this->queue->error(new NoServerResponse());
+                $this->pulls->next();
             });
         }
     }
@@ -84,6 +83,7 @@ final readonly class MessageHandler
                 ),
             );
 
+            $this->heartbeats->reset();
             $this->pulls->request();
         }
     }
