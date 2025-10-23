@@ -52,9 +52,7 @@ final readonly class MessageHandler
         );
 
         if ($config->heartbeat?->toSeconds() > 0) {
-            $this->heartbeats->monitor(function (): void {
-                $this->pulls->next();
-            });
+            $this->heartbeats->monitor($this->pulls->next(...));
         }
     }
 
