@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Config;
+use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol\Connect;
 
 #[CoversClass(Connect::class)]

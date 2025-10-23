@@ -10,6 +10,7 @@ use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
+use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol;
 
 /**

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\Internal\Connection;
+namespace Thesis\Nats\Internal\Nkey;
 
 /**
  * @internal

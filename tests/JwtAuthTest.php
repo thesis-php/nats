@@ -6,7 +6,7 @@ namespace Thesis\Nats;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Thesis\Nats\Internal\Connection\Signer;
+use Thesis\Nats\Internal\Nkey\Signer;
 
 #[CoversClass(Config::class)]
 #[CoversClass(Signer::class)]
