@@ -47,7 +47,7 @@ final class Headers implements
         $headers->values[$headerKey] = array_values([
             ...$this->values[$headerKey] ?? [],
             ...array_map(
-                static fn(mixed $value): string => $key->encode($value),
+                $key->encode(...),
                 $values,
             ),
         ]);
@@ -91,7 +91,7 @@ final class Headers implements
     public function values(HeaderKey $key): array
     {
         return array_map(
-            static fn(string $value): mixed => $key->decode($value),
+            $key->decode(...),
             $this->values[self::keyToString($key)] ?? [],
         );
     }
