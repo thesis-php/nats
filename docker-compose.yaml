@@ -7,8 +7,8 @@ services:
     command: sh -c 'trap "exit 0" TERM; tail -f /dev/null & wait'
 
   nats-1:
-    image: nats:latest
-    command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222 -js
+    image: nats
+    command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
@@ -16,8 +16,8 @@ services:
       - "8222:8222"
 
   nats-2:
-    image: nats:latest
-    command: -c /etc/server.conf --name nats-2 -p 4222 -m 8222 -js
+    image: nats
+    command: -c /etc/server.conf --name nats-2 -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
     ports:
@@ -32,8 +32,8 @@ services:
       - "4224:4222"
 
   nats-jwt:
-    image: nats:latest
-    command: -c /etc/jwt-server.conf --name nats-3 -p 4222 -m 8222 -js
+    image: nats
+    command: -c /etc/jwt-server.conf --name nats-3 -p 4222 -m 8222
     volumes:
       - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf
     ports:
