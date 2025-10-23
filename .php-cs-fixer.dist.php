@@ -20,6 +20,8 @@ $config = (new Config())
     ->setParallelConfig(ParallelConfigFactory::detect())
     ->setCacheFile(__DIR__ . '/var/' . basename(__FILE__) . '.cache');
 
-(new PhpCsFixerCodingStandard())->applyTo($config);
+(new PhpCsFixerCodingStandard())->applyTo($config, [
+    'numeric_literal_separator' => false,
+]);
 
 return $config;

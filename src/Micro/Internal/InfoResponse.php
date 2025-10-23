@@ -5,21 +5,15 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro\Internal;
 
 use Thesis\Nats\Micro\EndpointInfo;
-use Thesis\Nats\Micro\ServiceIdentity;
+use Thesis\Nats\Micro\Info;
 
 /**
  * @internal
  */
-final readonly class Info implements \JsonSerializable
+final readonly class InfoResponse implements \JsonSerializable
 {
-    /**
-     * @param non-empty-string $description
-     * @param list<EndpointInfo> $endpoints
-     */
     public function __construct(
-        public ServiceIdentity $identity,
-        public string $description,
-        public array $endpoints = [],
+        private Info $info,
     ) {}
 
     /**
@@ -29,18 +23,18 @@ final readonly class Info implements \JsonSerializable
     {
         return [
             'type' => 'io.nats.micro.v1.info_response',
-            'name' => $this->identity->name,
-            'id' => $this->identity->id,
-            'version' => $this->identity->version,
-            'metadata' => $this->identity->metadata,
+            'name' => $this->info->identity->name,
+            'id' => $this->info->identity->id,
+            'version' => $this->info->identity->version,
+            'metadata' => $this->info->identity->metadata,
             'endpoints' => array_map(
-                static fn (EndpointInfo $endpointInfo): array => [
+                static fn(EndpointInfo $endpointInfo): array => [
                     'name' => $endpointInfo->name,
                     'subject' => $endpointInfo->subject,
                     'queue_group' => $endpointInfo->queueGroup,
                     'metadata' => $endpointInfo->metadata,
                 ],
-                $this->endpoints,
+                $this->info->endpoints,
             ),
         ];
     }

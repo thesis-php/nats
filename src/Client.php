@@ -170,7 +170,7 @@ final class Client
             ->await($cancellation);
     }
 
-    public function createService(Micro\Config $config): Micro\Service
+    public function createService(Micro\ServiceConfig $config): Micro\Service
     {
         $identity = new Micro\ServiceIdentity(
             name: $config->name,

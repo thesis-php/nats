@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro;
 
 /**
- * @internal
+ * @api
  */
 final class EndpointStats
 {

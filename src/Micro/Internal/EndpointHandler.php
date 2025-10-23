@@ -9,7 +9,7 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Micro\EndpointInfo;
 use Thesis\Nats\Micro\EndpointStats;
 use Thesis\Nats\Micro\Request;
-use Amp;
+use Thesis\Time\TimeSpan;
 
 /**
  * @internal
@@ -21,7 +21,9 @@ final class EndpointHandler
 
     /** @var non-negative-int */
     private int $errors = 0;
+
     private float $processingTime = 0;
+
     private ?\Throwable $lastError = null;
 
     /**
@@ -31,19 +33,21 @@ final class EndpointHandler
         public readonly EndpointInfo $info,
         private readonly mixed $handler,
         private readonly Encoder $encoder,
+        private readonly \DateTimeZone $tz = new \DateTimeZone('UTC'),
     ) {}
 
     public function handle(Delivery $delivery): void
     {
-        $start = Amp\now();
+        $start = new \DateTimeImmutable(timezone: $this->tz);
 
         try {
             ($this->handler)(new Request($delivery, $this->encoder));
-            ++$this->requests;
-            $this->processingTime += Amp\now() - $start;
         } catch (\Throwable $e) {
             ++$this->errors;
             $this->lastError = $e;
+        } finally {
+            ++$this->requests;
+            $this->processingTime += TimeSpan::diff(new \DateTimeImmutable(timezone: $this->tz), $start)->toNanoseconds();
         }
     }
 

@@ -7,7 +7,7 @@ namespace Thesis\Nats\Micro;
 /**
  * @api
  */
-final readonly class Config
+final readonly class ServiceConfig
 {
     /**
      * @param non-empty-string $name

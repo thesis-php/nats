@@ -16,6 +16,7 @@ use Thesis\Nats\Message;
 final readonly class Request
 {
     public ?string $data;
+
     public Headers $headers;
 
     /** @var non-empty-string */
@@ -41,13 +42,8 @@ final readonly class Request
 
     public function respondJson(mixed $response, ?Cancellation $cancellation = null): void
     {
-        [$data, $headers] = [$response, new Headers()];
-        if ($data instanceof Response) {
-            [$data, $headers] = [$data->data, $data->headers];
-        }
-
         $this->delivery->reply(
-            new Message($this->encoder->encode($data), $headers),
+            new Message($this->encoder->encode($response)),
             $cancellation,
         );
     }

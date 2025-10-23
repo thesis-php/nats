@@ -9,10 +9,10 @@ use Thesis\Nats\Micro\ServiceIdentity;
 /**
  * @internal
  */
-final readonly class Ping implements \JsonSerializable
+final readonly class PingResponse implements \JsonSerializable
 {
     public function __construct(
-        public ServiceIdentity $identity,
+        private ServiceIdentity $identity,
     ) {}
 
     /**

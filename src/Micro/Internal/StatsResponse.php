@@ -5,20 +5,15 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro\Internal;
 
 use Thesis\Nats\Micro\EndpointStats;
-use Thesis\Nats\Micro\ServiceIdentity;
+use Thesis\Nats\Micro\Stats;
 
 /**
  * @internal
  */
-final readonly class Stats implements \JsonSerializable
+final readonly class StatsResponse implements \JsonSerializable
 {
-    /**
-     * @param list<EndpointStats> $endpoints
-     */
     public function __construct(
-        public ServiceIdentity $identity,
-        public \DateTimeImmutable $started,
-        public array $endpoints = [],
+        private Stats $stats,
     ) {}
 
     /**
@@ -28,13 +23,13 @@ final readonly class Stats implements \JsonSerializable
     {
         return [
             'type' => 'io.nats.micro.v1.stats_response',
-            'name' => $this->identity->name,
-            'id' => $this->identity->id,
-            'version' => $this->identity->version,
-            'metadata' => $this->identity->metadata,
-            'started' => $this->started->format(\DateTimeInterface::RFC3339),
+            'name' => $this->stats->identity->name,
+            'id' => $this->stats->identity->id,
+            'version' => $this->stats->identity->version,
+            'metadata' => $this->stats->identity->metadata,
+            'started' => $this->stats->started->format(\DateTimeInterface::RFC3339),
             'endpoints' => array_map(
-                static fn (EndpointStats $stats): array => array_filter([
+                static fn(EndpointStats $stats): array => array_filter([
                     'name' => $stats->name,
                     'subject' => $stats->subject,
                     'queue_group' => $stats->queueGroup,
@@ -44,8 +39,8 @@ final readonly class Stats implements \JsonSerializable
                     'processing_time' => $stats->processingTime,
                     'average_processing_time' => $stats->averageProcessingTime,
                     'data' => $stats->data,
-                ], static fn (mixed $value): bool => $value !== null),
-                $this->endpoints,
+                ], static fn(mixed $value): bool => $value !== null),
+                $this->stats->endpoints,
             ),
         ];
     }

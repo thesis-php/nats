@@ -34,7 +34,7 @@ final class Service
     public function __construct(
         private readonly Client $nc,
         private readonly ServiceIdentity $identity,
-        private readonly Config $config,
+        private readonly ServiceConfig $config,
         private readonly Encoder $encoder,
     ) {
         $this->queue = $this->config->queueGroup ?? self::DEFAULT_QUEUE_GROUP;
@@ -47,36 +47,28 @@ final class Service
         $this->registerVerbHandler(Internal\Verb::Stats, $this->handleStats(...));
     }
 
-    /**
-     * @param non-empty-string $name
-     * @param ?non-empty-string $queueGroup
-     */
-    public function addGroup(
-        string $name,
-        ?string $queueGroup = null,
-    ): Group {
-        return $this->groups[$name] ??= new Group(
+    public function addGroup(GroupConfig $config): Group
+    {
+        return $this->groups[$config->name] ??= new Group(
             svc: $this,
-            name: $name,
-            queueGroup: $queueGroup ?? $this->queue,
+            name: $config->name,
+            queueGroup: $config->queueGroup ?? $this->queue,
         );
     }
 
     /**
-     * @param non-empty-string $name
      * @param callable(Request): void $handler
      * @throws NatsException
      */
     public function addEndpoint(
-        string $name,
+        EndpointConfig $config,
         callable $handler,
-        EndpointConfig $config = new EndpointConfig(),
         ?Cancellation $cancellation = null,
-    ): void {
+    ): self {
         $endpointHandler = new Internal\EndpointHandler(
             info: new EndpointInfo(
-                name: $name,
-                subject: $config->subject ?? $name,
+                name: $config->name,
+                subject: $config->subject ?? $config->name,
                 queueGroup: $config->queueGroup ?? $this->queue,
                 metadata: $config->metadata,
             ),
@@ -92,23 +84,52 @@ final class Service
         );
 
         $this->endpoints[$sid] = $endpointHandler;
+
+        return $this;
+    }
+
+    public function info(): Info
+    {
+        return new Info(
+            identity: $this->identity,
+            description: $this->config->description,
+            endpoints: array_map(
+                static fn(Internal\EndpointHandler $endpoint): EndpointInfo => $endpoint->info,
+                array_values($this->endpoints),
+            ),
+        );
+    }
+
+    public function stats(): Stats
+    {
+        return new Stats(
+            identity: $this->identity,
+            started: $this->started,
+            endpoints: array_map(
+                static fn(Internal\EndpointHandler $endpoint): EndpointStats => $endpoint->stats(),
+                array_values($this->endpoints),
+            ),
+        );
     }
 
     public function stop(?Cancellation $cancellation = null): void
     {
-        foreach (array_keys($this->endpoints) as $sid) {
-            $this->nc->unsubscribe($sid, $cancellation);
-        }
-
-        foreach ($this->verbs as $sid) {
-            $this->nc->unsubscribe($sid, $cancellation);
-        }
+        $this->stopEndpoints($cancellation);
+        $this->stopInternalEndpoints($cancellation);
+        $this->stopGroups();
     }
 
     public function reset(): void
     {
         foreach ($this->endpoints as $endpoint) {
             $endpoint->reset();
+        }
+    }
+
+    public function __destruct()
+    {
+        if (\PHP_VERSION_ID >= 80400) {
+            $this->stop();
         }
     }
 
@@ -142,30 +163,41 @@ final class Service
 
     private function handlePing(Request $request): void
     {
-        $request->respondJson(new Internal\Ping($this->identity));
+        $request->respondJson(new Internal\PingResponse($this->identity));
     }
 
     private function handleInfo(Request $request): void
     {
-        $request->respondJson(new Internal\Info(
-            identity: $this->identity,
-            description: $this->config->description,
-            endpoints: array_map(
-                static fn (Internal\EndpointHandler $endpoint): EndpointInfo => $endpoint->info,
-                $this->endpoints,
-            ),
-        ));
+        $request->respondJson(new Internal\InfoResponse($this->info()));
     }
 
     private function handleStats(Request $request): void
     {
-        $request->respondJson(new Internal\Stats(
-            identity: $this->identity,
-            started: $this->started,
-            endpoints: array_map(
-                static fn (Internal\EndpointHandler $endpoint): EndpointStats => $endpoint->stats(),
-                $this->endpoints,
-            ),
-        ));
+        $request->respondJson(new Internal\StatsResponse($this->stats()));
+    }
+
+    private function stopEndpoints(?Cancellation $cancellation = null): void
+    {
+        $endpoints = $this->endpoints;
+        $this->endpoints = [];
+
+        foreach (array_keys($endpoints) as $sid) {
+            $this->nc->unsubscribe((string) $sid, $cancellation);
+        }
+    }
+
+    private function stopInternalEndpoints(?Cancellation $cancellation = null): void
+    {
+        $verbs = $this->verbs;
+        $this->verbs = [];
+
+        foreach ($verbs as $sid) {
+            $this->nc->unsubscribe($sid, $cancellation);
+        }
+    }
+
+    private function stopGroups(): void
+    {
+        $this->groups = [];
     }
 }

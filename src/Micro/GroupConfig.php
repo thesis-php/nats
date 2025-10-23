@@ -7,18 +7,14 @@ namespace Thesis\Nats\Micro;
 /**
  * @api
  */
-final readonly class EndpointConfig
+final readonly class GroupConfig
 {
     /**
      * @param non-empty-string $name
-     * @param ?non-empty-string $subject
      * @param ?non-empty-string $queueGroup
-     * @param array<non-empty-string, string> $metadata
      */
     public function __construct(
         public string $name,
-        public ?string $subject = null,
         public ?string $queueGroup = null,
-        public array $metadata = [],
     ) {}
 }
