@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Connection;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Config;
 use Thesis\Nats\Internal\Protocol\Connect;
@@ -39,12 +40,9 @@ final class SocketConnectionJwtTest extends TestCase
         self::assertStringNotContainsString('"sig":', $encoded);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testConnectProtocolCreationWithNkeyOnly(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $config = new Config(
             nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
         );
@@ -52,7 +50,8 @@ final class SocketConnectionJwtTest extends TestCase
         $nonce = 'test-nonce';
         $nkey = $config->nkey;
         self::assertNotNull($nkey);
-        $signature = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign($nonce, $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -75,12 +74,9 @@ final class SocketConnectionJwtTest extends TestCase
         self::assertStringNotContainsString('"jwt":', $encoded);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testConnectProtocolCreationWithBothJwtAndNkey(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $config = new Config(
             jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
             nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
@@ -89,7 +85,8 @@ final class SocketConnectionJwtTest extends TestCase
         $nonce = 'test-nonce';
         $nkey = $config->nkey;
         self::assertNotNull($nkey);
-        $signature = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign($nonce, $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,
@@ -141,22 +138,20 @@ final class SocketConnectionJwtTest extends TestCase
         self::assertStringNotContainsString('"sig":', $encoded);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignerIntegrationWithConfig(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nonce = 'integration-test-nonce';
-        $signature = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign($nonce, $nkey);
 
         self::assertEquals(88, \strlen($signature));
 
-        $signature2 = Signer::sign($nonce, $nkey);
+        $signature2 = $signer->sign($nonce, $nkey);
         self::assertEquals($signature, $signature2);
 
-        $signature3 = Signer::sign('different-nonce', $nkey);
+        $signature3 = $signer->sign('different-nonce', $nkey);
         self::assertNotEquals($signature, $signature3);
     }
 
@@ -186,12 +181,9 @@ final class SocketConnectionJwtTest extends TestCase
         self::assertStringNotContainsString('"nkey":', $encoded);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testJwtAndNkeyPrecedenceOverUserPassword(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $config = new Config(
             user: 'olduser',
             password: 'oldpass',
@@ -201,7 +193,8 @@ final class SocketConnectionJwtTest extends TestCase
 
         $nkey = $config->nkey;
         self::assertNotNull($nkey);
-        $signature = Signer::sign('test-nonce', $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign('test-nonce', $nkey);
 
         $connect = new Connect(
             verbose: $config->verbose,

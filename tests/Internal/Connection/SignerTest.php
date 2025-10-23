@@ -5,119 +5,103 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Connection;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(Signer::class)]
 final class SignerTest extends TestCase
 {
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithValidNkey(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
 
         $nonce = 'test-nonce';
-        $signature = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign($nonce, $nkey);
 
         self::assertNotEmpty($signature);
         self::assertEquals(88, \strlen($signature));
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignConsistency(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
 
         $nonce = 'consistent-test-nonce';
 
-        $signature1 = Signer::sign($nonce, $nkey);
-        $signature2 = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature1 = $signer->sign($nonce, $nkey);
+        $signature2 = $signer->sign($nonce, $nkey);
         self::assertEquals($signature1, $signature2);
 
-        $signature3 = Signer::sign('different-nonce', $nkey);
+        $signature3 = $signer->sign('different-nonce', $nkey);
         self::assertNotSame($signature1, $signature3);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithDifferentValidKeys(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $nkey1 = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nkey2 = 'SUAHZXJ5Y3KIRG3QJLP36DOLIW2GD7X2E7NLLDCK6ASBYNMGG4CVWIL6RA';
 
         $nonce = 'same-nonce';
-        $signature1 = Signer::sign($nonce, $nkey1);
+        $signer = new Signer();
+        $signature1 = $signer->sign($nonce, $nkey1);
 
-        $signature2 = Signer::sign($nonce, $nkey2);
+        $signature2 = $signer->sign($nonce, $nkey2);
         self::assertNotSame($signature1, $signature2);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithInvalidNKeyFormat(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
 
-        Signer::sign('test-nonce', 'INVALID_KEY_FORMAT');
+        $signer = new Signer();
+        $signer->sign('test-nonce', 'INVALID_KEY_FORMAT');
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithNonUserSeedKey(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('Invalid NKey format: expected user seed key starting with "SU"');
 
-        Signer::sign('test-nonce', 'SA' . str_repeat('A', 56));
+        $signer = new Signer();
+        $signer->sign('test-nonce', 'SA' . str_repeat('A', 56));
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithInvalidBase32Characters(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('Invalid NKey: insufficient length after decoding');
 
-        Signer::sign('test-nonce', 'SUAILOU' . str_repeat('A', 50));
+        $signer = new Signer();
+        $signer->sign('test-nonce', 'SUAILOU' . str_repeat('A', 50));
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithTooShortNKey(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('Failed to decode NKey from Base32');
 
-        Signer::sign('test-nonce', 'SUABC123');
+        $signer = new Signer();
+        $signer->sign('test-nonce', 'SUABC123');
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignatureVerification(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
         $nonce = 'verification-test-nonce';
 
-
-        $signature = Signer::sign($nonce, $nkey);
+        $signer = new Signer();
+        $signature = $signer->sign($nonce, $nkey);
 
         $decodedSignature = base64_decode($signature, strict: true);
         self::assertNotFalse($decodedSignature);
@@ -125,28 +109,24 @@ final class SignerTest extends TestCase
 
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithEmptyNonce(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('Nonce cannot be empty');
 
         $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
-        Signer::sign('', $nkey);
+        $signer = new Signer();
+        $signer->sign('', $nkey);
     }
 
+    #[RequiresPhpExtension('sodium')]
     public function testSignWithEmptyNKey(): void
     {
-        if (!\extension_loaded('sodium')) {
-            self::markTestSkipped('Sodium extension is not available.');
-        }
-
         self::expectException(\Exception::class);
         self::expectExceptionMessage('NKey cannot be empty');
 
-        Signer::sign('test-nonce', '');
+        $signer = new Signer();
+        $signer->sign('test-nonce', '');
     }
 }

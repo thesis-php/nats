@@ -30,6 +30,8 @@ final class SocketConnection implements Connection
 
     private bool $running = false;
 
+    private readonly Signer $signer;
+
     public function __construct(
         private readonly Config $config,
         private readonly Socket $socket,
@@ -37,6 +39,7 @@ final class SocketConnection implements Connection
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
+        $this->signer = new Signer();
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
@@ -177,6 +180,6 @@ final class SocketConnection implements Connection
             return null;
         }
 
-        return Signer::sign($nonce, $nkey);
+        return $this->signer->sign($nonce, $nkey);
     }
 }

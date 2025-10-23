@@ -17,7 +17,7 @@ final class Signer
     /**
      * @throws \Exception
      */
-    public static function sign(string $nonce, string $nkey): string
+    public function sign(string $nonce, string $nkey): string
     {
         if (!\extension_loaded('sodium')) {
             throw new \Exception('ext-sodium extension is required for NKey authentication');
@@ -31,7 +31,7 @@ final class Signer
             throw new \Exception('NKey cannot be empty');
         }
 
-        $binaryKey = self::decodeNKey($nkey);
+        $binaryKey = $this->decodeNKey($nkey);
 
         $signature = sodium_crypto_sign_detached($nonce, $binaryKey);
 
@@ -42,7 +42,7 @@ final class Signer
      * @return non-empty-string
      * @throws \Exception
      */
-    private static function decodeNKey(string $nkey): string
+    private function decodeNKey(string $nkey): string
     {
         $nkey = strtoupper(trim($nkey));
 
@@ -50,7 +50,7 @@ final class Signer
             throw new \Exception('Invalid NKey format: expected user seed key starting with "SU"');
         }
 
-        $decoded = self::base32Decode($nkey);
+        $decoded = $this->base32Decode($nkey);
 
         if ($decoded === false) {
             throw new \Exception('Failed to decode NKey from Base32');
@@ -79,7 +79,7 @@ final class Signer
     /**
      * Decode Base32 string using NATS alphabet.
      */
-    private static function base32Decode(string $input): string|false
+    private function base32Decode(string $input): string|false
     {
         if ($input === '') {
             return false;
