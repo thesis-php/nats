@@ -46,6 +46,8 @@ final class ServiceTest extends NatsTestCase
         self::assertSame($endpointConfig->name, $info->endpoints[0]->name);
         self::assertSame($endpointConfig->metadata, $info->endpoints[0]->metadata);
         self::assertSame('q', $info->endpoints[0]->queueGroup);
+
+        $srv->stop();
     }
 
     public function testServiceStats(): void
@@ -109,6 +111,8 @@ final class ServiceTest extends NatsTestCase
         self::assertSame(1, $stats->endpoints[1]->numRequests);
         self::assertSame(1, $stats->endpoints[1]->numErrors);
         self::assertSame('Invalid request', $stats->endpoints[1]->lastError?->getMessage());
+
+        $srv->stop();
     }
 
     public function testGroups(): void
@@ -128,6 +132,8 @@ final class ServiceTest extends NatsTestCase
 
         $response = $nc->request('api.echo', new Message('Ping'));
         self::assertSame('Ping', $response->message->payload);
+
+        $srv->stop();
     }
 
     public function testNestedGroups(): void
@@ -154,6 +160,8 @@ final class ServiceTest extends NatsTestCase
 
         $response = $nc->request('metrics');
         self::assertSame('service metrics', $response->message->payload);
+
+        $srv->stop();
     }
 
     public function testSubjects(): void
@@ -172,6 +180,8 @@ final class ServiceTest extends NatsTestCase
 
         $response = $nc->request('echo.x');
         self::assertSame('echo.x', $response->message->payload);
+
+        $srv->stop();
     }
 
     public function testQueueGroups(): void
@@ -207,5 +217,7 @@ final class ServiceTest extends NatsTestCase
 
         self::assertCount(5, $replies);
         self::assertEqualsCanonicalizing(['echo#0', 'echo#1', 'echo#2', 'echo#3', 'echo#4'], $replies);
+
+        $srv->stop();
     }
 }

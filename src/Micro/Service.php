@@ -126,13 +126,6 @@ final class Service
         }
     }
 
-    public function __destruct()
-    {
-        if (\PHP_VERSION_ID >= 80400) {
-            $this->stop();
-        }
-    }
-
     /**
      * @param callable(Request): void $handler
      */
