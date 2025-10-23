@@ -34,7 +34,7 @@ abstract class NatsTestCase extends TestCase
 
         $this->dsn = $dsn;
 
-        $this->jwtDsn = $dsn;
+        $this->jwtDsn = $jwtDsn;
     }
 
     protected function tearDown(): void
