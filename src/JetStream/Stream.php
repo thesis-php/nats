@@ -72,9 +72,41 @@ final readonly class Stream
     /**
      * @throws NatsException
      */
+    public function updatePushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
+    {
+        return $this->js->updatePushConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function updateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
+    {
+        return $this->js->updateConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createPushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
+    {
+        return $this->js->createPushConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
     public function createOrUpdateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
     {
         return $this->js->createOrUpdateConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createOrUpdatePushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
+    {
+        return $this->js->createOrUpdatePushConsumer($this->name, $config);
     }
 
     /**
