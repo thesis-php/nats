@@ -35,7 +35,7 @@
         "symfony/var-dumper": "^6.4.15 || ^7.3.4"
     },
     "suggest": {
-      "ext-sodium": "Provides Ed25519 for nkey authentication"
+        "ext-sodium": "Provides Ed25519 for nkey authentication"
     },
     "autoload": {
         "psr-4": {
@@ -75,7 +75,7 @@
         "check": [
             "@composer fixcs -- --dry-run",
             "@composer rector -- --dry-run",
-            "@phpstan",
+            "@phpstan --memory-limit=512M",
             "@composer validate",
             "@composer normalize --dry-run",
             "@analyse-deps",
