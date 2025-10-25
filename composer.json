@@ -75,7 +75,7 @@
         "check": [
             "@composer fixcs -- --dry-run",
             "@composer rector -- --dry-run",
-            "@phpstan",
+            "@phpstan --memory-limit=512M",
             "@composer validate",
             "@composer normalize --dry-run",
             "@analyse-deps",
