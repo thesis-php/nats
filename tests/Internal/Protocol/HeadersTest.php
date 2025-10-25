@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversFunction;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Headers;
 
 #[CoversFunction('\Thesis\Nats\Internal\Protocol\encodeHeaders')]
@@ -36,6 +37,10 @@ final class HeadersTest extends TestCase
     #[TestWith([
         new Headers(['X' => ['Y'], StatusCode::Header->value => ['200']]),
         "NATS/1.0 200\r\nX: Y\r\n\r\n",
+    ])]
+    #[TestWith([
+        new Headers(['X' => ['Y'], StatusCode::Header->value => ['100'], StatusDescription::HEADER => ['Idle Heartbeat']]),
+        "NATS/1.0 100 Idle Heartbeat\r\nX: Y\r\n\r\n",
     ])]
     public function testEncode(Headers $headers, string $encoded): void
     {
