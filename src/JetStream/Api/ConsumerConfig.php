@@ -12,6 +12,7 @@ use Thesis\Time\TimeSpan;
 final readonly class ConsumerConfig implements \JsonSerializable
 {
     /**
+     * @param ?non-empty-string $deliverSubject
      * @param ?non-negative-int $startSeq
      * @param ?list<TimeSpan> $backoff
      * @param ?non-negative-int $rateLimit
