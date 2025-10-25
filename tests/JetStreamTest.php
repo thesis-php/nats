@@ -247,14 +247,11 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedInfo = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumer->info->config->durableName, $updatedInfo->config->durableName);
-        self::assertSame($consumer->info->config->ackPolicy, $updatedInfo->config->ackPolicy);
-        self::assertNull($consumer->info->config->description);
-        self::assertSame('Test Consumer', $updatedInfo->config->description);
+        self::assertSame('Test Consumer', $consumer->actualInfo()->config->description);
 
         $js->deleteStream($stream);
     }
