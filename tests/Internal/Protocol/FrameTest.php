@@ -152,6 +152,10 @@ final class FrameTest extends TestCase
         "MSG events.success 1 local 3\r\nabz\r\n",
     ])]
     #[TestWith([
+        new Msg('events.success', '1', 'local', new Message('0')),
+        "MSG events.success 1 local 1\r\n0\r\n",
+    ])]
+    #[TestWith([
         new Msg('events.success', '1', message: new Message(headers: new Headers())),
         "HMSG events.success 1 12 12\r\nNATS/1.0\r\n\r\n\r\n",
     ])]

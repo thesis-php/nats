@@ -24,7 +24,7 @@ final readonly class Message implements Frame
     {
         $buffer = '';
 
-        $length = \strlen($this->payload ?: '');
+        $length = \strlen($this->payload ?? '');
 
         $headers = $this->headers !== null ? encodeHeaders($this->headers) : null;
         $headersLength = \strlen($headers ?: '');
