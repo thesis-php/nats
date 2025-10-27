@@ -51,6 +51,7 @@ final class PushConsumer
         $sid = $this->nats->subscribe(
             subject: $this->info->config->deliverSubject ?? throw new \LogicException('Deliver subject must not be null.'),
             handler: $messageHandler,
+            queueGroup: $this->info->config->deliverGroup,
             cancellation: $cancellation,
         );
 

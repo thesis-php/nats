@@ -64,9 +64,9 @@ final readonly class Stream
     /**
      * @throws NatsException
      */
-    public function createConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
+    public function createPushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
     {
-        return $this->js->createConsumer($this->name, $config);
+        return $this->js->createPushConsumer($this->name, $config);
     }
 
     /**
@@ -80,33 +80,51 @@ final readonly class Stream
     /**
      * @throws NatsException
      */
-    public function updateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
-    {
-        return $this->js->updateConsumer($this->name, $config);
-    }
-
-    /**
-     * @throws NatsException
-     */
-    public function createPushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
-    {
-        return $this->js->createPushConsumer($this->name, $config);
-    }
-
-    /**
-     * @throws NatsException
-     */
-    public function createOrUpdateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
-    {
-        return $this->js->createOrUpdateConsumer($this->name, $config);
-    }
-
-    /**
-     * @throws NatsException
-     */
     public function createOrUpdatePushConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PushConsumer
     {
         return $this->js->createOrUpdatePushConsumer($this->name, $config);
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function pushConsumer(string $name): PushConsumer
+    {
+        return $this->js->pushConsumer($this->name, $name);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createPullConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PullConsumer
+    {
+        return $this->js->createPullConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function updatePullConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PullConsumer
+    {
+        return $this->js->updatePullConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function createOrUpdatePullConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): PullConsumer
+    {
+        return $this->js->createOrUpdatePullConsumer($this->name, $config);
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @throws NatsException
+     */
+    public function pullConsumer(string $name): PullConsumer
+    {
+        return $this->js->pullConsumer($this->name, $name);
     }
 
     /**
