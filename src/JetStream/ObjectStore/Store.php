@@ -13,7 +13,6 @@ use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Internal\QueueIterator;
 use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
@@ -22,7 +21,6 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Serialization\Serializer;
-use function Amp\weakClosure;
 
 /**
  * @api
@@ -263,15 +261,12 @@ final readonly class Store
             filterSubject: "\$O.{$this->name}.M.>",
         ));
 
-        /** @var Pipeline\Queue<ObjectInfo> $queue */
-        $queue = new Pipeline\Queue();
-
-        $sid = $this->nats->subscribe(
-            subject: $id,
-            handler: weakClosure(function (Delivery $delivery) use ($queue, $config): void {
+        return $this->nats
+            ->subscribeIterator($id, cancellation: $cancellation)
+            ->mapNotNull(function (Delivery $delivery) use ($config): ?ObjectInfo {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {
-                    return;
+                    return null;
                 }
 
                 $info = $this->serializer->deserialize(
@@ -279,20 +274,12 @@ final readonly class Store
                     $this->json->decode($payload),
                 );
 
-                if (!$config->ignoreDeletes || !$info->deleted) {
-                    $queue->push($info);
+                if ($config->ignoreDeletes && $info->deleted) {
+                    return null;
                 }
-            }),
-            cancellation: $cancellation,
-        );
 
-        return new QueueIterator(
-            iterator: $queue->iterate(),
-            queue: $queue,
-            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
-                $this->nats->unsubscribe($sid, $cancellation);
-            },
-        );
+                return $info;
+            });
     }
 
     /**

@@ -119,13 +119,9 @@ final class Client
             cancellation: $cancellation,
         );
 
-        return new Internal\QueueIterator(
-            iterator: $queue->iterate(),
-            queue: $queue,
-            unsubscribe: function (?Cancellation $cancellation = null) use ($subscriptionId): void {
-                $this->unsubscribe($subscriptionId, $cancellation);
-            },
-        );
+        return Internal\PipelineIterator::fromQueue($queue, function (?Cancellation $cancellation = null) use ($subscriptionId): void {
+            $this->unsubscribe($subscriptionId, $cancellation);
+        });
     }
 
     /**
