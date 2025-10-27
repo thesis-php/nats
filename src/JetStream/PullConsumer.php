@@ -18,9 +18,9 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class Consumer
+final class PullConsumer
 {
-    /** @var array<non-empty-string|int, Internal\MessageHandler> */
+    /** @var array<non-empty-string|int, Internal\PullMessageHandler> */
     private array $subscribers = [];
 
     /**
@@ -58,7 +58,7 @@ final class Consumer
         /** @var Pipeline\Queue<Delivery> $queue */
         $queue = new Pipeline\Queue(bufferSize: $config->batch);
 
-        $messageHandler = new Internal\MessageHandler(
+        $messageHandler = new Internal\PullMessageHandler(
             queue: $queue,
             nats: $this->nats,
             json: $this->json,

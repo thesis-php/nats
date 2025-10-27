@@ -172,7 +172,7 @@ final readonly class Bucket
             $keys !== [] ? $keys : [self::ALL_KEYS],
         );
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+        $this->stream->createOrUpdatePullConsumer(new JetStream\Api\ConsumerConfig(
             description: 'kv watch consumer',
             deliverPolicy: DeliverPolicy::New,
             deliverSubject: $id = Id\generateInboxId(),

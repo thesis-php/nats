@@ -84,7 +84,7 @@ final readonly class Store
             return $object;
         }
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+        $this->stream->createOrUpdatePullConsumer(new JetStream\Api\ConsumerConfig(
             deliverSubject: $id = Id\generateInboxId(),
             filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
         ));
@@ -256,7 +256,7 @@ final readonly class Store
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
     ): Iterator {
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+        $this->stream->createOrUpdatePullConsumer(new JetStream\Api\ConsumerConfig(
             description: 'object store consumer',
             deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
             deliverSubject: $id = Id\generateInboxId(),

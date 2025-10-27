@@ -75,7 +75,7 @@
         "check": [
             "@composer fixcs -- --dry-run",
             "@composer rector -- --dry-run",
-            "@phpstan --memory-limit=512M",
+            "@phpstan",
             "@composer validate",
             "@composer normalize --dry-run",
             "@analyse-deps",
@@ -84,7 +84,7 @@
         "fixcs": "tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --diff --verbose",
         "infection": "tools/infection/vendor/bin/infection --show-mutations",
         "normalize": "@composer bin composer-normalize normalize --diff ../../composer.json",
-        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze",
+        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze --memory-limit=512M",
         "pre-command-run": "mkdir -p var",
         "rector": "tools/rector/vendor/bin/rector process",
         "test": "phpunit"
