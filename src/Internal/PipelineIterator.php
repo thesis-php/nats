@@ -49,19 +49,6 @@ final readonly class PipelineIterator implements Iterator
         $this->unsubscribe = $unsubscribe ?? static fn() => null;
     }
 
-    /**
-     * @param \Closure(?Cancellation=): void $unsubscribe
-     * @return self<T>
-     */
-    public function withUnsubscribe(\Closure $unsubscribe): self
-    {
-        return new self(
-            pipeline: $this->pipeline,
-            queue: $this->queue,
-            unsubscribe: $unsubscribe,
-        );
-    }
-
     public function complete(?Cancellation $cancellation = null): void
     {
         ($this->unsubscribe)($cancellation);
