@@ -747,6 +747,7 @@ final readonly class JetStream
             name: $info->name,
             stream: $info->streamName,
             nats: $this->nats,
+            deliverySubject: $info->config->deliverSubject ?? throw new \LogicException('For push consumers deliver subject is required.'),
         );
     }
 

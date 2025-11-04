@@ -27,7 +27,7 @@ final readonly class PipelineIterator implements Iterator
         ?\Closure $unsubscribe = null,
     ): self {
         return new self(
-            pipeline: new Pipeline\Pipeline($queue->iterate()),
+            pipeline: $queue->pipe(),
             queue: $queue,
             unsubscribe: $unsubscribe,
         );

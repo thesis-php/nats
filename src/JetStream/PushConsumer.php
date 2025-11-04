@@ -5,65 +5,78 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream;
 
 use Amp\Cancellation;
-use Amp\Pipeline;
 use Thesis\Nats\Client;
-use Thesis\Nats\Internal\QueueIterator;
+use Thesis\Nats\Description;
+use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Iterator;
+use Thesis\Nats\JetStream\Internal\Acks;
+use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Delivery as NatsDelivery;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Nats\Status;
 
 /**
  * @api
  */
-final class PushConsumer
+final readonly class PushConsumer
 {
-    private bool $consuming = false;
+    private Acks $acks;
 
     /**
      * @param non-empty-string $name
      * @param non-empty-string $stream
+     * @param non-empty-string $deliverySubject
      */
     public function __construct(
-        public readonly Api\ConsumerInfo $info,
-        public readonly string $name,
-        public readonly string $stream,
-        private readonly Client $nats,
-    ) {}
+        public Api\ConsumerInfo $info,
+        public string $name,
+        public string $stream,
+        private Client $nats,
+        private string $deliverySubject,
+    ) {
+        $this->acks = new Acks($nats);
+    }
 
     /**
      * @return Iterator<Delivery>
      * @throws NatsException
-     * @throws \LogicException if consumer is already running or deliver subject is not set
      */
     public function consume(?Cancellation $cancellation = null): Iterator
     {
-        if ($this->consuming) {
-            throw new \LogicException('Consumer is already running.');
+        return $this->nats
+            ->subscribeIterator(
+                subject: $this->deliverySubject,
+                queueGroup: $this->info->config->deliverGroup,
+                cancellation: $cancellation,
+            )
+            ->mapFilter($this->filterDelivery(...))
+            ;
+    }
+
+    private function filterDelivery(NatsDelivery $delivery): false|JetStreamDelivery
+    {
+        $status = $delivery->message->headers?->get(StatusCode::Header);
+
+        if ($status !== null) {
+            $description = Description::tryFrom(strtolower($delivery->message->headers?->get(StatusDescription::header()) ?? '')) ?? Description::Unknown;
+
+            if ($status === Status::Control && $description === Description::FlowControl) {
+                $delivery->reply(new Message());
+            } elseif ($status === Status::Conflict && $description === Description::ConsumerDeleted) {
+                // TODO: stop consumer
+            }
+        } else if (($replyTo = $delivery->replyTo) !== null) {
+            return new JetStreamDelivery(
+                message: $delivery->message,
+                subject: $delivery->subject,
+                metadata: Metadata::parse($replyTo),
+                replyTo: $replyTo,
+                acks: $this->acks,
+            );
         }
 
-        /** @var Pipeline\Queue<Delivery> $queue */
-        $queue = new Pipeline\Queue(bufferSize: $this->info->config->maxAckPending ?? 0);
-
-        $messageHandler = new Internal\PushMessageHandler(
-            nc: $this->nats,
-            queue: $queue,
-        );
-
-        $sid = $this->nats->subscribe(
-            subject: $this->info->config->deliverSubject ?? throw new \LogicException('Deliver subject must not be null.'),
-            handler: $messageHandler,
-            queueGroup: $this->info->config->deliverGroup,
-            cancellation: $cancellation,
-        );
-
-        $this->consuming = true;
-
-        return new QueueIterator(
-            iterator: $queue->iterate(),
-            queue: $queue,
-            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
-                $this->nats->unsubscribe($sid, $cancellation);
-                $this->consuming = false;
-            },
-        );
+        return false;
     }
 }
