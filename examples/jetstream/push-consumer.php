@@ -47,6 +47,7 @@ for ($i = 0; $i < 1_000; ++$i) {
     $js->publish("push.{$i}", new Nats\Message("{$i}"));
 }
 
-trapSignal([\SIGINT, \SIGTERM]);
+$signal = trapSignal([\SIGINT, \SIGTERM]);
 $messages->complete();
 $future->await();
+dump("Terminate signal '{$signal}' received.");
