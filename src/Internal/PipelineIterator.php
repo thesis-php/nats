@@ -27,9 +27,9 @@ final readonly class PipelineIterator implements Iterator
         ?\Closure $unsubscribe = null,
     ): self {
         return new self(
-            new Pipeline\Pipeline($queue->iterate()),
-            $queue,
-            $unsubscribe,
+            pipeline: new Pipeline\Pipeline($queue->iterate()),
+            queue: $queue,
+            unsubscribe: $unsubscribe,
         );
     }
 
@@ -109,13 +109,13 @@ final readonly class PipelineIterator implements Iterator
         );
     }
 
-    public function mapNotNull(\Closure $map): Iterator
+    public function mapFilter(\Closure $map): Iterator
     {
         return new self(
             pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($map): array {
                 $value = $map($value);
 
-                return $value !== null ? [$value] : [];
+                return $value !== false ? [$value] : [];
             }),
             queue: $this->queue,
             unsubscribe: $this->unsubscribe,

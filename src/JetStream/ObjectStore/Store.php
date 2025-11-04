@@ -263,10 +263,10 @@ final readonly class Store
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->mapNotNull(function (Delivery $delivery) use ($config): ?ObjectInfo {
+            ->mapFilter(function (Delivery $delivery) use ($config): false|ObjectInfo {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {
-                    return null;
+                    return false;
                 }
 
                 $info = $this->serializer->deserialize(
@@ -275,7 +275,7 @@ final readonly class Store
                 );
 
                 if ($config->ignoreDeletes && $info->deleted) {
-                    return null;
+                    return false;
                 }
 
                 return $info;

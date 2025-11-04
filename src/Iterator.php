@@ -38,8 +38,8 @@ interface Iterator extends \IteratorAggregate
 
     /**
      * @template R
-     * @param \Closure(T): ?R $map
+     * @param \Closure(T): (false|R) $map
      * @return Iterator<R>
      */
-    public function mapNotNull(\Closure $map): self;
+    public function mapFilter(\Closure $map): self;
 }

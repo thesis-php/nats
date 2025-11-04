@@ -180,21 +180,21 @@ final readonly class Bucket
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->mapNotNull(function (Delivery $delivery) use ($config): ?Entry {
+            ->mapFilter(function (Delivery $delivery) use ($config): false|Entry {
                 $replyTo = $delivery->replyTo;
                 if ($replyTo === null) {
-                    return null;
+                    return false;
                 }
 
                 $key = substr($delivery->subject, \strlen($this->prefix));
                 if ($key === '') {
-                    return null;
+                    return false;
                 }
 
                 $op = $delivery->message->headers?->get(Header\KvOperation::header());
 
                 if ($config->ignoreDeletes && \in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
-                    return null;
+                    return false;
                 }
 
                 $metadata = JetStream\Metadata::parse($replyTo);
