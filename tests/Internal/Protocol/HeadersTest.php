@@ -2,69 +2,67 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\Internal\Protocol;
+namespace Thesis\Nats;
 
-use PHPUnit\Framework\Attributes\CoversFunction;
-use PHPUnit\Framework\Attributes\TestWith;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Thesis\Nats\Description;
-use Thesis\Nats\Header\StatusCode;
-use Thesis\Nats\Header\StatusDescription;
-use Thesis\Nats\Headers;
-use Thesis\Nats\Status;
+use Thesis\Nats\Header\ScalarKey;
+use Thesis\Time\TimeSpan;
 
-#[CoversFunction('\Thesis\Nats\Internal\Protocol\encodeHeaders')]
-#[CoversFunction('\Thesis\Nats\Internal\Protocol\decodeHeaders')]
+#[CoversClass(Headers::class)]
 final class HeadersTest extends TestCase
 {
-    /**
-     * @param non-empty-string $encoded
-     */
-    #[TestWith([
-        new Headers(['Bar' => ['Baz']]),
-        "NATS/1.0\r\nBar: Baz\r\n\r\n",
-    ])]
-    #[TestWith([
-        new Headers(['Bar' => ['Baz', 'Foo']]),
-        "NATS/1.0\r\nBar: Baz\r\nBar: Foo\r\n\r\n",
-    ])]
-    #[TestWith([
-        new Headers(['Attempts' => ['1']]),
-        "NATS/1.0\r\nAttempts: 1\r\n\r\n",
-    ])]
-    #[TestWith([
-        new Headers([StatusCode::Header->value => ['503']]),
-        "NATS/1.0 503\r\n\r\n",
-    ])]
-    #[TestWith([
-        new Headers(['X' => ['Y'], StatusCode::Header->value => ['200']]),
-        "NATS/1.0 200\r\nX: Y\r\n\r\n",
-    ])]
-    #[TestWith([
-        new Headers(['X' => ['Y'], StatusCode::Header->value => ['100'], StatusDescription::Header->value => ['idle heartbeat']]),
-        "NATS/1.0 100 idle heartbeat\r\nX: Y\r\n\r\n",
-    ])]
-    public function testEncode(Headers $headers, string $encoded): void
-    {
-        self::assertEquals($encoded, encodeHeaders($headers));
-        self::assertEquals($headers, decodeHeaders($encoded));
-    }
-
-    public function testStatusCode(): void
+    public function testHeaders(): void
     {
         $headers = new Headers();
-        self::assertSame(Status::OK, $headers->statusCode());
 
-        $headers = $headers->with(StatusCode::Header, Status::Conflict);
-        self::assertSame(Status::Conflict, $headers->statusCode());
-    }
+        self::assertFalse($headers->exists(ScalarKey::string('x')));
 
-    public function testStatusDescription(): void
-    {
-        $headers = new Headers();
-        self::assertEquals(new Description(Description::OK), $headers->statusDescription());
+        $headers = $headers->with(ScalarKey::string('x'), 'y');
+        self::assertCount(1, $headers);
+        self::assertSame(['x' => ['y']], [...$headers]);
+        self::assertSame('y', $headers->get(ScalarKey::string('x')));
+        self::assertSame(['y'], $headers->values(ScalarKey::string('x')));
+        self::assertTrue($headers->exists(ScalarKey::string('x')));
 
-        $headers = $headers->with(StatusDescription::Header, new Description(Description::FlowControl));
-        self::assertEquals(new Description(Description::FlowControl), $headers->statusDescription());
+        $headers = $headers->with(ScalarKey::string('x'), 'z');
+        self::assertCount(1, $headers);
+        self::assertSame(['x' => ['y', 'z']], [...$headers]);
+        self::assertSame('y', $headers->get(ScalarKey::string('x')));
+        self::assertSame(['y', 'z'], $headers->values(ScalarKey::string('x')));
+
+        $headers = $headers->without(ScalarKey::string('x'));
+        self::assertCount(0, $headers);
+        self::assertSame([], [...$headers]);
+        self::assertNull($headers->get(ScalarKey::string('x')));
+        self::assertCount(0, $headers->values(ScalarKey::string('x')));
+
+        self::assertSame(Status::OK, $headers->get(Header\StatusCode::Header));
+
+        $headers = $headers->with(Header\StatusCode::Header, Status::BadRequest);
+        self::assertSame(Status::BadRequest, $headers->get(Header\StatusCode::Header));
+
+        $headers = $headers->with(Header\MsgTtl::Header, TimeSpan::fromSeconds(2));
+        self::assertEquals(TimeSpan::fromSeconds(2), $headers->get(Header\MsgTtl::Header));
+        self::assertEquals(
+            [
+                'Nats-TTL' => ['2'],
+                'Nats-Status-Code' => ['400'],
+            ],
+            [...$headers],
+        );
+
+        $headers = $headers->with(Header\MsgId::header(), '123');
+        self::assertSame('123', $headers->get(Header\MsgId::header()));
+        self::assertEquals(
+            [
+                'Nats-TTL' => ['2'],
+                'Nats-Status-Code' => ['400'],
+                'Nats-Msg-Id' => ['123'],
+            ],
+            [...$headers],
+        );
+
+        self::assertNull($headers->get(ScalarKey::string('x')));
     }
 }
