@@ -7,8 +7,11 @@ namespace Thesis\Nats\Internal\Protocol;
 use PHPUnit\Framework\Attributes\CoversFunction;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
+use Thesis\Nats\Description;
 use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Headers;
+use Thesis\Nats\Status;
 
 #[CoversFunction('\Thesis\Nats\Internal\Protocol\encodeHeaders')]
 #[CoversFunction('\Thesis\Nats\Internal\Protocol\decodeHeaders')]
@@ -37,9 +40,31 @@ final class HeadersTest extends TestCase
         new Headers(['X' => ['Y'], StatusCode::Header->value => ['200']]),
         "NATS/1.0 200\r\nX: Y\r\n\r\n",
     ])]
+    #[TestWith([
+        new Headers(['X' => ['Y'], StatusCode::Header->value => ['100'], StatusDescription::Header->value => ['idle heartbeat']]),
+        "NATS/1.0 100 idle heartbeat\r\nX: Y\r\n\r\n",
+    ])]
     public function testEncode(Headers $headers, string $encoded): void
     {
         self::assertEquals($encoded, encodeHeaders($headers));
         self::assertEquals($headers, decodeHeaders($encoded));
+    }
+
+    public function testStatusCode(): void
+    {
+        $headers = new Headers();
+        self::assertSame(Status::OK, $headers->statusCode());
+
+        $headers = $headers->with(StatusCode::Header, Status::Conflict);
+        self::assertSame(Status::Conflict, $headers->statusCode());
+    }
+
+    public function testStatusDescription(): void
+    {
+        $headers = new Headers();
+        self::assertEquals(new Description(Description::OK), $headers->statusDescription());
+
+        $headers = $headers->with(StatusDescription::Header, new Description(Description::FlowControl));
+        self::assertEquals(new Description(Description::FlowControl), $headers->statusDescription());
     }
 }

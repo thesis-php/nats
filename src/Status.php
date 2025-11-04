@@ -14,7 +14,7 @@ enum Status: int
     case BadRequest = 400;
     case NoMessages = 404;
     case ReqTimeout = 408;
-    case MaxBytesExceeded = 409;
+    case Conflict = 409;
     case NoResponders = 503;
     case PinIdMismatch = 423;
     case Unknown = -1;
