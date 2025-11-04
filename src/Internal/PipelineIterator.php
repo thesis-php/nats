@@ -109,13 +109,31 @@ final readonly class PipelineIterator implements Iterator
         );
     }
 
+    /**
+     * @template R
+     * @param \Closure(T): Iterator\Decision<R> $map
+     * @return self<R>
+     */
     public function mapFilter(\Closure $map): Iterator
     {
-        return new self(
-            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($map): array {
-                $value = $map($value);
+        $complete = $this->complete(...);
+        $cancel = $this->cancel(...);
 
-                return $value !== false ? [$value] : [];
+        return new self(
+            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($map, $complete, $cancel): array {
+                $decision = $map($value);
+
+                if ($decision instanceof Iterator\Emit) {
+                    /** @var array{R} */
+                    return [$decision->value];
+                }
+                if ($decision instanceof Iterator\Complete) {
+                    $complete();
+                } elseif ($decision instanceof Iterator\Cancel) {
+                    $cancel($decision->e);
+                }
+
+                return [];
             }),
             queue: $this->queue,
             unsubscribe: $this->unsubscribe,

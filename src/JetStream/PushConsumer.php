@@ -6,15 +6,13 @@ namespace Thesis\Nats\JetStream;
 
 use Amp\Cancellation;
 use Thesis\Nats\Client;
+use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
-use Thesis\Nats\Header\StatusCode;
-use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Iterator;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Internal\Acks;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
-use Thesis\Nats\Delivery as NatsDelivery;
-use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\Status;
 
 /**
@@ -40,7 +38,7 @@ final readonly class PushConsumer
     }
 
     /**
-     * @return Iterator<Delivery>
+     * @return Iterator<JetStreamDelivery>
      * @throws NatsException
      */
     public function consume(?Cancellation $cancellation = null): Iterator
@@ -51,32 +49,30 @@ final readonly class PushConsumer
                 queueGroup: $this->info->config->deliverGroup,
                 cancellation: $cancellation,
             )
-            ->mapFilter($this->filterDelivery(...))
-            ;
-    }
+            ->mapFilter(function (NatsDelivery $delivery): Iterator\Decision {
+                $status = $delivery->message->headers?->statusCode();
 
-    private function filterDelivery(NatsDelivery $delivery): false|JetStreamDelivery
-    {
-        $status = $delivery->message->headers?->get(StatusCode::Header);
+                if ($status !== null) {
+                    $description = $delivery->message->headers?->statusDescription();
 
-        if ($status !== null) {
-            $description = Description::tryFrom(strtolower($delivery->message->headers?->get(StatusDescription::header()) ?? '')) ?? Description::Unknown;
+                    if ($status === Status::Control && $description?->value === Description::FlowControl) {
+                        $delivery->reply(new Message());
+                    } elseif ($status === Status::Conflict && $description?->value === Description::ConsumerDeleted) {
+                        return Iterator\Complete::Decision;
+                    }
+                }
 
-            if ($status === Status::Control && $description === Description::FlowControl) {
-                $delivery->reply(new Message());
-            } elseif ($status === Status::Conflict && $description === Description::ConsumerDeleted) {
-                // TODO: stop consumer
-            }
-        } else if (($replyTo = $delivery->replyTo) !== null) {
-            return new JetStreamDelivery(
-                message: $delivery->message,
-                subject: $delivery->subject,
-                metadata: Metadata::parse($replyTo),
-                replyTo: $replyTo,
-                acks: $this->acks,
-            );
-        }
+                if (($replyTo = $delivery->replyTo) !== null) {
+                    return new Iterator\Emit(new JetStreamDelivery(
+                        message: $delivery->message,
+                        subject: $delivery->subject,
+                        metadata: Metadata::parse($replyTo),
+                        replyTo: $replyTo,
+                        acks: $this->acks,
+                    ));
+                }
 
-        return false;
+                return Iterator\Discard::Decision;
+            });
     }
 }

@@ -32,14 +32,14 @@ interface Iterator extends \IteratorAggregate
     /**
      * @template R
      * @param \Closure(T): R $map
-     * @return Iterator<R>
+     * @return self<R>
      */
     public function map(\Closure $map): self;
 
     /**
      * @template R
-     * @param \Closure(T): (false|R) $map
-     * @return Iterator<R>
+     * @param \Closure(T): Iterator\Decision<R> $map
+     * @return self<R>
      */
     public function mapFilter(\Closure $map): self;
 }
