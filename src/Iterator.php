@@ -22,4 +22,24 @@ interface Iterator extends \IteratorAggregate
      * @return callable(?\Throwable=, ?Cancellation=): void callback to cancel subscription
      */
     public function subscribe(callable $handler): callable;
+
+    /**
+     * @param \Closure(T): bool $filter
+     * @return self<T>
+     */
+    public function filter(\Closure $filter): self;
+
+    /**
+     * @template R
+     * @param \Closure(T): R $map
+     * @return Iterator<R>
+     */
+    public function map(\Closure $map): self;
+
+    /**
+     * @template R
+     * @param \Closure(T): (false|R) $map
+     * @return Iterator<R>
+     */
+    public function mapFilter(\Closure $map): self;
 }

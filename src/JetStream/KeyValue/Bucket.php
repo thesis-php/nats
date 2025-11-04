@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\KeyValue;
 
 use Amp\Cancellation;
-use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Internal\QueueIterator;
 use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
@@ -19,7 +17,6 @@ use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Time\TimeSpan;
-use function Amp\weakClosure;
 
 /**
  * @api
@@ -181,47 +178,36 @@ final readonly class Bucket
             filterSubjects: $keys,
         ));
 
-        /** @var Pipeline\Queue<Entry> $queue */
-        $queue = new Pipeline\Queue();
-
-        $sid = $this->nats->subscribe(
-            subject: $id,
-            handler: weakClosure(function (Delivery $delivery) use ($queue, $config): void {
-                $reply = $delivery->replyTo;
-                if ($reply === null) {
-                    return;
+        return $this->nats
+            ->subscribeIterator($id, cancellation: $cancellation)
+            ->mapFilter(function (Delivery $delivery) use ($config): false|Entry {
+                $replyTo = $delivery->replyTo;
+                if ($replyTo === null) {
+                    return false;
                 }
 
                 $key = substr($delivery->subject, \strlen($this->prefix));
                 if ($key === '') {
-                    return;
+                    return false;
                 }
 
                 $op = $delivery->message->headers?->get(Header\KvOperation::header());
 
-                if (!$config->ignoreDeletes || !\in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
-                    $metadata = JetStream\Metadata::parse($reply);
-
-                    $queue->push(new Entry(
-                        bucket: $this->name,
-                        key: $key,
-                        created: $metadata->timestamp,
-                        revision: max($metadata->streamSequence, 0),
-                        value: $delivery->message->payload,
-                        delta: $metadata->pending,
-                    ));
+                if ($config->ignoreDeletes && \in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
+                    return false;
                 }
-            }),
-            cancellation: $cancellation,
-        );
 
-        return new QueueIterator(
-            iterator: $queue->iterate(),
-            queue: $queue,
-            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
-                $this->nats->unsubscribe($sid, $cancellation);
-            },
-        );
+                $metadata = JetStream\Metadata::parse($replyTo);
+
+                return new Entry(
+                    bucket: $this->name,
+                    key: $key,
+                    created: $metadata->timestamp,
+                    revision: max($metadata->streamSequence, 0),
+                    value: $delivery->message->payload,
+                    delta: $metadata->pending,
+                );
+            });
     }
 
     /**

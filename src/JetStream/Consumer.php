@@ -8,7 +8,7 @@ use Amp\Cancellation;
 use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Internal\QueueIterator;
+use Thesis\Nats\Internal\PipelineIterator;
 use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\Router;
@@ -75,13 +75,9 @@ final class Consumer
 
         $this->subscribers[$sid] = $messageHandler;
 
-        return new QueueIterator(
-            iterator: $queue->iterate(),
-            queue: $queue,
-            unsubscribe: function (?Cancellation $cancellation = null) use ($sid): void {
-                $this->unsubscribe($sid, $cancellation);
-            },
-        );
+        return PipelineIterator::fromQueue($queue, function (?Cancellation $cancellation = null) use ($sid): void {
+            $this->unsubscribe($sid, $cancellation);
+        });
     }
 
     /**
