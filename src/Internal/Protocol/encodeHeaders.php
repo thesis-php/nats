@@ -20,10 +20,10 @@ function encodeHeaders(Headers $headers): string
         $buffer .= " {$status}";
         $headers = $headers->without(StatusCode::Header);
 
-        if ($headers->exists(StatusDescription::header())) {
-            $description = $headers->get(StatusDescription::header());
-            $buffer .= " {$description}";
-            $headers = $headers->without(StatusDescription::header());
+        if ($headers->exists(StatusDescription::Header)) {
+            $description = $headers->get(StatusDescription::Header);
+            $buffer .= " {$description->value}";
+            $headers = $headers->without(StatusDescription::Header);
         }
     }
 

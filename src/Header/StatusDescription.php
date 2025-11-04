@@ -4,18 +4,30 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Header;
 
+use Thesis\Nats\Description;
+use Thesis\Nats\Headers;
+use Thesis\Nats\OptionalHeaderKey;
+
 /**
  * @api
+ * @template-implements OptionalHeaderKey<Description>
  */
-final readonly class StatusDescription
+enum StatusDescription: string implements OptionalHeaderKey
 {
-    public const string HEADER = 'Nats-Status-Description';
+    case Header = 'Nats-Status-Description';
 
-    /**
-     * @return ScalarKey<non-empty-string>
-     */
-    public static function header(): ScalarKey
+    public function encode(mixed $value): string
     {
-        return ScalarKey::string(self::HEADER);
+        return $value->value;
+    }
+
+    public function decode(string $value): Description
+    {
+        return new Description($value ?: Description::OK);
+    }
+
+    public function default(Headers $headers): Description
+    {
+        return new Description(Description::OK);
     }
 }

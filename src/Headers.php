@@ -20,6 +20,16 @@ final class Headers implements
         private array $values = [],
     ) {}
 
+    public function statusCode(): Status
+    {
+        return $this->get(Header\StatusCode::Header);
+    }
+
+    public function statusDescription(): Description
+    {
+        return $this->get(Header\StatusDescription::Header);
+    }
+
     public function merge(self $other): self
     {
         $headers = clone $this;
