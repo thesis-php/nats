@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Protocol;
 
+use Thesis\Nats\Description;
 use Thesis\Nats\Header\ScalarKey;
 use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Status;
 
@@ -24,8 +26,15 @@ function decodeHeaders(string $encoded): Headers
 
     $lines = explode("\r\n", trim($encoded));
 
-    if (($status = parseStatus(array_shift($lines))) !== null) {
-        $headers = $headers->with(StatusCode::Header, Status::tryFrom((int) $status) ?? Status::Unknown);
+    $status = parseStatus(array_shift($lines));
+    if ($status !== null) {
+        [$code, $description] = $status;
+
+        $headers = $headers->with(StatusCode::Header, Status::tryFrom((int) $code) ?? Status::Unknown);
+
+        if ($description !== '') {
+            $headers = $headers->with(StatusDescription::Header, new Description(strtolower($description)));
+        }
     }
 
     foreach ($lines as $line) {
@@ -46,14 +55,17 @@ function decodeHeaders(string $encoded): Headers
 
 /**
  * @internal
- * @return ?numeric-string
+ * @return ?array{numeric-string, string}
  */
-function parseStatus(string $line): ?string
+function parseStatus(string $line): ?array
 {
     $chunks = explode(' ', $line);
     if (\count($chunks) > 1) {
-        /** @var numeric-string */
-        return $chunks[1];
+        /** @var numeric-string $code */
+        $code = $chunks[1];
+        $description = implode(' ', \array_slice($chunks, 2));
+
+        return [$code, $description];
     }
 
     return null;
