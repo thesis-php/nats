@@ -263,10 +263,10 @@ final readonly class Store
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->mapFilter(function (Delivery $delivery) use ($config): false|ObjectInfo {
+            ->filterMap(function (Delivery $delivery) use ($config): Iterator\Outcome {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {
-                    return false;
+                    return Iterator\Discard::It;
                 }
 
                 $info = $this->serializer->deserialize(
@@ -275,10 +275,10 @@ final readonly class Store
                 );
 
                 if ($config->ignoreDeletes && $info->deleted) {
-                    return false;
+                    return Iterator\Discard::It;
                 }
 
-                return $info;
+                return new Iterator\Emit($info);
             });
     }
 
