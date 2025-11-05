@@ -27,7 +27,7 @@ final readonly class PipelineIterator implements Iterator
         ?\Closure $unsubscribe = null,
     ): self {
         return new self(
-            pipeline: new Pipeline\Pipeline($queue->iterate()),
+            pipeline: $queue->pipe(),
             queue: $queue,
             unsubscribe: $unsubscribe,
         );
@@ -91,7 +91,7 @@ final readonly class PipelineIterator implements Iterator
         };
     }
 
-    public function filter(\Closure $filter): Iterator
+    public function filter(\Closure $filter): static
     {
         return new self(
             pipeline: $this->pipeline->filter($filter),
@@ -100,7 +100,7 @@ final readonly class PipelineIterator implements Iterator
         );
     }
 
-    public function map(\Closure $map): Iterator
+    public function map(\Closure $map): static
     {
         return new self(
             pipeline: $this->pipeline->map($map),
@@ -109,13 +109,29 @@ final readonly class PipelineIterator implements Iterator
         );
     }
 
-    public function mapFilter(\Closure $map): Iterator
+    /**
+     * @template R
+     * @param \Closure(T): Iterator\Outcome<R> $selector
+     * @return static<R>
+     */
+    public function select(\Closure $selector): static
     {
-        return new self(
-            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($map): array {
-                $value = $map($value);
+        $complete = $this->complete(...);
 
-                return $value !== false ? [$value] : [];
+        return new self(
+            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($selector, $complete): array {
+                $outcome = $selector($value);
+
+                if ($outcome instanceof Iterator\Emit) {
+                    /** @var array{R} */
+                    return [$outcome->value];
+                }
+
+                if ($outcome instanceof Iterator\Complete) {
+                    $complete();
+                }
+
+                return [];
             }),
             queue: $this->queue,
             unsubscribe: $this->unsubscribe,
@@ -124,6 +140,12 @@ final readonly class PipelineIterator implements Iterator
 
     public function getIterator(): \Traversable
     {
-        return $this->pipeline->getIterator();
+        try {
+            foreach ($this->pipeline as $value) {
+                yield $value;
+            }
+        } finally {
+            $this->complete();
+        }
     }
 }

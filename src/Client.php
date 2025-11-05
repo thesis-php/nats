@@ -101,6 +101,7 @@ final class Client
     /**
      * @param non-empty-string $subject
      * @param ?non-empty-string $queueGroup
+     * @param non-negative-int $bufferSize
      * @return Iterator<Delivery>
      * @throws NatsException
      */
@@ -108,9 +109,10 @@ final class Client
         string $subject,
         ?string $queueGroup = null,
         ?Cancellation $cancellation = null,
+        int $bufferSize = 0,
     ): Iterator {
         /** @var Pipeline\Queue<Delivery> $queue */
-        $queue = new Pipeline\Queue();
+        $queue = new Pipeline\Queue(bufferSize: $bufferSize);
 
         $subscriptionId = $this->subscribe(
             subject: $subject,

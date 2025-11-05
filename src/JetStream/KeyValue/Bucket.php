@@ -180,33 +180,33 @@ final readonly class Bucket
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->mapFilter(function (Delivery $delivery) use ($config): false|Entry {
+            ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
                 $replyTo = $delivery->replyTo;
                 if ($replyTo === null) {
-                    return false;
+                    return Iterator\Discard::It;
                 }
 
                 $key = substr($delivery->subject, \strlen($this->prefix));
                 if ($key === '') {
-                    return false;
+                    return Iterator\Discard::It;
                 }
 
                 $op = $delivery->message->headers?->get(Header\KvOperation::header());
 
                 if ($config->ignoreDeletes && \in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
-                    return false;
+                    return Iterator\Discard::It;
                 }
 
                 $metadata = JetStream\Metadata::parse($replyTo);
 
-                return new Entry(
+                return new Iterator\Emit(new Entry(
                     bucket: $this->name,
                     key: $key,
                     created: $metadata->timestamp,
                     revision: max($metadata->streamSequence, 0),
                     value: $delivery->message->payload,
                     delta: $metadata->pending,
-                );
+                ));
             });
     }
 

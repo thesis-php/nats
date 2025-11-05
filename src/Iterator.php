@@ -25,21 +25,21 @@ interface Iterator extends \IteratorAggregate
 
     /**
      * @param \Closure(T): bool $filter
-     * @return self<T>
+     * @return static<T>
      */
-    public function filter(\Closure $filter): self;
+    public function filter(\Closure $filter): static;
 
     /**
      * @template R
      * @param \Closure(T): R $map
-     * @return Iterator<R>
+     * @return static<R>
      */
-    public function map(\Closure $map): self;
+    public function map(\Closure $map): static;
 
     /**
      * @template R
-     * @param \Closure(T): (false|R) $map
-     * @return Iterator<R>
+     * @param \Closure(T): Iterator\Outcome<R> $selector
+     * @return static<R>
      */
-    public function mapFilter(\Closure $map): self;
+    public function select(\Closure $selector): static;
 }
