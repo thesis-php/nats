@@ -111,17 +111,16 @@ final readonly class PipelineIterator implements Iterator
 
     /**
      * @template R
-     * @param \Closure(T): Iterator\Outcome<R> $filterMap
+     * @param \Closure(T): Iterator\Outcome<R> $selector
      * @return static<R>
      */
-    public function filterMap(\Closure $filterMap): static
+    public function select(\Closure $selector): static
     {
         $complete = $this->complete(...);
-        $cancel = $this->cancel(...);
 
         return new self(
-            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($filterMap, $complete, $cancel): array {
-                $outcome = $filterMap($value);
+            pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($selector, $complete): array {
+                $outcome = $selector($value);
 
                 if ($outcome instanceof Iterator\Emit) {
                     /** @var array{R} */
@@ -130,8 +129,6 @@ final readonly class PipelineIterator implements Iterator
 
                 if ($outcome instanceof Iterator\Complete) {
                     $complete();
-                } elseif ($outcome instanceof Iterator\Cancel) {
-                    $cancel($outcome->e);
                 }
 
                 return [];
@@ -143,6 +140,12 @@ final readonly class PipelineIterator implements Iterator
 
     public function getIterator(): \Traversable
     {
-        return $this->pipeline->getIterator();
+        try {
+            foreach ($this->pipeline as $value) {
+                yield $value;
+            }
+        } finally {
+            $this->complete();
+        }
     }
 }

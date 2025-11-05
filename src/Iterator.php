@@ -38,8 +38,8 @@ interface Iterator extends \IteratorAggregate
 
     /**
      * @template R
-     * @param \Closure(T): Iterator\Outcome<R> $filterMap
+     * @param \Closure(T): Iterator\Outcome<R> $selector
      * @return static<R>
      */
-    public function filterMap(\Closure $filterMap): static;
+    public function select(\Closure $selector): static;
 }

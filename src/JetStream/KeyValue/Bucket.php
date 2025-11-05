@@ -180,7 +180,7 @@ final readonly class Bucket
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->filterMap(function (Delivery $delivery) use ($config): Iterator\Outcome {
+            ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
                 $replyTo = $delivery->replyTo;
                 if ($replyTo === null) {
                     return Iterator\Discard::It;

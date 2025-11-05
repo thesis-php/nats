@@ -263,7 +263,7 @@ final readonly class Store
 
         return $this->nats
             ->subscribeIterator($id, cancellation: $cancellation)
-            ->filterMap(function (Delivery $delivery) use ($config): Iterator\Outcome {
+            ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {
                     return Iterator\Discard::It;

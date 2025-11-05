@@ -34,7 +34,7 @@ final class PipelineIteratorTest extends TestCase
             $future->await();
         });
 
-        $iter = $iter->filterMap(static function (int $value): Iterator\Outcome {
+        $iter = $iter->select(static function (int $value): Iterator\Outcome {
             if ($value % 2 === 0) {
                 return new Iterator\Emit($value);
             }
@@ -77,9 +77,9 @@ final class PipelineIteratorTest extends TestCase
 
         $iter = $iter
             ->filter(static fn(int $value): bool => $value % 2 === 0)
-            ->filterMap(static function (int $value): Iterator\Outcome {
+            ->select(static function (int $value): Iterator\Outcome {
                 if ($value > 100) {
-                    return new Iterator\Cancel(new \RuntimeException('Iterator cancelled.'));
+                    throw new \RuntimeException('Iterator cancelled.');
                 }
 
                 return new Iterator\Emit($value);
