@@ -33,7 +33,7 @@ final class Delivery
         public readonly Message $message,
         public readonly string $subject,
         public readonly Metadata $metadata,
-        private readonly string $replyTo,
+        public readonly string $replyTo,
         private readonly Acks $acks,
     ) {}
 

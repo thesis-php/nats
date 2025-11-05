@@ -23,7 +23,7 @@ $stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
     subjects: ['events.*'],
 ));
 
-$consumer = $stream->createConsumer(new Nats\JetStream\Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Nats\JetStream\Api\AckPolicy::Explicit));
+$consumer = $stream->createPullConsumer(new Nats\JetStream\Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Nats\JetStream\Api\AckPolicy::Explicit));
 
 $deliveries = $consumer->consume(
     config: new ConsumeConfig(

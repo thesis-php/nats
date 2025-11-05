@@ -82,7 +82,7 @@ final readonly class CounterStore
             $subjects,
         );
 
-        $consumer = $this->stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+        $consumer = $this->stream->createOrUpdatePullConsumer(new Api\ConsumerConfig(
             deliverPolicy: DeliverPolicy::LastPerSubject,
             ackPolicy: AckPolicy::None,
             replayPolicy: ReplayPolicy::Instant,

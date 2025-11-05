@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\ObjectStore;
 
 use Amp\Cancellation;
-use Amp\Pipeline;
-use Thesis\Nats\Client;
-use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\ObjectIsInvalid;
 use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
@@ -16,6 +13,7 @@ use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
+use Thesis\Nats\JetStream\Delivery;
 use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
@@ -32,7 +30,6 @@ final readonly class Store
 
     public function __construct(
         public string $name,
-        private Client $nats,
         private JetStream $js,
         private JetStream\Stream $stream,
         private Encoder $json,
@@ -43,7 +40,7 @@ final readonly class Store
      * @param non-empty-string $name
      * @throws NatsException
      */
-    public function get(string $name): ?StoredObject
+    public function get(string $name, ?Cancellation $cancellation = null): ?StoredObject
     {
         $info = $this->info($name);
         if ($info === null || $info->deleted) {
@@ -72,55 +69,32 @@ final readonly class Store
                 ?->get($name);
         }
 
-        /** @var Pipeline\Queue<non-empty-string> $queue */
-        $queue = new Pipeline\Queue();
-        $object = new StoredObject($info, $queue->iterate());
-
         if ($info->size === 0) {
-            $queue->complete();
-
-            return $object;
+            return new StoredObject($info);
         }
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            deliverSubject: $id = Id\generateInboxId(),
-            filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
-        ));
+        /** @var Iterator<non-empty-string> $iterator */
+        $iterator = $this->stream
+            ->createOrUpdatePushConsumer(new JetStream\Api\ConsumerConfig(
+                deliverSubject: Id\generateInboxId(),
+                filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
+            ))
+            ->consume($cancellation)
+            ->select(static function (Delivery $delivery): Iterator\Outcome {
+                $metadata = JetStream\Metadata::parse($delivery->replyTo);
+                $payload = $delivery->message->payload;
 
-        $this->nats->subscribe($id, static function (
-            Delivery $delivery,
-            Client $nats,
-            string $sid,
-        ) use ($queue): void {
-            $reply = $delivery->replyTo;
-            if ($reply === null) {
-                $queue->error(new ObjectIsInvalid('No reply in Delivery.'));
-                $nats->unsubscribe($sid);
+                $op = (new Iterator\Composite())
+                    ->with($payload !== null && $payload !== '' ? new Iterator\Emit($payload) : Iterator\Discard::It);
 
-                return;
-            }
-
-            $metadata = JetStream\Metadata::parse($reply);
-
-            $payload = $delivery->message->payload;
-
-            if ($payload !== null && $payload !== '') {
-                try {
-                    $queue->push($payload);
-                } catch (Pipeline\DisposedException) { // Object was destroyed and ConcurrentIterator::__destruct was called.
-                    $nats->unsubscribe($sid);
-
-                    return;
+                if ($metadata->pending === 0) {
+                    $op = $op->with(Iterator\Complete::It);
                 }
-            }
 
-            if ($metadata->pending === 0) {
-                $queue->complete();
-                $nats->unsubscribe($sid);
-            }
-        });
+                return $op;
+            });
 
-        return $object;
+        return new StoredObject($info, $iterator);
     }
 
     /**
@@ -254,15 +228,14 @@ final readonly class Store
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
     ): Iterator {
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            description: 'object store consumer',
-            deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
-            deliverSubject: $id = Id\generateInboxId(),
-            filterSubject: "\$O.{$this->name}.M.>",
-        ));
-
-        return $this->nats
-            ->subscribeIterator($id, cancellation: $cancellation)
+        return $this->stream
+            ->createPushConsumer(new JetStream\Api\ConsumerConfig(
+                description: 'object store consumer',
+                deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
+                deliverSubject: Id\generateInboxId(),
+                filterSubject: "\$O.{$this->name}.M.>",
+            ))
+            ->consume($cancellation)
             ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {

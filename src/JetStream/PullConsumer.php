@@ -18,7 +18,7 @@ use Thesis\Nats\NatsException;
 /**
  * @api
  */
-final class Consumer
+final class PullConsumer
 {
     /** @var array<non-empty-string|int, Internal\PullMessageHandler> */
     private array $subscribers = [];

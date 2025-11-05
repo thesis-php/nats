@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\KeyValue;
 
 use Amp\Cancellation;
-use Thesis\Nats\Client;
-use Thesis\Nats\Delivery;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
@@ -14,6 +12,7 @@ use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
+use Thesis\Nats\JetStream\Delivery;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Time\TimeSpan;
@@ -32,7 +31,6 @@ final readonly class Bucket
      */
     public function __construct(
         public string $name,
-        private Client $nats,
         private JetStream $js,
         private JetStream\Stream $stream,
         private string $prefix,
@@ -169,23 +167,17 @@ final readonly class Bucket
             $keys !== [] ? $keys : [self::ALL_KEYS],
         );
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            description: 'kv watch consumer',
-            deliverPolicy: DeliverPolicy::New,
-            deliverSubject: $id = Id\generateInboxId(),
-            replayPolicy: ReplayPolicy::Instant,
-            headersOnly: $config->headersOnly,
-            filterSubjects: $keys,
-        ));
-
-        return $this->nats
-            ->subscribeIterator($id, cancellation: $cancellation)
+        return $this->stream
+            ->createOrUpdatePushConsumer(new JetStream\Api\ConsumerConfig(
+                description: 'kv watch consumer',
+                deliverPolicy: DeliverPolicy::New,
+                deliverSubject: Id\generateInboxId(),
+                replayPolicy: ReplayPolicy::Instant,
+                headersOnly: $config->headersOnly,
+                filterSubjects: $keys,
+            ))
+            ->consume($cancellation)
             ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
-                $replyTo = $delivery->replyTo;
-                if ($replyTo === null) {
-                    return Iterator\Discard::It;
-                }
-
                 $key = substr($delivery->subject, \strlen($this->prefix));
                 if ($key === '') {
                     return Iterator\Discard::It;
@@ -197,7 +189,7 @@ final readonly class Bucket
                     return Iterator\Discard::It;
                 }
 
-                $metadata = JetStream\Metadata::parse($replyTo);
+                $metadata = JetStream\Metadata::parse($delivery->replyTo);
 
                 return new Iterator\Emit(new Entry(
                     bucket: $this->name,

@@ -122,16 +122,22 @@ final readonly class PipelineIterator implements Iterator
             pipeline: $this->pipeline->flatMap(static function (mixed $value) use ($selector, $complete): array {
                 $outcome = $selector($value);
 
-                if ($outcome instanceof Iterator\Emit) {
-                    /** @var array{R} */
-                    return [$outcome->value];
+                $values = [];
+
+                if (!$outcome instanceof Iterator\Composite) {
+                    $outcome = [$outcome];
                 }
 
-                if ($outcome instanceof Iterator\Complete) {
-                    $complete();
+                foreach ($outcome as $op) {
+                    if ($op instanceof Iterator\Emit) {
+                        $values[] = $op->value;
+                    } elseif ($op instanceof Iterator\Complete) {
+                        $complete();
+                    }
                 }
 
-                return [];
+                /** @var list<R> */
+                return $values;
             }),
             queue: $this->queue,
             unsubscribe: $this->unsubscribe,

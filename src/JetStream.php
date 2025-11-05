@@ -191,13 +191,72 @@ final readonly class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @param non-empty-string $consumer
      * @throws NatsException
      */
-    public function createConsumer(
+    public function pushConsumer(string $stream, string $consumer): JetStream\PushConsumer
+    {
+        return $this->setupPushConsumer($this->consumerInfo($stream, $consumer));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function createPushConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): JetStream\Consumer {
-        return $this->setupConsumer(
+    ): JetStream\PushConsumer {
+        return $this->setupPushConsumer(
+            $this->upsertPushConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE),
+        );
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function updatePushConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): JetStream\PushConsumer {
+        return $this->setupPushConsumer(
+            $this->upsertPushConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_UPDATE),
+        );
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function createOrUpdatePushConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): JetStream\PushConsumer {
+        return $this->setupPushConsumer(
+            $this->upsertPushConsumer($stream, $config),
+        );
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function pullConsumer(string $stream, string $consumer): JetStream\PullConsumer
+    {
+        return $this->setupPullConsumer($this->consumerInfo($stream, $consumer));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @throws NatsException
+     */
+    public function createPullConsumer(
+        string $stream,
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+    ): JetStream\PullConsumer {
+        return $this->setupPullConsumer(
             $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE),
         );
     }
@@ -206,22 +265,24 @@ final readonly class JetStream
      * @param non-empty-string $stream
      * @throws NatsException
      */
-    public function updateConsumer(
+    public function updatePullConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): Api\ConsumerInfo {
-        return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_UPDATE);
+    ): JetStream\PullConsumer {
+        return $this->setupPullConsumer(
+            $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_UPDATE),
+        );
     }
 
     /**
      * @param non-empty-string $stream
      * @throws NatsException
      */
-    public function createOrUpdateConsumer(
+    public function createOrUpdatePullConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): JetStream\Consumer {
-        return $this->setupConsumer(
+    ): JetStream\PullConsumer {
+        return $this->setupPullConsumer(
             $this->upsertConsumer($stream, $config),
         );
     }
@@ -375,7 +436,6 @@ final readonly class JetStream
 
         return new KeyValue\Bucket(
             name: $config->bucket,
-            nats: $this->nats,
             js: $this,
             stream: $stream,
             prefix: "\$KV.{$config->bucket}.",
@@ -405,7 +465,6 @@ final readonly class JetStream
         if ($stream !== null) {
             return new KeyValue\Bucket(
                 name: $bucket,
-                nats: $this->nats,
                 js: $this,
                 stream: $stream,
                 prefix: "\$KV.{$bucket}.",
@@ -476,7 +535,6 @@ final readonly class JetStream
 
         return new ObjectStore\Store(
             name: $config->store,
-            nats: $this->nats,
             js: $this,
             stream: $stream,
             json: $this->encoder,
@@ -506,7 +564,6 @@ final readonly class JetStream
         if ($stream !== null) {
             return new ObjectStore\Store(
                 name: $store,
-                nats: $this->nats,
                 js: $this,
                 stream: $stream,
                 json: $this->encoder,
@@ -625,6 +682,31 @@ final readonly class JetStream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
      */
+    private function upsertPushConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): Api\ConsumerInfo
+    {
+        if ($config->deliverSubject === null) {
+            throw new \LogicException('For push consumers deliver subject is required.');
+        }
+
+        $consumerName = $config->name ?? $config->durableName;
+
+        if ($consumerName === null || $consumerName === '') {
+            $consumerName = Id\generateUniqueId(10);
+        }
+
+        return $this->request(new Api\CreateConsumerRequest(
+            stream: $stream,
+            consumer: $consumerName,
+            config: $config,
+            action: $action,
+        ));
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param ?Api\CreateConsumerRequest::ACTION_* $action
+     * @throws NatsException
+     */
     private function upsertConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): Api\ConsumerInfo
     {
         $consumerName = $config->name ?? $config->durableName;
@@ -641,9 +723,9 @@ final readonly class JetStream
         ));
     }
 
-    private function setupConsumer(Api\ConsumerInfo $info): JetStream\Consumer
+    private function setupPullConsumer(Api\ConsumerInfo $info): JetStream\PullConsumer
     {
-        return new JetStream\Consumer(
+        return new JetStream\PullConsumer(
             info: $info,
             name: $info->name,
             stream: $info->streamName,
@@ -651,6 +733,17 @@ final readonly class JetStream
             nats: $this->nats,
             router: $this->router,
             json: $this->encoder,
+        );
+    }
+
+    private function setupPushConsumer(Api\ConsumerInfo $info): JetStream\PushConsumer
+    {
+        return new JetStream\PushConsumer(
+            info: $info,
+            name: $info->name,
+            stream: $info->streamName,
+            nats: $this->nats,
+            deliverySubject: $info->config->deliverSubject ?? throw new \LogicException('For push consumers deliver subject is required.'),
         );
     }
 

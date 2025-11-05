@@ -215,7 +215,7 @@ final class JetStreamTest extends NatsTestCase
         $js = $client->jetStream();
 
         self::expectException(StreamNotFound::class);
-        $js->createConsumer(generateUniqueId(10), new ConsumerConfig(durableName: generateUniqueId(10)));
+        $js->createPullConsumer(generateUniqueId(10), new ConsumerConfig(durableName: generateUniqueId(10)));
     }
 
     public function testCreateConsumer(): void
@@ -227,7 +227,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
         self::assertSame($consumerName, $consumer->info->name);
         self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
@@ -247,14 +247,11 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $js->createPullConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedInfo = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $consumer = $js->updatePullConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test PullConsumer', ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumer->info->config->durableName, $updatedInfo->config->durableName);
-        self::assertSame($consumer->info->config->ackPolicy, $updatedInfo->config->ackPolicy);
-        self::assertNull($consumer->info->config->description);
-        self::assertSame('Test Consumer', $updatedInfo->config->description);
+        self::assertSame('Test PullConsumer', $consumer->actualInfo()->config->description);
 
         $js->deleteStream($stream);
     }
@@ -270,7 +267,7 @@ final class JetStreamTest extends NatsTestCase
 
         try {
             self::expectException(ConsumerDoesNotExist::class);
-            $js->updateConsumer($stream, new ConsumerConfig(durableName: generateUniqueId(10)));
+            $js->updatePullConsumer($stream, new ConsumerConfig(durableName: generateUniqueId(10)));
         } finally {
             $js->deleteStream($stream);
         }
@@ -285,7 +282,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createOrUpdatePullConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
         self::assertSame($consumerName, $consumer->info->name);
         self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
@@ -303,14 +300,14 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $createdConsumer = $stream->createConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $createdConsumer = $stream->createPullConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedConsumer = $stream->createOrUpdateConsumer(new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $updatedConsumer = $stream->createOrUpdatePullConsumer(new ConsumerConfig(durableName: $consumerName, description: 'Test PullConsumer', ackPolicy: AckPolicy::Explicit));
 
         self::assertSame($createdConsumer->info->config->durableName, $updatedConsumer->info->config->durableName);
         self::assertSame($createdConsumer->info->config->ackPolicy, $updatedConsumer->info->config->ackPolicy);
         self::assertNull($createdConsumer->info->config->description);
-        self::assertSame('Test Consumer', $updatedConsumer->info->config->description);
+        self::assertSame('Test PullConsumer', $updatedConsumer->info->config->description);
 
         $stream->delete();
     }
@@ -324,7 +321,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
         $consumerInfo = $consumer->actualInfo();
 
@@ -340,7 +337,7 @@ final class JetStreamTest extends NatsTestCase
 
         $stream = $js->createStream(new StreamConfig(generateUniqueId(10)));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
 
         self::assertTrue($consumer->delete()->success);
 
@@ -359,7 +356,7 @@ final class JetStreamTest extends NatsTestCase
 
         $stream = $js->createStream(new StreamConfig(generateUniqueId(10)));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
 
         $until = (new \DateTimeImmutable())->add(new \DateInterval('P1D'));
 
@@ -393,12 +390,12 @@ final class JetStreamTest extends NatsTestCase
         $consumers = [$consumer1, $consumer2];
         sort($consumers);
 
-        $js->createConsumer($stream, new ConsumerConfig(
+        $js->createPullConsumer($stream, new ConsumerConfig(
             durableName: $consumer1,
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        $js->createConsumer($stream, new ConsumerConfig(
+        $js->createPullConsumer($stream, new ConsumerConfig(
             durableName: $consumer2,
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -427,12 +424,12 @@ final class JetStreamTest extends NatsTestCase
         $consumers = [$consumer1, $consumer2];
         sort($consumers);
 
-        $js->createConsumer($stream, new ConsumerConfig(
+        $js->createPullConsumer($stream, new ConsumerConfig(
             durableName: $consumer1,
             ackPolicy: AckPolicy::Explicit,
         ));
 
-        $js->createConsumer($stream, new ConsumerConfig(
+        $js->createPullConsumer($stream, new ConsumerConfig(
             durableName: $consumer2,
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -465,7 +462,7 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $stream->createConsumer(new ConsumerConfig(
+        $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -493,7 +490,7 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $stream->createConsumer(new ConsumerConfig(
+        $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -521,7 +518,7 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $stream->createConsumer(new ConsumerConfig(
+        $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -549,7 +546,7 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $stream->createConsumer(new ConsumerConfig(
+        $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -660,7 +657,7 @@ final class JetStreamTest extends NatsTestCase
             self::assertSame($i + 1, $response->seq);
         }
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
 
         self::assertSame(5, $consumer->actualInfo()->numPending);
 
@@ -805,7 +802,7 @@ final class JetStreamTest extends NatsTestCase
                 ->with(Header\ScheduleTarget::header(), 'recurrents'),
         ));
 
-        $consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(
+        $consumer = $stream->createOrUpdatePullConsumer(new ConsumerConfig(
             durableName: 'RecurrentsConsumer',
             deliverPolicy: DeliverPolicy::New,
             ackPolicy: AckPolicy::None,
@@ -840,7 +837,7 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
@@ -876,7 +873,7 @@ final class JetStreamTest extends NatsTestCase
 
         $stream = $js->createStream(new StreamConfig($streamName));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(
+        $consumer = $stream->createPullConsumer(new ConsumerConfig(
             durableName: generateUniqueId(10),
             ackPolicy: AckPolicy::Explicit,
         ));
