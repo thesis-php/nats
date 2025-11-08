@@ -82,30 +82,16 @@ final readonly class SubscriptionHandler
                     $queue->complete();
 
                     if ($op instanceof Drain) {
-                        // We process messages concurrently to avoid blocking,
-                        // but confine the processing to a single coroutine to maintain message ordering.
-                        EventLoop::queue(static function () use (
-                            $mq,
-                            $handler,
-                            $subscription,
-                            $completeSubscriptionMarker,
-                            $unsubscribe,
-                        ): void {
-                            foreach ($mq as $delivery) {
-                                try {
-                                    $handler($delivery, $subscription);
-                                } catch (\Throwable $e) {
-                                    $unsubscribe();
-                                    $completeSubscriptionMarker->error($e);
+                        foreach ($mq as $delivery) {
+                            try {
+                                $handler($delivery, $subscription);
+                            } catch (\Throwable $e) {
+                                $unsubscribe();
+                                $completeSubscriptionMarker->error($e);
 
-                                    return;
-                                }
+                                return;
                             }
-
-                            $completeSubscriptionMarker->complete();
-                        });
-
-                        return;
+                        }
                     }
 
                     $completeSubscriptionMarker->complete();
