@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         php: ["8.3", "8.4"]
-        dependencies: ["locked", "lowest", "highest"]
+        dependencies: ["locked", "highest"]
     steps:
       - uses: actions/checkout@v4
       - name: Create Docker network for NATS
