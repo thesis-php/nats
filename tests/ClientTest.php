@@ -41,7 +41,7 @@ final class ClientTest extends NatsTestCase
             self::assertEquals('events.happens', $delivery->subject);
             self::assertEquals('ok', $delivery->message->payload);
 
-            $deliveries->complete();
+            $deliveries->stop();
         }
     }
 
@@ -66,7 +66,7 @@ final class ClientTest extends NatsTestCase
 
         $id = Id\generateUniqueId();
 
-        $client->unsubscribe($client->subscribe("{$id}.*", static fn() => null));
+        $client->subscribe("{$id}.*", static fn() => null)->stop();
 
         self::expectException(RequestHasNoResponders::class);
         $client->request("{$id}.happens", new Message('Are you ok?'));

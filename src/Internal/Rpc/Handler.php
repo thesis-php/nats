@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Rpc;
 
+use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Thesis\Nats\Client;
@@ -13,6 +14,7 @@ use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
+use Thesis\Nats\Subscription;
 
 /**
  * @internal
@@ -25,8 +27,7 @@ final class Handler
     /** @var non-empty-string */
     private readonly string $inboxId;
 
-    /** @var ?non-empty-string */
-    private ?string $subscriptionId = null;
+    private ?Subscription $subscription = null;
 
     public function __construct(private readonly Client $client)
     {
@@ -36,7 +37,7 @@ final class Handler
 
     public function setup(): void
     {
-        $this->subscriptionId = $this->client->subscribe(
+        $this->subscription = $this->client->subscribe(
             "{$this->inboxId}*",
             function (Delivery $delivery): void {
                 $replyTo = ReplyTo::parse($this->inboxId, $delivery->subject);
@@ -50,16 +51,12 @@ final class Handler
         );
     }
 
-    public function shutdown(): void
+    public function shutdown(?Cancellation $cancellation = null): void
     {
-        if ($this->subscriptionId === null) {
-            return;
-        }
-
         try {
-            $this->client->unsubscribe($this->subscriptionId);
+            $this->subscription?->stop($cancellation);
         } finally {
-            $this->subscriptionId = null;
+            $this->subscription = null;
             $this->futures = [];
         }
     }

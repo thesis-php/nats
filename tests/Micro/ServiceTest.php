@@ -211,7 +211,7 @@ final class ServiceTest extends NatsTestCase
             $replies[] = $reply->message->payload;
 
             if (++$count >= 5) {
-                $iterator->complete();
+                $iterator->stop();
             }
         }
 

@@ -4,29 +4,36 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
-use Amp\Pipeline\ConcurrentIterator;
+use Amp\ByteStream\ReadableBuffer;
+use Amp\ByteStream\ReadableStream;
 
 /**
  * @api
- * @template-implements \IteratorAggregate<non-empty-string>
+ * @template-implements \IteratorAggregate<string>
  */
-final readonly class StoredObject implements \IteratorAggregate
+final readonly class StoredObject implements
+    \IteratorAggregate,
+    \Stringable
 {
-    /**
-     * @param ConcurrentIterator<non-empty-string> $iterator
-     */
     public function __construct(
         public ObjectInfo $info,
-        private ConcurrentIterator $iterator,
+        public ReadableStream $stream = new ReadableBuffer(),
     ) {}
 
-    public function __toString(): string
+    public function buffer(): string
     {
-        return implode(separator: '', array: [...$this]);
+        return implode('', [...$this]);
     }
 
     public function getIterator(): \Traversable
     {
-        return $this->iterator->getIterator();
+        while (($chunk = $this->stream->read()) !== null) {
+            yield $chunk;
+        }
+    }
+
+    public function __toString(): string
+    {
+        return $this->buffer();
     }
 }

@@ -7,7 +7,6 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Time\TimeSpan;
-use function Amp\async;
 use function Amp\trapSignal;
 
 $client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
@@ -25,19 +24,16 @@ $stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
 
 $consumer = $stream->createConsumer(new Nats\JetStream\Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Nats\JetStream\Api\AckPolicy::Explicit));
 
-$deliveries = $consumer->consume(
+$subscription = $consumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        dump($delivery->message->payload);
+        $delivery->ack();
+    },
     config: new ConsumeConfig(
         batch: 2,
         heartbeat: TimeSpan::fromSeconds(5),
     ),
 );
-
-$future = async(static function () use ($deliveries): void {
-    foreach ($deliveries as $delivery) {
-        dump($delivery->message->payload);
-        $delivery->ack();
-    }
-});
 
 for ($i = 0; $i < 10; ++$i) {
     $response = $jetstream->publish(
@@ -54,7 +50,7 @@ for ($i = 0; $i < 10; ++$i) {
 
 trapSignal([\SIGINT, \SIGTERM]);
 
-$deliveries->complete();
-$future->await();
+$subscription->stop();
+$subscription->wait();
 
 $client->disconnect();

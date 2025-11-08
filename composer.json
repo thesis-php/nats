@@ -21,6 +21,7 @@
         "php": "^8.3",
         "ext-filter": "*",
         "amphp/amp": "^3.1",
+        "amphp/byte-stream": "^2.1",
         "amphp/parser": "^1.1",
         "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.3",
@@ -45,7 +46,8 @@
             "src/Internal/Id/generateInboxId.php",
             "src/Internal/Id/generateUniqueId.php",
             "src/Internal/Protocol/encodeHeaders.php",
-            "src/Internal/Protocol/decodeHeaders.php"
+            "src/Internal/Protocol/decodeHeaders.php",
+            "src/Internal/Iter/push.php"
         ]
     },
     "autoload-dev": {
@@ -84,7 +86,7 @@
         "fixcs": "tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --diff --verbose",
         "infection": "tools/infection/vendor/bin/infection --show-mutations",
         "normalize": "@composer bin composer-normalize normalize --diff ../../composer.json",
-        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze",
+        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze --memory-limit=512M",
         "pre-command-run": "mkdir -p var",
         "rector": "tools/rector/vendor/bin/rector process",
         "test": "phpunit"

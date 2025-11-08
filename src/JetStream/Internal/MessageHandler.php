@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Internal;
 
-use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Header\StatusCode;
@@ -13,6 +12,7 @@ use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Status;
+use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -27,12 +27,12 @@ final readonly class MessageHandler
     private PullSupervisor $pulls;
 
     /**
-     * @param Pipeline\Queue<JetStreamDelivery> $queue
+     * @param callable(JetStreamDelivery, Subscription): void $handler
      * @param non-empty-string $subject
      * @param non-empty-string $replyTo
      */
     public function __construct(
-        private Pipeline\Queue $queue,
+        private mixed $handler,
         Client $nats,
         Encoder $json,
         private ConsumeConfig $config,
@@ -56,9 +56,10 @@ final readonly class MessageHandler
         }
     }
 
-    public function __invoke(NatsDelivery $delivery): void
+    public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
     {
         if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoMessages && $this->config->completeOnNoMessages) {
+            $subscription->stop();
             $this->stop();
 
             return;
@@ -71,7 +72,7 @@ final readonly class MessageHandler
         }
 
         if ($replyTo !== null) {
-            $this->queue->push(
+            ($this->handler)(
                 new JetStreamDelivery(
                     message: $delivery->message,
                     subject: $delivery->subject,
@@ -79,6 +80,7 @@ final readonly class MessageHandler
                     replyTo: $replyTo,
                     acks: $this->acks,
                 ),
+                $subscription,
             );
 
             $this->heartbeats->reset();
@@ -88,10 +90,6 @@ final readonly class MessageHandler
 
     public function stop(): void
     {
-        if (!$this->queue->isComplete()) {
-            $this->queue->complete();
-        }
-
         $this->pulls->stop();
         $this->heartbeats->stop();
     }

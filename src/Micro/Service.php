@@ -9,6 +9,7 @@ use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Subscription;
 
 /**
  * @api
@@ -19,10 +20,10 @@ final class Service
 
     private readonly \DateTimeImmutable $started;
 
-    /** @var array<non-empty-string, non-empty-string> */
+    /** @var array<non-empty-string, Subscription> */
     private array $verbs = [];
 
-    /** @var array<non-empty-string, Internal\EndpointHandler> */
+    /** @var list<Internal\SubscribedEndpoint> */
     private array $endpoints = [];
 
     /** @var array<non-empty-string, Group> */
@@ -76,14 +77,14 @@ final class Service
             encoder: $this->encoder,
         );
 
-        $sid = $this->nc->subscribe(
+        $subscription = $this->nc->subscribe(
             $endpointHandler->info->subject,
             $endpointHandler->handle(...),
             $endpointHandler->info->queueGroup,
             $cancellation,
         );
 
-        $this->endpoints[$sid] = $endpointHandler;
+        $this->endpoints[] = new Internal\SubscribedEndpoint($endpointHandler, $subscription);
 
         return $this;
     }
@@ -94,8 +95,8 @@ final class Service
             identity: $this->identity,
             description: $this->config->description,
             endpoints: array_map(
-                static fn(Internal\EndpointHandler $endpoint): EndpointInfo => $endpoint->info,
-                array_values($this->endpoints),
+                static fn(Internal\SubscribedEndpoint $it): EndpointInfo => $it->endpoint->info,
+                $this->endpoints,
             ),
         );
     }
@@ -106,8 +107,8 @@ final class Service
             identity: $this->identity,
             started: $this->started,
             endpoints: array_map(
-                static fn(Internal\EndpointHandler $endpoint): EndpointStats => $endpoint->stats(),
-                array_values($this->endpoints),
+                static fn(Internal\SubscribedEndpoint $it): EndpointStats => $it->endpoint->stats(),
+                $this->endpoints,
             ),
         );
     }
@@ -121,8 +122,8 @@ final class Service
 
     public function reset(): void
     {
-        foreach ($this->endpoints as $endpoint) {
-            $endpoint->reset();
+        foreach ($this->endpoints as $it) {
+            $it->endpoint->reset();
         }
     }
 
@@ -174,8 +175,8 @@ final class Service
         $endpoints = $this->endpoints;
         $this->endpoints = [];
 
-        foreach (array_keys($endpoints) as $sid) {
-            $this->nc->unsubscribe((string) $sid, $cancellation);
+        foreach ($endpoints as $it) {
+            $it->subscription->stop($cancellation);
         }
     }
 
@@ -184,8 +185,8 @@ final class Service
         $verbs = $this->verbs;
         $this->verbs = [];
 
-        foreach ($verbs as $sid) {
-            $this->nc->unsubscribe($sid, $cancellation);
+        foreach ($verbs as $sub) {
+            $sub->stop($cancellation);
         }
     }
 

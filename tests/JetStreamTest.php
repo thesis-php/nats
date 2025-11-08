@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\Future;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
@@ -29,6 +30,7 @@ use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\StreamConfig;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Time\TimeSpan;
 use function Amp\async;
 use function Amp\delay;
@@ -667,15 +669,17 @@ final class JetStreamTest extends NatsTestCase
         $counter = 0;
         $messages = [];
 
-        $deliveries = $consumer->consume();
-
-        foreach ($deliveries as $delivery) {
+        $subscription = $consumer->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use (
+            &$messages,
+            &$counter,
+        ): void {
             $messages[] = $delivery->message->payload;
             if (++$counter === 5) {
-                $deliveries->complete();
+                $subscription->stop();
             }
-        }
+        });
 
+        $subscription->wait();
         self::assertSame($publishedMessages, $messages);
         self::assertSame(0, $consumer->actualInfo()->numPending);
 
@@ -813,16 +817,16 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $ts = now();
-        $deliveries = $consumer->consume();
-
-        foreach ($deliveries as $delivery) {
+        $subscription = $consumer->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use ($ts): void {
             self::assertTrue(now() - $ts > 0.5);
             self::assertSame('{"id":1}', $delivery->message->payload);
             self::assertNotNull($delivery->message->headers);
             self::assertSame('scheduler.recurrents.1', $delivery->message->headers->get(Scheduler::header()));
             self::assertSame('purge', $delivery->message->headers->get(ScheduleNext::header()));
-            $deliveries->complete();
-        }
+            $subscription->stop();
+        });
+
+        $subscription->wait();
 
         $stream->delete();
     }
@@ -846,20 +850,21 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $completedCount = 0;
-        $futures = [];
+        $subscriptions = [];
 
         for ($i = 0; $i < 3; ++$i) {
-            $futures[] = async(static function () use ($consumer, &$completedCount): void {
-                foreach ($consumer->consume() as $_);
-                ++$completedCount;
-            });
+            $subscriptions[] = $consumer
+                ->consume(static fn() => null)
+                ->onComplete(static function () use (&$completedCount): void {
+                    ++$completedCount;
+                });
         }
 
         delay(0.01);
 
         $consumer->unsubscribeAll();
 
-        awaitAll($futures);
+        awaitAll(array_map(static fn(Subscription $subscription): Future => async($subscription->wait(...)), $subscriptions));
 
         self::assertSame(3, $completedCount, 'All iterators should complete after unsubscribeAll');
 
