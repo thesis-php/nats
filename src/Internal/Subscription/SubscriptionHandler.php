@@ -101,7 +101,11 @@ final readonly class SubscriptionHandler
                                     return;
                                 }
                             }
+
+                            $completeSubscriptionMarker->complete();
                         });
+
+                        return;
                     }
 
                     $completeSubscriptionMarker->complete();
