@@ -8,7 +8,6 @@ use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Internal\Id;
-use function Amp\async;
 use function Amp\delay;
 
 #[CoversClass(Client::class)]

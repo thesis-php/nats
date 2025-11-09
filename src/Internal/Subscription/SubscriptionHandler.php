@@ -63,7 +63,7 @@ final readonly class SubscriptionHandler
             $unsubscribe,
         ): void {
             while (!$queue->isComplete()) {
-                /** @var Future<Emit<Delivery>> $pop */
+                /** @var Future<Stop|Emit<Delivery>> $pop */
                 $pop = async($mq->pop(...));
 
                 $op = Future\awaitFirst([
@@ -89,7 +89,12 @@ final readonly class SubscriptionHandler
                         $messages = [...$mq];
 
                         if ($pop->isComplete()) {
-                            $messages = [$pop->await()->value, ...$messages];
+                            $op = $pop->await();
+
+                            // When complete a subscription, even if the complete future resolves first,
+                            // it is possible for a pop future to resolve simultaneously if both events are triggered at the same time.
+                            // Consequently, the drain logic must also process any such received message.
+                            $messages = [...($op instanceof Emit ? [$op->value] : []), ...$messages];
                         }
 
                         foreach ($messages as $delivery) {
