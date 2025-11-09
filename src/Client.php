@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\Cancellation;
+use Amp\Future;
 use Amp\Pipeline;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
@@ -17,6 +18,7 @@ use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 use Thesis\Sync;
+use function Amp\async;
 
 /**
  * @api
@@ -30,8 +32,8 @@ final class Client
     /** @var ?Sync\Once<Connection\Connection> */
     private ?Sync\Once $connection = null;
 
-    /** @var ?Sync\Once<Rpc\Handler> */
-    private ?Sync\Once $rpc = null;
+    /** @var ?Future<Rpc\Handler> */
+    private ?Future $rpc = null;
 
     /** @var array<non-empty-string, callable(Delivery): bool> */
     private array $subscribers = [];
@@ -168,7 +170,7 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $this->rpc ??= new Sync\Once(function (): Rpc\Handler {
+        $this->rpc ??= async(function (): Rpc\Handler {
             $handler = new Rpc\Handler($this);
             $handler->setup();
 
