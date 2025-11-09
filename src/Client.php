@@ -17,7 +17,6 @@ use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 use Thesis\Sync;
-use function Amp\weakClosure;
 
 /**
  * @api
@@ -252,12 +251,12 @@ final class Client
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $this->connection ??= new Sync\Once(weakClosure(function (): Connection\Connection {
+        $this->connection ??= new Sync\Once(function (): Connection\Connection {
             $connection = $this->connectionFactory->connect();
             $connection->hooks()->onMessage($this->invokeSubscriber(...));
 
             return $connection;
-        }));
+        });
 
         return $this->connection->await($cancellation);
     }
