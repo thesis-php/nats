@@ -81,7 +81,7 @@ final class Service
             $endpointHandler->info->subject,
             $endpointHandler->handle(...),
             $endpointHandler->info->queueGroup,
-            $cancellation,
+            cancellation: $cancellation,
         );
 
         $this->endpoints[] = new Internal\SubscribedEndpoint($endpointHandler, $subscription);

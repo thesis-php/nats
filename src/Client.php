@@ -22,6 +22,8 @@ use function Amp\async;
 
 /**
  * @api
+ * @phpstan-type MessageHandler = callable(Delivery, Subscription): void
+ * @phpstan-type Subscribe = \Closure(non-empty-string, MessageHandler, ?non-empty-string=, positive-int=): Subscription
  */
 final class Client
 {
@@ -141,8 +143,8 @@ final class Client
         string $subject,
         callable $handler,
         ?string $queueGroup = null,
-        ?Cancellation $cancellation = null,
         int $bufferSize = 1_000,
+        ?Cancellation $cancellation = null,
     ): Subscription {
         $subscriptionId = $this->subscriptionIdGenerator->nextId();
         $unsubscribe = $this->unsubscribe(...);
@@ -170,16 +172,17 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $this->rpc ??= async(function (): Rpc\Handler {
-            $handler = new Rpc\Handler($this);
-            $handler->setup();
+        $subscribe = $this->subscribe(...);
+        $this->rpc ??= async(static function () use ($subscribe): Rpc\Handler {
+            $handler = new Rpc\Handler();
+            $handler->setup($subscribe);
 
             return $handler;
         });
 
         return $this->rpc
             ->await($cancellation)
-            ->request($subject, $message)
+            ->request($subject, $message, $this)
             ->await($cancellation);
     }
 
