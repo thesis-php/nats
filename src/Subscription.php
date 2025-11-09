@@ -51,7 +51,7 @@ final class Subscription
         $this->complete(Drain::It, $cancellation);
     }
 
-    public function wait(?Cancellation $cancellation = null): void
+    public function suspend(?Cancellation $cancellation = null): void
     {
         $this->completeMarker->await($cancellation);
     }

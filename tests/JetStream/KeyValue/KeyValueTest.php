@@ -190,7 +190,7 @@ final class KeyValueTest extends NatsTestCase
         $kv->put('a', 'b');
         $kv->put('x', 'w');
 
-        $subscription->wait();
+        $subscription->suspend();
 
         self::assertSame(
             [
@@ -232,7 +232,7 @@ final class KeyValueTest extends NatsTestCase
         $kv->put('a', 'b');
         $kv->put('x', 'w');
 
-        $subscription->wait();
+        $subscription->suspend();
 
         self::assertSame(
             [
@@ -272,7 +272,7 @@ final class KeyValueTest extends NatsTestCase
         $kv->put('a', 'b');
         $kv->delete('x');
 
-        $subscription->wait();
+        $subscription->suspend();
 
         self::assertSame(
             [
@@ -307,7 +307,7 @@ final class KeyValueTest extends NatsTestCase
         $kv->put('a', 'b');
         $kv->delete('x');
 
-        $subscription->wait();
+        $subscription->suspend();
 
         self::assertSame(
             [
