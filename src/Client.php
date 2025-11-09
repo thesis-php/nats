@@ -17,7 +17,6 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
-use Thesis\Sync;
 use function Amp\async;
 
 /**
@@ -31,8 +30,8 @@ final class Client
 
     private readonly Connection\ConnectionFactory $connectionFactory;
 
-    /** @var ?Sync\Once<Connection\Connection> */
-    private ?Sync\Once $connection = null;
+    /** @var ?Future<Connection\Connection> */
+    private ?Future $connection = null;
 
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpc = null;
@@ -256,9 +255,15 @@ final class Client
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $this->connection ??= new Sync\Once(function (): Connection\Connection {
-            $connection = $this->connectionFactory->connect();
-            $connection->hooks()->onMessage($this->invokeSubscriber(...));
+        $connectionFactory = $this->connectionFactory;
+        $invokeSubscriber = $this->invokeSubscriber(...);
+
+        $this->connection ??= async(static function () use (
+            $connectionFactory,
+            $invokeSubscriber,
+        ): Connection\Connection {
+            $connection = $connectionFactory->connect();
+            $connection->hooks()->onMessage($invokeSubscriber);
 
             return $connection;
         });

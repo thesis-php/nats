@@ -27,7 +27,6 @@
         "amphp/socket": "^2.3",
         "cuyz/valinor": "^1.15",
         "revolt/event-loop": "^1.0",
-        "thesis/sync-once": "^0.1.1",
         "thesis/time-span": "^0.2.3"
     },
     "require-dev": {
