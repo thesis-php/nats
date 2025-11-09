@@ -7,23 +7,19 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
+$js = $nc->jetStream();
 
-try {
-    $jetstream->deleteStream('Batches');
-} catch (Nats\Exception\StreamNotFound) {
-}
+$js->deleteStreams('batches');
 
-
-$stream = $jetstream->createStream(new StreamConfig(
-    name: 'Batches',
+$stream = $js->createStream(new StreamConfig(
+    name: 'batches',
     description: 'Batch Stream',
     subjects: ['batch.*'],
     allowAtomicPublish: true,
 ));
 
-$jetstream->publishBatch('batch.orders', [
+$js->publishBatch('batch.orders', [
     new Nats\Message('Order#1'),
     new Nats\Message('Order#2'),
     new Nats\Message('Order#3'),

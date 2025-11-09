@@ -7,12 +7,12 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Counter\CounterConfig;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'));
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222'));
+$js = $nc->jetStream();
 
-$jetstream->deleteCounter('atomics');
+$js->deleteCounter('atomics');
 
-$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+$counter = $js->createOrUpdateCounter(new CounterConfig(
     name: 'atomics',
 ));
 
