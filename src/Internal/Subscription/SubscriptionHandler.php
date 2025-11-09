@@ -63,9 +63,12 @@ final readonly class SubscriptionHandler
             $unsubscribe,
         ): void {
             while (!$queue->isComplete()) {
+                /** @var Future<Emit<Delivery>> $pop */
+                $pop = async($mq->pop(...));
+
                 $op = Future\awaitFirst([
                     $completeSubscriptionDeferred->getFuture(),
-                    async($mq->pop(...)),
+                    $pop,
                 ]);
 
                 if ($op instanceof Emit) {
@@ -75,6 +78,7 @@ final readonly class SubscriptionHandler
                     } catch (\Throwable $e) {
                         $unsubscribe();
                         $completeSubscriptionMarker->error($e);
+                        $queue->complete();
 
                         return;
                     }
@@ -82,7 +86,13 @@ final readonly class SubscriptionHandler
                     $queue->complete();
 
                     if ($op instanceof Drain) {
-                        foreach ($mq as $delivery) {
+                        $messages = [...$mq];
+
+                        if ($pop->isComplete()) {
+                            $messages = [$pop->await()->value, ...$messages];
+                        }
+
+                        foreach ($messages as $delivery) {
                             try {
                                 $handler($delivery, $subscription);
                             } catch (\Throwable $e) {
