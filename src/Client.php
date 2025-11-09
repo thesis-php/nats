@@ -169,12 +169,12 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $this->rpc ??= new Sync\Once(weakClosure(function (): Rpc\Handler {
+        $this->rpc ??= new Sync\Once(function (): Rpc\Handler {
             $handler = new Rpc\Handler($this);
             $handler->setup();
 
             return $handler;
-        }));
+        });
 
         return $this->rpc
             ->await($cancellation)
