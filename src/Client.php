@@ -36,7 +36,7 @@ final class Client
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpc = null;
 
-    /** @var array<non-empty-string, callable(Delivery): bool> */
+    /** @var array<non-empty-string, array{callable(Delivery): bool, Subscription}> */
     private array $subscribers = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
@@ -156,11 +156,11 @@ final class Client
             bufferSize: $bufferSize,
         );
 
-        $this->subscribers[$subscriptionId] = $handler->push(...);
+        $this->subscribers[$subscriptionId] = [$handler->push(...), $subscription = $handler->subscription];
 
         $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
 
-        return $handler->subscription;
+        return $subscription;
     }
 
     /**
@@ -209,6 +209,11 @@ final class Client
             return;
         }
 
+        /** @var Subscription $subscription */
+        foreach ($this->subscribers as [$_, $subscription]) {
+            $subscription->stop($cancellation);
+        }
+
         $this->connection = null;
         $connection->close();
     }
@@ -236,7 +241,8 @@ final class Client
 
     private function invokeSubscriber(Hooks\MessageReceived $event): void
     {
-        $subscriber = $this->subscribers[$event->sid] ?? static fn(): bool => false;
+        [$subscriber, $subscription] = $this->subscribers[$event->sid] ?? [static fn(): bool => true, null];
+
         $pushed = $subscriber(
             new Delivery(
                 reply: $this->publish(...),
@@ -249,7 +255,7 @@ final class Client
             ),
         );
         if (!$pushed) {
-            $this->unsubscribe($event->sid);
+            $subscription?->stop();
         }
     }
 

@@ -6,6 +6,7 @@ namespace Thesis\Nats;
 
 use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Internal\Id;
 use function Amp\delay;
@@ -137,6 +138,18 @@ final class ClientTest extends NatsTestCase
 
         self::expectException(\RuntimeException::class);
         self::expectExceptionMessage('Exception in test.');
+        $subscription->suspend();
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testSuspendSubscriptionOnClientDisconnect(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        $subscription = $client->subscribe("{$id}.*", static function (): void {});
+        $client->disconnect();
         $subscription->suspend();
     }
 }
