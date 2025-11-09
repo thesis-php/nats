@@ -13,6 +13,7 @@ use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
+use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
@@ -92,27 +93,32 @@ final readonly class CounterStore
         ));
 
         /** @var Pipeline\Queue<Entry> $queue */
-        $queue = new Pipeline\Queue(1_000);
+        $queue = new Pipeline\Queue($buffer = 1_000);
 
-        $subscription = $consumer->consume(
+        $consumer->consume(
             function (JetStream\Delivery $delivery, Subscription $subscription) use ($queue): void {
-                $queue->push(
-                    $this->entryFromMessage($delivery->message, $this->normalizeSubject($delivery->subject)),
-                );
+                if ($delivery->message->headers?->statusCode() === Status::NoMessages) {
+                    $queue->complete();
+                    $subscription->stop();
 
-                if ($delivery->metadata->pending === 0) {
+                    return;
+                }
+
+                $entry = $this->entryFromMessage($delivery->message, $this->normalizeSubject($delivery->subject));
+
+                $queue->push($entry);
+
+                if ($delivery->metadata?->pending === 0) {
+                    $queue->complete();
                     $subscription->stop();
                 }
             },
             new JetStream\ConsumeConfig(
                 expires: TimeSpan::fromSeconds(0),
-                batch: 1_000,
+                batch: $buffer,
                 noWait: true,
-                completeOnNoMessages: true,
             ),
         );
-
-        $subscription->onComplete($queue->complete(...));
 
         return $queue->iterate();
     }

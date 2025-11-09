@@ -6,7 +6,7 @@ namespace Thesis\Nats\JetStream\Internal;
 
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
-use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Description;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
@@ -35,7 +35,7 @@ final readonly class MessageHandler
         private mixed $handler,
         Client $nats,
         Encoder $json,
-        private ConsumeConfig $config,
+        ConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
@@ -58,34 +58,28 @@ final readonly class MessageHandler
 
     public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
     {
-        if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoMessages && $this->config->completeOnNoMessages) {
-            $subscription->stop();
-            $this->stop();
+        $statusCode = $delivery->message->headers?->statusCode();
+        $statusDescription = $delivery->message->headers?->statusDescription();
+
+        if ($statusCode === Status::Control && $statusDescription?->value === Description::IdleHeartbeat) {
+            $this->heartbeats->reset();
 
             return;
         }
 
-        $replyTo = $delivery->replyTo;
+        ($this->handler)(
+            new JetStreamDelivery(
+                message: $delivery->message,
+                subject: $delivery->subject,
+                acks: $this->acks,
+                metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
+                replyTo: $delivery->replyTo,
+            ),
+            $subscription,
+        );
 
-        if ($replyTo === null && $delivery->message->payload === null) {
-            $this->heartbeats->reset();
-        }
-
-        if ($replyTo !== null) {
-            ($this->handler)(
-                new JetStreamDelivery(
-                    message: $delivery->message,
-                    subject: $delivery->subject,
-                    metadata: Metadata::parse($replyTo),
-                    replyTo: $replyTo,
-                    acks: $this->acks,
-                ),
-                $subscription,
-            );
-
-            $this->heartbeats->reset();
-            $this->pulls->request();
-        }
+        $this->heartbeats->reset();
+        $this->pulls->request();
     }
 
     public function stop(): void
