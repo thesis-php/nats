@@ -20,7 +20,7 @@ use function Amp\async;
 final class PullConsumer
 {
     /** @var list<Subscription> */
-    private array $subscribers = [];
+    private array $subscriptions = [];
 
     public function __construct(
         private readonly Api\ConsumerInfo $info,
@@ -55,7 +55,7 @@ final class PullConsumer
             cancellation: $cancellation,
         );
 
-        $this->subscribers[] = $subscription->onComplete(
+        $this->subscriptions[] = $subscription->onComplete(
             $messageHandler->stop(...),
         );
 
@@ -77,13 +77,13 @@ final class PullConsumer
      */
     private function complete(\Closure $complete): void
     {
-        [$subscribers, $this->subscribers] = [$this->subscribers, []];
+        [$subscriptions, $this->subscriptions] = [$this->subscriptions, []];
 
         /** @var list<Future<void>> $futures */
         $futures = [];
 
-        foreach ($subscribers as $subscriber) {
-            $futures[] = async($complete, $subscriber);
+        foreach ($subscriptions as $subscription) {
+            $futures[] = async($complete, $subscription);
         }
 
         Future\awaitAll($futures);

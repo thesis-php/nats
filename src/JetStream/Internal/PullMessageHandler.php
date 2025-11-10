@@ -17,6 +17,7 @@ use Thesis\Time\TimeSpan;
 
 /**
  * @internal
+ * @TODO Consider for future refactoring:
  */
 final readonly class PullMessageHandler
 {
