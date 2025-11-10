@@ -74,6 +74,15 @@ final readonly class Stream
      * @param non-empty-string $consumer
      * @throws NatsException
      */
+    public function pushConsumer(string $consumer): PushConsumer
+    {
+        return $this->js->pushConsumer($this->name, $consumer);
+    }
+
+    /**
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
     public function consumer(string $consumer): Consumer
     {
         return $this->js->consumer($this->name, $consumer);

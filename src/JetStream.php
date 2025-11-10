@@ -218,6 +218,16 @@ final readonly class JetStream
      * @param non-empty-string $consumer
      * @throws NatsException
      */
+    public function pushConsumer(string $stream, string $consumer): JetStream\PushConsumer
+    {
+        return $this->consumer($stream, $consumer)->pushing();
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
     public function consumer(string $stream, string $consumer): JetStream\Consumer
     {
         return $this->setupConsumer($this->consumerInfo($stream, $consumer));
