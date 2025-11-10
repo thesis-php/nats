@@ -154,7 +154,7 @@ final class ObjectStoreTest extends NatsTestCase
         $store->put(new ObjectMeta('file2'), $body2 = str_repeat('y', 20));
         $store->put(new ObjectMeta('file3'), $body3 = str_repeat('z', 120));
 
-        $subscription->suspend();
+        $subscription->awaitCompletion();
 
         self::assertSame(
             [

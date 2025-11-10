@@ -50,6 +50,6 @@ for ($i = 0; $i < 10; ++$i) {
 trapSignal([\SIGINT, \SIGTERM]);
 
 $subscription->stop();
-$subscription->suspend();
+$subscription->awaitCompletion();
 
 $nc->disconnect();

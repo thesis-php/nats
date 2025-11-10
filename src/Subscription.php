@@ -51,6 +51,11 @@ final class Subscription
         $this->complete(Drain::It, $cancellation);
     }
 
+    public function awaitCompletion(?Cancellation $cancellation = null): void
+    {
+        $this->completeMarker->await($cancellation);
+    }
+
     public function suspend(?Cancellation $cancellation = null): void
     {
         $this->completeMarker->await($cancellation);

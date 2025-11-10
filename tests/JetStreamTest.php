@@ -679,7 +679,7 @@ final class JetStreamTest extends NatsTestCase
             }
         });
 
-        $subscription->suspend();
+        $subscription->awaitCompletion();
         self::assertSame($publishedMessages, $messages);
         self::assertSame(0, $consumer->actualInfo()->numPending);
 
@@ -826,7 +826,7 @@ final class JetStreamTest extends NatsTestCase
             $subscription->stop();
         });
 
-        $subscription->suspend();
+        $subscription->awaitCompletion();
 
         $stream->delete();
     }
@@ -864,7 +864,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumer->unsubscribeAll();
 
-        awaitAll(array_map(static fn(Subscription $subscription): Future => async($subscription->suspend(...)), $subscriptions));
+        awaitAll(array_map(static fn(Subscription $subscription): Future => async($subscription->awaitCompletion(...)), $subscriptions));
 
         self::assertSame(3, $completedCount, 'All iterators should complete after unsubscribeAll');
 

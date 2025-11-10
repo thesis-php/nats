@@ -97,7 +97,7 @@ final class ClientTest extends NatsTestCase
 
         delay(0.1);
         $subscription->stop();
-        $subscription->suspend();
+        $subscription->awaitCompletion();
 
         self::assertSame(1, $count);
     }
@@ -125,7 +125,7 @@ final class ClientTest extends NatsTestCase
 
         delay(0.1);
         $subscription->drain();
-        $subscription->suspend();
+        $subscription->awaitCompletion();
 
         self::assertSame(10, $count);
     }
@@ -144,7 +144,7 @@ final class ClientTest extends NatsTestCase
 
         self::expectException(\RuntimeException::class);
         self::expectExceptionMessage('Exception in test.');
-        $subscription->suspend();
+        $subscription->awaitCompletion();
     }
 
     #[DoesNotPerformAssertions]
@@ -156,6 +156,6 @@ final class ClientTest extends NatsTestCase
 
         $subscription = $client->subscribe("{$id}.*", static function (): void {});
         $client->disconnect();
-        $subscription->suspend();
+        $subscription->awaitCompletion();
     }
 }
