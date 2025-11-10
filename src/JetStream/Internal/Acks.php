@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\Internal;
 
 use Amp\Cancellation;
-use Thesis\Nats\Client;
+use Thesis\Nats\Delivery;
 use Thesis\Nats\Message;
-use Thesis\Nats\NatsException;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -15,59 +14,66 @@ use Thesis\Time\TimeSpan;
  */
 final readonly class Acks
 {
+    /**
+     * @param \Closure(non-empty-string, Message, ?Cancellation=): void $publish
+     * @param \Closure(non-empty-string, Message, ?Cancellation=): Delivery $request
+     */
     public function __construct(
-        private Client $nats,
+        private \Closure $publish,
+        private \Closure $request,
     ) {}
 
     /**
      * @param non-empty-string $replyTo
-     * @throws NatsException
      */
     public function ack(string $replyTo, bool $sync = false, ?Cancellation $cancellation = null): void
     {
         $handler = match ($sync) {
-            true => $this->nats->request(...),
-            default => $this->nats->publish(...),
+            true => $this->request,
+            default => $this->publish,
         };
 
-        $handler($replyTo, new Message('+ACK'), cancellation: $cancellation);
+        $handler(
+            $replyTo,
+            new Message('+ACK'),
+            $cancellation,
+        );
     }
 
     /**
      * @param non-empty-string $replyTo
-     * @throws NatsException
      */
     public function nack(string $replyTo, ?TimeSpan $delay = null, ?Cancellation $cancellation = null): void
     {
-        $body = '-NAK';
-        if ($delay !== null) {
-            $body .= \sprintf(' {"delay": %d}', $delay->toNanoseconds());
-        }
-
-        $this->nats->publish($replyTo, new Message($body), cancellation: $cancellation);
+        ($this->publish)(
+            $replyTo,
+            new Message('-NAK' . ($delay !== null ? \sprintf(' {"delay": %d}', $delay->toNanoseconds()) : '')),
+            $cancellation,
+        );
     }
 
     /**
      * @param non-empty-string $replyTo
-     * @throws NatsException
      */
     public function inProgress(string $replyTo, ?Cancellation $cancellation = null): void
     {
-        $this->nats->publish($replyTo, new Message('+WPI'), cancellation: $cancellation);
+        ($this->publish)(
+            $replyTo,
+            new Message('+WPI'),
+            $cancellation,
+        );
     }
 
     /**
      * @param non-empty-string $replyTo
      * @param ?non-empty-string $reason
-     * @throws NatsException
      */
     public function terminate(string $replyTo, ?string $reason = null, ?Cancellation $cancellation = null): void
     {
-        $body = '+TERM';
-        if ($reason !== null) {
-            $body .= " {$reason}";
-        }
-
-        $this->nats->publish($replyTo, new Message($body), cancellation: $cancellation);
+        ($this->publish)(
+            $replyTo,
+            new Message('+TERM' . ($reason !== null ? " {$reason}" : '')),
+            $cancellation,
+        );
     }
 }
