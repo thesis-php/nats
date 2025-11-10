@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Rpc;
 
+use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Thesis\Nats\Client;
@@ -13,9 +14,11 @@ use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
+use Thesis\Nats\Subscription;
 
 /**
  * @internal
+ * @phpstan-import-type Subscribe from Client
  */
 final class Handler
 {
@@ -25,41 +28,45 @@ final class Handler
     /** @var non-empty-string */
     private readonly string $inboxId;
 
-    /** @var ?non-empty-string */
-    private ?string $subscriptionId = null;
+    private ?Subscription $subscription = null;
 
-    public function __construct(private readonly Client $client)
+    public function __construct()
     {
         $inboxId = Id\generateInboxId();
         $this->inboxId = "{$inboxId}.";
     }
 
-    public function setup(): void
+    /**
+     * @param Subscribe $subscribe
+     */
+    public function setup(\Closure $subscribe): void
     {
-        $this->subscriptionId = $this->client->subscribe(
-            "{$this->inboxId}*",
-            function (Delivery $delivery): void {
-                $replyTo = ReplyTo::parse($this->inboxId, $delivery->subject);
+        $futures = &$this->futures;
+        $inboxId = $this->inboxId;
+
+        $this->subscription = $subscribe(
+            "{$inboxId}*",
+            static function (Delivery $delivery) use (
+                &$futures,
+                $inboxId,
+            ): void {
+                $replyTo = ReplyTo::parse($inboxId, $delivery->subject);
 
                 try {
-                    ($this->futures[$replyTo->token] ?? static fn() => null)($delivery);
+                    ($futures[$replyTo->token] ?? static fn() => null)($delivery);
                 } finally {
-                    unset($this->futures[$replyTo->token]);
+                    unset($futures[$replyTo->token]);
                 }
             },
         );
     }
 
-    public function shutdown(): void
+    public function shutdown(?Cancellation $cancellation = null): void
     {
-        if ($this->subscriptionId === null) {
-            return;
-        }
-
         try {
-            $this->client->unsubscribe($this->subscriptionId);
+            $this->subscription?->stop($cancellation);
         } finally {
-            $this->subscriptionId = null;
+            $this->subscription = null;
             $this->futures = [];
         }
     }
@@ -71,6 +78,7 @@ final class Handler
     public function request(
         string $subject,
         Message $message,
+        Client $client,
     ): Future {
         $replyTo = ReplyTo::new($this->inboxId);
 
@@ -84,7 +92,7 @@ final class Handler
             }
         };
 
-        $this->client->publish($subject, $message, $replyTo->subject);
+        $client->publish($subject, $message, $replyTo->subject);
 
         return $deferred->getFuture();
     }

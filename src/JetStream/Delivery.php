@@ -9,32 +9,30 @@ use Amp\Future;
 use Thesis\Nats\JetStream\Internal\Acks;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
-use Thesis\Sync;
 use Thesis\Time\TimeSpan;
 use function Amp\async;
-use function Amp\weakClosure;
 
 /**
  * @api
  */
 final class Delivery
 {
-    /** @var ?Sync\Once<bool> */
-    private ?Sync\Once $acked = null;
+    /** @var ?Future<void> */
+    private ?Future $acked = null;
 
     /** @var ?Future<void> */
     private ?Future $wip = null;
 
     /**
      * @param non-empty-string $subject
-     * @param non-empty-string $replyTo
+     * @param ?non-empty-string $replyTo
      */
     public function __construct(
         public readonly Message $message,
         public readonly string $subject,
-        public readonly Metadata $metadata,
-        private readonly string $replyTo,
         private readonly Acks $acks,
+        public readonly ?Metadata $metadata = null,
+        private readonly ?string $replyTo = null,
     ) {}
 
     /**
@@ -42,12 +40,11 @@ final class Delivery
      */
     public function ack(bool $sync = false, ?Cancellation $cancellation = null): void
     {
-        $this->doAck(
-            handler: weakClosure(function () use ($sync, $cancellation): void {
-                $this->acks->ack($this->replyTo, $sync, $cancellation);
-            }),
-            cancellation: $cancellation,
-        );
+        if (($reply = $this->replyTo) !== null) {
+            $ack = $this->acks->ack(...);
+
+            $this->doAck(static fn() => $ack($reply, $sync, $cancellation), $cancellation);
+        }
     }
 
     /**
@@ -55,29 +52,10 @@ final class Delivery
      */
     public function nack(?TimeSpan $delay = null, ?Cancellation $cancellation = null): void
     {
-        $this->doAck(
-            handler: weakClosure(function () use ($delay, $cancellation): void {
-                $this->acks->nack($this->replyTo, $delay, $cancellation);
-            }),
-            cancellation: $cancellation,
-        );
-    }
+        if (($reply = $this->replyTo) !== null) {
+            $nack = $this->acks->nack(...);
 
-    /**
-     * @throws NatsException
-     */
-    public function inProgress(?Cancellation $cancellation = null): void
-    {
-        if ($this->acked?->await($cancellation)) {
-            return;
-        }
-
-        $this->wip ??= async($this->acks->inProgress(...), $this->replyTo);
-
-        try {
-            $this->wip->await($cancellation);
-        } finally {
-            $this->wip = null;
+            $this->doAck(static fn() => $nack($reply, $delay, $cancellation), $cancellation);
         }
     }
 
@@ -87,30 +65,45 @@ final class Delivery
      */
     public function terminate(?string $reason = null, ?Cancellation $cancellation = null): void
     {
-        $this->doAck(
-            handler: weakClosure(function () use ($reason, $cancellation): void {
-                $this->acks->terminate($this->replyTo, $reason, $cancellation);
-            }),
-            cancellation: $cancellation,
-        );
+        if (($reply = $this->replyTo) !== null) {
+            $terminate = $this->acks->terminate(...);
+
+            $this->doAck(static fn() => $terminate($reply, $reason, $cancellation), $cancellation);
+        }
     }
 
     /**
-     * @param callable(): void $handler
      * @throws NatsException
      */
-    private function doAck(callable $handler, ?Cancellation $cancellation = null): void
+    public function inProgress(?Cancellation $cancellation = null): void
+    {
+        $reply = $this->replyTo;
+        if ($reply === null) {
+            return;
+        }
+
+        if ($this->acked !== null) {
+            return;
+        }
+
+        $this->wip ??= async($this->acks->inProgress(...), $reply, $cancellation);
+
+        try {
+            $this->wip->await($cancellation);
+        } finally {
+            $this->wip = null;
+        }
+    }
+
+    /**
+     * @param \Closure(): void $handler
+     */
+    private function doAck(\Closure $handler, ?Cancellation $cancellation = null): void
     {
         while ($this->wip !== null) {
             $this->wip->await($cancellation);
         }
 
-        $ack = static function () use ($handler): bool {
-            $handler();
-
-            return true;
-        };
-
-        ($this->acked ??= new Sync\Once($ack))->await($cancellation);
+        ($this->acked ??= async($handler))->await($cancellation);
     }
 }

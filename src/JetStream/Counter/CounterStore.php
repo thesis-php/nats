@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Counter;
 
+use Amp\Pipeline;
 use Thesis\Nats\Header\Incr;
 use Thesis\Nats\Header\Subject;
 use Thesis\Nats\JetStream;
@@ -12,6 +13,8 @@ use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
+use Thesis\Nats\Status;
+use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -58,7 +61,7 @@ final readonly class CounterStore
                 throw new \LogicException('Message has no subject.');
             }
 
-            return self::entryFromMessage(
+            return $this->entryFromMessage(
                 $message,
                 $this->normalizeSubject($subject),
             );
@@ -89,29 +92,41 @@ final readonly class CounterStore
             filterSubjects: $subjects,
         ));
 
-        $iterator = $consumer->consume(new JetStream\ConsumeConfig(
-            expires: TimeSpan::fromSeconds(0),
-            batch: 1_000,
-            noWait: true,
-            completeOnNoMessages: true,
-        ));
+        /** @var Pipeline\Queue<Entry> $queue */
+        $queue = new Pipeline\Queue($buffer = 1_000);
 
-        foreach ($iterator as $delivery) {
-            yield self::entryFromMessage(
-                $delivery->message,
-                $this->normalizeSubject($delivery->subject),
-            );
+        $consumer->consume(
+            function (JetStream\Delivery $delivery, Subscription $subscription) use ($queue): void {
+                if ($delivery->message->headers?->statusCode() === Status::NoMessages) {
+                    $queue->complete();
+                    $subscription->stop();
 
-            if ($delivery->metadata->pending === 0) {
-                $iterator->complete();
-            }
-        }
+                    return;
+                }
+
+                $entry = $this->entryFromMessage($delivery->message, $this->normalizeSubject($delivery->subject));
+
+                $queue->push($entry);
+
+                if ($delivery->metadata?->pending === 0) {
+                    $queue->complete();
+                    $subscription->stop();
+                }
+            },
+            new JetStream\ConsumeConfig(
+                expires: TimeSpan::fromSeconds(0),
+                batch: $buffer,
+                noWait: true,
+            ),
+        );
+
+        return $queue->iterate();
     }
 
     /**
      * @param non-empty-string $subject
      */
-    private static function entryFromMessage(
+    private function entryFromMessage(
         Message $message,
         string $subject,
     ): Entry {

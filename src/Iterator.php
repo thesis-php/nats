@@ -13,15 +13,9 @@ use Amp\Cancellation;
  */
 interface Iterator extends \IteratorAggregate
 {
-    public function complete(?Cancellation $cancellation = null): void;
+    public function stop(?Cancellation $cancellation = null): void;
 
-    public function cancel(\Throwable $e, ?Cancellation $cancellation = null): void;
-
-    /**
-     * @param callable(T): void $handler
-     * @return callable(?\Throwable=, ?Cancellation=): void callback to cancel subscription
-     */
-    public function subscribe(callable $handler): callable;
+    public function drain(?Cancellation $cancellation = null): void;
 
     /**
      * @param \Closure(T): bool $filter
@@ -35,11 +29,4 @@ interface Iterator extends \IteratorAggregate
      * @return static<R>
      */
     public function map(\Closure $map): static;
-
-    /**
-     * @template R
-     * @param \Closure(T): Iterator\Outcome<R> $selector
-     * @return static<R>
-     */
-    public function select(\Closure $selector): static;
 }

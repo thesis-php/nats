@@ -6,8 +6,10 @@ namespace Thesis\Nats;
 
 use Amp\DeferredFuture;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Internal\Id;
+use function Amp\delay;
 
 #[CoversClass(Client::class)]
 final class ClientTest extends NatsTestCase
@@ -41,7 +43,7 @@ final class ClientTest extends NatsTestCase
             self::assertEquals('events.happens', $delivery->subject);
             self::assertEquals('ok', $delivery->message->payload);
 
-            $deliveries->complete();
+            $deliveries->stop();
         }
     }
 
@@ -66,9 +68,94 @@ final class ClientTest extends NatsTestCase
 
         $id = Id\generateUniqueId();
 
-        $client->unsubscribe($client->subscribe("{$id}.*", static fn() => null));
+        $client->subscribe("{$id}.*", static fn() => null)->stop();
 
         self::expectException(RequestHasNoResponders::class);
         $client->request("{$id}.happens", new Message('Are you ok?'));
+    }
+
+    public function testStopSubscription(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        $count = 0;
+
+        $subscription = $client->subscribe("{$id}.*", static function (Delivery $delivery) use (&$count): void {
+            if ($count === 0) {
+                // Let the subscription accumulate messages in its local queue buffer.
+                delay(0.1);
+            }
+
+            ++$count;
+        });
+
+        for ($i = 0; $i < 10; ++$i) {
+            $client->publish("{$id}.{$i}", new Message("{$i}"));
+        }
+
+        delay(0.1);
+        $subscription->stop();
+        $subscription->awaitCompletion();
+
+        self::assertSame(1, $count);
+    }
+
+    public function testDrainSubscription(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        $count = 0;
+
+        $subscription = $client->subscribe("{$id}.*", static function (Delivery $delivery) use (&$count): void {
+            if ($count === 0) {
+                // Let the subscription accumulate messages in its local queue buffer.
+                delay(0.1);
+            }
+
+            ++$count;
+        });
+
+        for ($i = 0; $i < 10; ++$i) {
+            $client->publish("{$id}.{$i}", new Message("{$i}"));
+        }
+
+        delay(0.1);
+        $subscription->drain();
+        $subscription->awaitCompletion();
+
+        self::assertSame(10, $count);
+    }
+
+    public function testSuspendExceptionalSubscription(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        $subscription = $client->subscribe("{$id}.*", static function (): void {
+            throw new \RuntimeException('Exception in test.');
+        });
+
+        $client->publish("{$id}.x");
+
+        self::expectException(\RuntimeException::class);
+        self::expectExceptionMessage('Exception in test.');
+        $subscription->awaitCompletion();
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testSuspendSubscriptionOnClientDisconnect(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        $subscription = $client->subscribe("{$id}.*", static function (): void {});
+        $client->disconnect();
+        $subscription->awaitCompletion();
     }
 }

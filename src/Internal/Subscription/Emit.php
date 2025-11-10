@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\Iterator;
+namespace Thesis\Nats\Internal\Subscription;
 
 /**
- * @api
+ * @internal
  * @template-covariant T
- * @template-implements Outcome<T>
+ * @template-implements Operation<T>
  */
-final readonly class Emit implements Outcome
+final readonly class Emit implements Operation
 {
     /**
      * @param T $value

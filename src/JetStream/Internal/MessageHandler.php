@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Internal;
 
-use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
-use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Description;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Status;
+use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -27,15 +27,15 @@ final readonly class MessageHandler
     private PullSupervisor $pulls;
 
     /**
-     * @param Pipeline\Queue<JetStreamDelivery> $queue
+     * @param callable(JetStreamDelivery, Subscription): void $handler
      * @param non-empty-string $subject
      * @param non-empty-string $replyTo
      */
     public function __construct(
-        private Pipeline\Queue $queue,
+        private mixed $handler,
         Client $nats,
         Encoder $json,
-        private ConsumeConfig $config,
+        ConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
@@ -56,42 +56,34 @@ final readonly class MessageHandler
         }
     }
 
-    public function __invoke(NatsDelivery $delivery): void
+    public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
     {
-        if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoMessages && $this->config->completeOnNoMessages) {
-            $this->stop();
+        $statusCode = $delivery->message->headers?->statusCode();
+        $statusDescription = $delivery->message->headers?->statusDescription();
+
+        if ($statusCode === Status::Control && $statusDescription?->value === Description::IdleHeartbeat) {
+            $this->heartbeats->reset();
 
             return;
         }
 
-        $replyTo = $delivery->replyTo;
+        ($this->handler)(
+            new JetStreamDelivery(
+                message: $delivery->message,
+                subject: $delivery->subject,
+                acks: $this->acks,
+                metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
+                replyTo: $delivery->replyTo,
+            ),
+            $subscription,
+        );
 
-        if ($replyTo === null && $delivery->message->payload === null) {
-            $this->heartbeats->reset();
-        }
-
-        if ($replyTo !== null) {
-            $this->queue->push(
-                new JetStreamDelivery(
-                    message: $delivery->message,
-                    subject: $delivery->subject,
-                    metadata: Metadata::parse($replyTo),
-                    replyTo: $replyTo,
-                    acks: $this->acks,
-                ),
-            );
-
-            $this->heartbeats->reset();
-            $this->pulls->request();
-        }
+        $this->heartbeats->reset();
+        $this->pulls->request();
     }
 
     public function stop(): void
     {
-        if (!$this->queue->isComplete()) {
-            $this->queue->complete();
-        }
-
         $this->pulls->stop();
         $this->heartbeats->stop();
     }

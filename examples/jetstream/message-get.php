@@ -6,20 +6,18 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 use Thesis\Nats;
 
-$client = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
+$js = $nc->jetStream();
 
-foreach ($jetstream->streamNames('events.*') as $streamName) {
-    $jetstream->deleteStream($streamName);
-}
+$js->deleteStreams(...$js->streamNames('events.*'));
 
-$stream = $jetstream->createStream(new Nats\JetStream\Api\StreamConfig(
+$stream = $js->createStream(new Nats\JetStream\Api\StreamConfig(
     name: 'EventsStream',
     description: 'Testing Stream',
     subjects: ['events.*'],
 ));
 
-$jetstream->publish(
+$js->publish(
     subject: 'events.activated',
     message: new Nats\Message(
         payload: 'Message',

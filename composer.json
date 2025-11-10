@@ -21,18 +21,18 @@
         "php": "^8.3",
         "ext-filter": "*",
         "amphp/amp": "^3.1",
+        "amphp/byte-stream": "^2.1",
         "amphp/parser": "^1.1",
         "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.3",
         "cuyz/valinor": "^1.15",
-        "revolt/event-loop": "^1.0",
-        "thesis/sync-once": "^0.1.1",
+        "revolt/event-loop": "^1.0.7",
         "thesis/time-span": "^0.2.3"
     },
     "require-dev": {
         "bamarni/composer-bin-plugin": "^1.8.2",
         "phpunit/phpunit": "^10.5.58",
-        "symfony/var-dumper": "^6.4.15 || ^7.3.4"
+        "symfony/var-dumper": "^6.4.15 || ^7.3.5"
     },
     "suggest": {
         "ext-sodium": "Provides Ed25519 for nkey authentication"
@@ -45,7 +45,8 @@
             "src/Internal/Id/generateInboxId.php",
             "src/Internal/Id/generateUniqueId.php",
             "src/Internal/Protocol/encodeHeaders.php",
-            "src/Internal/Protocol/decodeHeaders.php"
+            "src/Internal/Protocol/decodeHeaders.php",
+            "src/Internal/Iter/push.php"
         ]
     },
     "autoload-dev": {
@@ -84,7 +85,7 @@
         "fixcs": "tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --diff --verbose",
         "infection": "tools/infection/vendor/bin/infection --show-mutations",
         "normalize": "@composer bin composer-normalize normalize --diff ../../composer.json",
-        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze",
+        "phpstan": "tools/phpstan/vendor/bin/phpstan analyze --memory-limit=512M",
         "pre-command-run": "mkdir -p var",
         "rector": "tools/rector/vendor/bin/rector process",
         "test": "phpunit"

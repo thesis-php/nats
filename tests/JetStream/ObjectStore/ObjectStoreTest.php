@@ -11,7 +11,7 @@ use Thesis\Nats\JetStream\ObjectStore\ObjectStoreInfo;
 use Thesis\Nats\JetStream\ObjectStore\Store;
 use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
 use Thesis\Nats\NatsTestCase;
-use function Amp\async;
+use Thesis\Nats\Subscription;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(Store::class)]
@@ -137,19 +137,16 @@ final class ObjectStoreTest extends NatsTestCase
         $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
 
         $files = [];
+        $count = 0;
 
-        $objects = $store->watch();
+        $subscription = $store->watch(static function (ObjectInfo $object, Subscription $subscription) use (
+            &$files,
+            &$count,
+        ): void {
+            $files[$object->name] = $object->size;
 
-        $future = async(static function () use (&$files, $objects): void {
-            $count = 0;
-
-            /** @var ObjectInfo $object */
-            foreach ($objects as $object) {
-                $files[$object->name] = $object->size;
-
-                if (++$count >= 3) {
-                    return;
-                }
+            if (++$count >= 3) {
+                $subscription->stop();
             }
         });
 
@@ -157,8 +154,7 @@ final class ObjectStoreTest extends NatsTestCase
         $store->put(new ObjectMeta('file2'), $body2 = str_repeat('y', 20));
         $store->put(new ObjectMeta('file3'), $body3 = str_repeat('z', 120));
 
-        $future->await();
-        $objects->complete();
+        $subscription->awaitCompletion();
 
         self::assertSame(
             [

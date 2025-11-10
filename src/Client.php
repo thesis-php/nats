@@ -5,32 +5,38 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\Cancellation;
+use Amp\Future;
 use Amp\Pipeline;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\Iter;
 use Thesis\Nats\Internal\Rpc;
+use Thesis\Nats\Internal\Subscription\SubscriptionHandler;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
-use Thesis\Sync;
-use function Amp\weakClosure;
+use function Amp\async;
 
 /**
  * @api
+ * @phpstan-type MessageHandler = callable(Delivery, Subscription): void
+ * @phpstan-type Subscribe = \Closure(non-empty-string, MessageHandler, ?non-empty-string=, positive-int=): Subscription
  */
 final class Client
 {
+    private const int DEFAULT_DELIVERY_BUFFER_SIZE = 1_000;
+
     private readonly Connection\ConnectionFactory $connectionFactory;
 
-    /** @var ?Sync\Once<Connection\Connection> */
-    private ?Sync\Once $connection = null;
+    /** @var ?Future<Connection\Connection> */
+    private ?Future $connection = null;
 
-    /** @var ?Sync\Once<Rpc\Handler> */
-    private ?Sync\Once $rpc = null;
+    /** @var ?Future<Rpc\Handler> */
+    private ?Future $rpc = null;
 
-    /** @var array<non-empty-string, callable(Delivery, self, non-empty-string): void> */
+    /** @var array<non-empty-string, array{callable(Delivery): bool, Subscription}> */
     private array $subscribers = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
@@ -101,7 +107,7 @@ final class Client
     /**
      * @param non-empty-string $subject
      * @param ?non-empty-string $queueGroup
-     * @param non-negative-int $bufferSize
+     * @param positive-int $bufferSize
      * @return Iterator<Delivery>
      * @throws NatsException
      */
@@ -109,42 +115,52 @@ final class Client
         string $subject,
         ?string $queueGroup = null,
         ?Cancellation $cancellation = null,
-        int $bufferSize = 0,
+        int $bufferSize = self::DEFAULT_DELIVERY_BUFFER_SIZE,
     ): Iterator {
         /** @var Pipeline\Queue<Delivery> $queue */
         $queue = new Pipeline\Queue(bufferSize: $bufferSize);
 
-        $subscriptionId = $this->subscribe(
+        $subscription = $this->subscribe(
             subject: $subject,
-            handler: $queue->push(...),
+            /** @phpstan-ignore argument.type */
+            handler: static fn(mixed $delivery): bool => Iter\push($queue, $delivery),
             queueGroup: $queueGroup,
             cancellation: $cancellation,
         );
 
-        return Internal\PipelineIterator::fromQueue($queue, function (?Cancellation $cancellation = null) use ($subscriptionId): void {
-            $this->unsubscribe($subscriptionId, $cancellation);
-        });
+        return Iter\PipelineIterator::fromQueue($queue, $subscription);
     }
 
     /**
      * @param non-empty-string $subject
-     * @param callable(Delivery, self, non-empty-string): void $handler
+     * @param callable(Delivery, Subscription): void $handler
      * @param ?non-empty-string $queueGroup
-     * @return non-empty-string
+     * @param positive-int $bufferSize
      * @throws NatsException
      */
     public function subscribe(
         string $subject,
         callable $handler,
         ?string $queueGroup = null,
+        int $bufferSize = 1_000,
         ?Cancellation $cancellation = null,
-    ): string {
+    ): Subscription {
         $subscriptionId = $this->subscriptionIdGenerator->nextId();
-        $this->subscribers[$subscriptionId] = $handler;
+        $unsubscribe = $this->unsubscribe(...);
+
+        $handler = new SubscriptionHandler(
+            unsubscribe: static function () use ($subscriptionId, $unsubscribe): void {
+                $unsubscribe($subscriptionId);
+            },
+            handler: $handler,
+            bufferSize: $bufferSize,
+        );
+
+        $this->subscribers[$subscriptionId] = [$handler->push(...), $subscription = $handler->subscription];
 
         $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
 
-        return $subscriptionId;
+        return $subscription;
     }
 
     /**
@@ -155,16 +171,17 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $this->rpc ??= new Sync\Once(weakClosure(function (): Rpc\Handler {
-            $handler = new Rpc\Handler($this);
-            $handler->setup();
+        $subscribe = $this->subscribe(...);
+        $this->rpc ??= async(static function () use ($subscribe): Rpc\Handler {
+            $handler = new Rpc\Handler();
+            $handler->setup($subscribe);
 
             return $handler;
-        }));
+        });
 
         return $this->rpc
             ->await($cancellation)
-            ->request($subject, $message)
+            ->request($subject, $message, $this)
             ->await($cancellation);
     }
 
@@ -185,21 +202,16 @@ final class Client
         );
     }
 
-    /**
-     * @param non-empty-string $sid
-     * @throws NatsException
-     */
-    public function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
-    {
-        $this->connection($cancellation)->execute(Internal\Command::unsub($sid));
-        unset($this->subscribers[$sid]);
-    }
-
     public function disconnect(?Cancellation $cancellation = null): void
     {
         $connection = $this->connection?->await($cancellation);
         if ($connection === null) {
             return;
+        }
+
+        /** @var Subscription $subscription */
+        foreach ($this->subscribers as [$_, $subscription]) {
+            $subscription->stop($cancellation);
         }
 
         $this->connection = null;
@@ -213,10 +225,25 @@ final class Client
         }
     }
 
+    /**
+     * @param non-empty-string $sid
+     * @throws NatsException
+     */
+    private function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
+    {
+        if (!isset($this->subscribers[$sid])) {
+            return;
+        }
+
+        $this->connection($cancellation)->execute(Internal\Command::unsub($sid));
+        unset($this->subscribers[$sid]);
+    }
+
     private function invokeSubscriber(Hooks\MessageReceived $event): void
     {
-        $subscriber = $this->subscribers[$event->sid] ?? static fn() => null;
-        $subscriber(
+        [$subscriber, $subscription] = $this->subscribers[$event->sid] ?? [static fn(): bool => true, null];
+
+        $pushed = $subscriber(
             new Delivery(
                 reply: $this->publish(...),
                 subject: $event->subject,
@@ -226,19 +253,26 @@ final class Client
                     headers: $event->headers,
                 ),
             ),
-            $this,
-            $event->sid,
         );
+        if (!$pushed) {
+            $subscription?->stop();
+        }
     }
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $this->connection ??= new Sync\Once(weakClosure(function (): Connection\Connection {
-            $connection = $this->connectionFactory->connect();
-            $connection->hooks()->onMessage($this->invokeSubscriber(...));
+        $connectionFactory = $this->connectionFactory;
+        $invokeSubscriber = $this->invokeSubscriber(...);
+
+        $this->connection ??= async(static function () use (
+            $connectionFactory,
+            $invokeSubscriber,
+        ): Connection\Connection {
+            $connection = $connectionFactory->connect();
+            $connection->hooks()->onMessage($invokeSubscriber);
 
             return $connection;
-        }));
+        });
 
         return $this->connection->await($cancellation);
     }

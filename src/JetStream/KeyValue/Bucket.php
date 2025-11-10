@@ -10,12 +10,12 @@ use Thesis\Nats\Delivery;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -152,14 +152,15 @@ final readonly class Bucket
     }
 
     /**
+     * @param callable(Entry, Subscription): void $handler
      * @param list<non-empty-string>|non-empty-string $keys
-     * @return Iterator<Entry>
      */
     public function watch(
+        callable $handler,
         string|array $keys = [],
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
-    ): Iterator {
+    ): Subscription {
         if (!\is_array($keys)) {
             $keys = [$keys];
         }
@@ -178,36 +179,47 @@ final readonly class Bucket
             filterSubjects: $keys,
         ));
 
-        return $this->nats
-            ->subscribeIterator($id, cancellation: $cancellation)
-            ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
-                $replyTo = $delivery->replyTo;
-                if ($replyTo === null) {
-                    return Iterator\Discard::It;
-                }
+        $name = $this->name;
+        $prefix = $this->prefix;
 
-                $key = substr($delivery->subject, \strlen($this->prefix));
+        return $this->nats->subscribe(
+            subject: $id,
+            handler: static function (Delivery $delivery, Subscription $subscription) use (
+                $config,
+                $handler,
+                $name,
+                $prefix,
+            ): void {
+                $key = substr($delivery->subject, \strlen($prefix));
                 if ($key === '') {
-                    return Iterator\Discard::It;
+                    return;
                 }
 
                 $op = $delivery->message->headers?->get(Header\KvOperation::header());
 
                 if ($config->ignoreDeletes && \in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
-                    return Iterator\Discard::It;
+                    return;
                 }
 
-                $metadata = JetStream\Metadata::parse($replyTo);
+                $metadata = $delivery->replyTo !== null ? JetStream\Metadata::parse($delivery->replyTo) : null;
+                if ($metadata === null) {
+                    return;
+                }
 
-                return new Iterator\Emit(new Entry(
-                    bucket: $this->name,
-                    key: $key,
-                    created: $metadata->timestamp,
-                    revision: max($metadata->streamSequence, 0),
-                    value: $delivery->message->payload,
-                    delta: $metadata->pending,
-                ));
-            });
+                $handler(
+                    new Entry(
+                        bucket: $name,
+                        key: $key,
+                        created: $metadata->timestamp,
+                        revision: max($metadata->streamSequence, 0),
+                        value: $delivery->message->payload,
+                        delta: $metadata->pending,
+                    ),
+                    $subscription,
+                );
+            },
+            cancellation: $cancellation,
+        );
     }
 
     /**

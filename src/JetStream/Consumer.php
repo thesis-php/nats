@@ -5,22 +5,20 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream;
 
 use Amp\Cancellation;
-use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Internal\PipelineIterator;
-use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\Router;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Subscription;
 
 /**
  * @api
  */
 final class Consumer
 {
-    /** @var array<non-empty-string|int, Internal\MessageHandler> */
+    /** @var list<Subscription> */
     private array $subscribers = [];
 
     /**
@@ -46,20 +44,18 @@ final class Consumer
     }
 
     /**
-     * @return Iterator<Delivery>
+     * @param callable(Delivery, Subscription): void $handler
      * @throws NatsException
      */
     public function consume(
+        callable $handler,
         ConsumeConfig $config = new ConsumeConfig(),
         ?Cancellation $cancellation = null,
-    ): Iterator {
+    ): Subscription {
         $id = Id\generateInboxId();
 
-        /** @var Pipeline\Queue<Delivery> $queue */
-        $queue = new Pipeline\Queue(bufferSize: $config->batch);
-
         $messageHandler = new Internal\MessageHandler(
-            queue: $queue,
+            handler: $handler,
             nats: $this->nats,
             json: $this->json,
             config: $config,
@@ -67,17 +63,17 @@ final class Consumer
             replyTo: $id,
         );
 
-        $sid = $this->nats->subscribe(
+        $subscription = $this->nats->subscribe(
             subject: $id,
             handler: $messageHandler,
             cancellation: $cancellation,
         );
 
-        $this->subscribers[$sid] = $messageHandler;
+        $this->subscribers[] = $subscription->onComplete(
+            $messageHandler->stop(...),
+        );
 
-        return PipelineIterator::fromQueue($queue, function (?Cancellation $cancellation = null) use ($sid): void {
-            $this->unsubscribe($sid, $cancellation);
-        });
+        return $subscription;
     }
 
     /**
@@ -127,30 +123,12 @@ final class Consumer
         );
     }
 
-    /**
-     * @throws NatsException
-     */
-    public function unsubscribeAll(): void
+    public function unsubscribeAll(?Cancellation $cancellation = null): void
     {
-        foreach ($this->subscribers as $sid => $messageHandler) {
-            $this->nats->unsubscribe((string) $sid);
-            unset($this->subscribers[$sid]);
+        [$subscribers, $this->subscribers] = [$this->subscribers, []];
 
-            $messageHandler->stop();
+        foreach ($subscribers as $subscriber) {
+            $subscriber->stop($cancellation);
         }
-    }
-
-    /**
-     * @param non-empty-string $sid
-     * @throws NatsException
-     */
-    private function unsubscribe(string $sid, ?Cancellation $cancellation = null): void
-    {
-        $this->nats->unsubscribe($sid, $cancellation);
-
-        $subscriber = $this->subscribers[$sid] ?? null;
-        $subscriber?->stop();
-
-        unset($this->subscribers[$sid]);
     }
 }

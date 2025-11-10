@@ -150,6 +150,20 @@ final readonly class JetStream
     }
 
     /**
+     * @param non-empty-string ...$names
+     * @throws NatsException
+     */
+    public function deleteStreams(string ...$names): void
+    {
+        foreach ($names as $name) {
+            try {
+                $this->request(new Api\DeleteStreamRequest($name));
+            } catch (StreamNotFound) {
+            }
+        }
+    }
+
+    /**
      * @param non-empty-string $name
      * @param ?non-negative-int $sequence
      * @param ?non-negative-int $keep

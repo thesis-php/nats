@@ -53,30 +53,30 @@ use Thesis\Nats;
 use function Amp\delay;
 use function Amp\trapSignal;
 
-$nats = new Nats\Client(Nats\Config::default());
+$nc = new Nats\Client(Nats\Config::default());
 
-$nats->subscribe('foo.*', static function (Nats\Delivery $delivery): void {
+$nc->subscribe('foo.*', static function (Nats\Delivery $delivery): void {
     dump("Received message {$delivery->message->payload} for consumer#1");
 });
 
-$nats->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
+$nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
     dump("Received message {$delivery->message->payload} for consumer#2");
 });
 
-$sid = $nats->subscribe('foo.bar', static function (Nats\Delivery $delivery): void {
+$subscription = $nc->subscribe('foo.bar', static function (Nats\Delivery $delivery): void {
     dump("Received message {$delivery->message->payload} for consumer#3");
 });
 
-$nats->publish('foo.bar', new Nats\Message('Hello World!')); // visible for all consumers
-$nats->publish('foo.baz', new Nats\Message('Hello World!')); // visible only for 1-2 consumers
-$nats->publish('foo.bar.baz', new Nats\Message('Hello World!')); // visible only for 2 consumer
+$nc->publish('foo.bar', new Nats\Message('Hello World!')); // visible for all consumers
+$nc->publish('foo.baz', new Nats\Message('Hello World!')); // visible only for 1-2 consumers
+$nc->publish('foo.bar.baz', new Nats\Message('Hello World!')); // visible only for 2 consumer
 
-$nats->unsubscribe($sid);
-$nats->publish('foo.bar', new Nats\Message('Hello World!')); // visible for 1-2 consumers
+$subscription->stop();
+$nc->publish('foo.bar', new Nats\Message('Hello World!')); // visible for 1-2 consumers
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nats->disconnect();
+$nc->disconnect();
 ```
 
 #### Queues
@@ -91,9 +91,9 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use function Amp\trapSignal;
 
-$nats = new Nats\Client(Nats\Config::default());
+$nc = new Nats\Client(Nats\Config::default());
 
-$nats->subscribe(
+$nc->subscribe(
     subject: 'foo.>',
     handler: static function (Nats\Delivery $delivery): void {
         dump("Received message {$delivery->message->payload} for consumer#1");
@@ -101,7 +101,7 @@ $nats->subscribe(
     queueGroup: 'test',
 );
 
-$nats->subscribe(
+$nc->subscribe(
     subject: 'foo.>',
     handler: static function (Nats\Delivery $delivery): void {
         dump("Received message {$delivery->message->payload} for consumer#2");
@@ -109,7 +109,7 @@ $nats->subscribe(
     queueGroup: 'test',
 );
 
-$nats->subscribe(
+$nc->subscribe(
     subject: 'foo.>',
     handler: static function (Nats\Delivery $delivery): void {
         dump("Received message {$delivery->message->payload} for consumer#3");
@@ -117,13 +117,13 @@ $nats->subscribe(
     queueGroup: 'test',
 );
 
-$nats->publish('foo.bar', new Nats\Message('x'));
-$nats->publish('foo.baz', new Nats\Message('y'));
-$nats->publish('foo.bar.baz', new Nats\Message('z'));
+$nc->publish('foo.bar', new Nats\Message('x'));
+$nc->publish('foo.baz', new Nats\Message('y'));
+$nc->publish('foo.bar.baz', new Nats\Message('z'));
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nats->disconnect();
+$nc->disconnect();
 ```
 
 #### Request-reply
@@ -137,17 +137,17 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Thesis\Nats;
 
-$nats = new Nats\Client(Nats\Config::default());
+$nc = new Nats\Client(Nats\Config::default());
 
-$nats->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
+$nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
     dump("Received request {$delivery->message->payload}");
     $delivery->reply(new Nats\Message(strrev($delivery->message->payload ?? '')));
 });
 
-$response = $nats->request('foo.bar', new Nats\Message('Hello World!'));
+$response = $nc->request('foo.bar', new Nats\Message('Hello World!'));
 dump("Received response {$response->message->payload}");
 
-$nats->disconnect();
+$nc->disconnect();
 ```
 
 ## Nats JetStream
@@ -169,11 +169,10 @@ use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Time\TimeSpan;
-use function Amp\async;
 use function Amp\trapSignal;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $js->deleteStream('EventStream');
 
@@ -188,35 +187,31 @@ $logConsumer = $stream->createConsumer(new ConsumerConfig(
     ackPolicy: AckPolicy::None,
 ));
 
-$logDeliveries = $logConsumer->consume(new ConsumeConfig(
-    batch: 10,
-    heartbeat: TimeSpan::fromSeconds(5),
-));
-
-async(static function () use ($logDeliveries): void {
-    /** @var Nats\JetStream\Delivery $delivery */
-    foreach ($logDeliveries as $delivery) {
+$logSubscription = $logConsumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {
         dump("Log event with ack=none: {$delivery->message->payload} ({$delivery->subject})");
-    }
-});
+    },
+    new ConsumeConfig(
+        batch: 10,
+        heartbeat: TimeSpan::fromSeconds(5),
+    ),
+);
 
 $handleConsumer = $stream->createConsumer(new ConsumerConfig(
     durableName: 'EventHandle',
     ackPolicy: AckPolicy::Explicit,
 ));
 
-$handleDeliveries = $handleConsumer->consume(new ConsumeConfig(
-    batch: 10,
-    heartbeat: TimeSpan::fromSeconds(5),
-));
-
-async(static function () use ($handleDeliveries): void {
-    /** @var Nats\JetStream\Delivery $delivery */
-    foreach ($handleDeliveries as $delivery) {
+$handleSubscription = $handleConsumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {
         dump("Handle event with ack=explicit: {$delivery->message->payload} ({$delivery->subject})");
         $delivery->ack();
-    }
-});
+    },
+    new ConsumeConfig(
+        batch: 10,
+        heartbeat: TimeSpan::fromSeconds(5),
+    ),
+);
 
 for ($i = 0; $i < 10; ++$i) {
     $js->publish(
@@ -231,10 +226,10 @@ for ($i = 0; $i < 10; ++$i) {
 
 trapSignal([\SIGINT, \SIGTERM]);
 
-$logDeliveries->complete();
-$handleDeliveries->complete();
+$logSubscription->drain();
+$handleSubscription->drain();
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 #### Get message
@@ -249,8 +244,8 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $js->deleteStream('EventStream');
 
@@ -273,7 +268,7 @@ for ($i = 0; $i < 5; ++$i) {
 
 dump($stream->getLastMessageForSubject('events.payment_rejected')?->payload);
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 ## NATS Key Value Store
@@ -292,8 +287,8 @@ require __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\KeyValue\BucketConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $kv = $js->createOrUpdateKeyValue(new BucketConfig(
     bucket: 'configs',
@@ -307,7 +302,7 @@ dump(
     $kv->get('database.dsn')?->value,
 );
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 #### Watch KV
@@ -323,8 +318,8 @@ use Thesis\Nats;
 use Thesis\Nats\JetStream\KeyValue\BucketConfig;
 use function Amp\trapSignal;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $js->deleteKeyValue('configs');
 
@@ -332,20 +327,18 @@ $kv = $js->createOrUpdateKeyValue(new BucketConfig(
     bucket: 'configs',
 ));
 
-$cancel = $kv
-    ->watch()
-    ->subscribe(static function (Nats\JetStream\KeyValue\Entry $entry): void {
-        dump("Config key {$entry->key} value changed to {$entry->value}");
-    });
+$subscription = $kv->watch(static function (Nats\JetStream\KeyValue\Entry $entry): void {
+    dump("Config key {$entry->key} value changed to {$entry->value}");
+});
 
 $kv->put('app.env', 'prod');
 $kv->put('database.dsn', 'mysql:host=127.0.0.1;port=3306');
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$cancel();
+$subscription->stop();
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 ## NATS Object Store
@@ -366,8 +359,8 @@ use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
 use Thesis\Nats\JetStream\ObjectStore\ResourceReader;
 use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $js->deleteObjectStore('code');
 
@@ -388,7 +381,7 @@ dump(
     (string) $store->get('config.php'),
 );
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 #### Watch Object Store
@@ -406,8 +399,8 @@ use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
 use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
 use function Amp\delay;
 
-$client = new Nats\Client(Nats\Config::default());
-$js = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $js->deleteObjectStore('code');
 
@@ -415,20 +408,18 @@ $store = $js->createOrUpdateObjectStore(new StoreConfig(
     store: 'code',
 ));
 
-$cancel = $store
-    ->watch()
-    ->subscribe(static function (ObjectInfo $info): void {
-        dump("New object {$info->name} in the bucket {$info->bucket} at size {$info->size} bytes");
-    });
+$subscription = $store->watch(static function (ObjectInfo $info): void {
+    dump("New object {$info->name} in the bucket {$info->bucket} at size {$info->size} bytes");
+});
 
 $store->put(new ObjectMeta('config.php'), '<?php return [];');
 $store->put(new ObjectMeta('snippet.php'), '<?php echo 1 + 1;');
 
 delay(0.5);
 
-$cancel();
+$subscription->stop();
 
-$client->disconnect();
+$nc->disconnect();
 ```
 
 ## NATS CRDT
@@ -448,10 +439,10 @@ require __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Counter\CounterConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
-$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+$counter = $js->createOrUpdateCounter(new CounterConfig(
     name: 'atomics',
 ));
 
@@ -471,10 +462,10 @@ require __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Counter\CounterConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
-$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+$counter = $js->createOrUpdateCounter(new CounterConfig(
     name: 'atomics',
 ));
 
@@ -494,12 +485,12 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Counter\CounterConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
 $jetstream->deleteCounter('atomics');
 
-$counter = $jetstream->createOrUpdateCounter(new CounterConfig(
+$counter = $js->createOrUpdateCounter(new CounterConfig(
     name: 'atomics',
 ));
 
@@ -533,10 +524,10 @@ use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
-$stream = $jetstream->createStream(new StreamConfig(
+$stream = $js->createStream(new StreamConfig(
     name: 'RecurrentsStream',
     subjects: [
         'recurrents',
@@ -545,7 +536,7 @@ $stream = $jetstream->createStream(new StreamConfig(
     allowMsgSchedules: true,
 ));
 
-$jetstream->publish('scheduler.recurrents.1', new Nats\Message(
+$js->publish('scheduler.recurrents.1', new Nats\Message(
     payload: '{"id":1}',
     headers: (new Nats\Headers())
         ->with(Header\Schedule::Header, new \DateTimeImmutable('+5 seconds'))
@@ -559,13 +550,13 @@ $consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(
     filterSubjects: ['recurrents'],
 ));
 
-foreach ($consumer->consume() as $delivery) {
+$consumer->consume(static function (Nats\JetStream\Delivery $delivery): void {
     dump([
         $delivery->message->payload,
         $delivery->message->headers?->get(Header\Scheduler::header()),
         $delivery->message->headers?->get(Header\ScheduleNext::header()),
     ]);
-}
+});
 ```
 
 ## NATS JetStream Batch Publishing
@@ -584,17 +575,17 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
-$stream = $jetstream->createStream(new StreamConfig(
+$stream = $js->createStream(new StreamConfig(
     name: 'Batches',
     description: 'Batch Stream',
     subjects: ['batch.*'],
     allowAtomicPublish: true,
 ));
 
-$batch = $jetstream->createPublishBatch();
+$batch = $js->createPublishBatch();
 
 for ($i = 0; $i < 999; ++$i) {
     $batch->publish('batch.orders', new Nats\Message("Order#{$i}"));
@@ -615,17 +606,17 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 
-$client = new Nats\Client(Nats\Config::default());
-$jetstream = $client->jetStream();
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
 
-$stream = $jetstream->createStream(new StreamConfig(
+$stream = $js->createStream(new StreamConfig(
     name: 'Batches',
     description: 'Batch Stream',
     subjects: ['batch.*'],
     allowAtomicPublish: true,
 ));
 
-$jetstream->publishBatch('batch.orders', [
+$js->publishBatch('batch.orders', [
     new Nats\Message('Order#1'),
     new Nats\Message('Order#2'),
     new Nats\Message('Order#3'),

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
+use Amp\ByteStream\ReadableIterableStream;
+use Amp\ByteStream\WritableIterableStream;
 use Amp\Cancellation;
-use Amp\Pipeline;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\ObjectIsInvalid;
@@ -13,7 +14,6 @@ use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
-use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
@@ -21,6 +21,7 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Serialization\Serializer;
+use Thesis\Nats\Subscription;
 
 /**
  * @api
@@ -72,15 +73,11 @@ final readonly class Store
                 ?->get($name);
         }
 
-        /** @var Pipeline\Queue<non-empty-string> $queue */
-        $queue = new Pipeline\Queue();
-        $object = new StoredObject($info, $queue->iterate());
-
         if ($info->size === 0) {
-            $queue->complete();
-
-            return $object;
+            return new StoredObject($info);
         }
+
+        $sink = new WritableIterableStream($info->size);
 
         $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
             deliverSubject: $id = Id\generateInboxId(),
@@ -89,38 +86,26 @@ final readonly class Store
 
         $this->nats->subscribe($id, static function (
             Delivery $delivery,
-            Client $nats,
-            string $sid,
-        ) use ($queue): void {
-            $reply = $delivery->replyTo;
-            if ($reply === null) {
-                $queue->error(new ObjectIsInvalid('No reply in Delivery.'));
-                $nats->unsubscribe($sid);
-
-                return;
-            }
-
-            $metadata = JetStream\Metadata::parse($reply);
+            Subscription $subscription,
+        ) use ($sink): void {
+            $metadata = $delivery->replyTo !== null ? JetStream\Metadata::parse($delivery->replyTo) : null;
 
             $payload = $delivery->message->payload;
 
-            if ($payload !== null && $payload !== '') {
-                try {
-                    $queue->push($payload);
-                } catch (Pipeline\DisposedException) { // Object was destroyed and ConcurrentIterator::__destruct was called.
-                    $nats->unsubscribe($sid);
-
-                    return;
-                }
+            if ($metadata !== null && $payload !== null && $payload !== '') {
+                $sink->write($payload);
             }
 
-            if ($metadata->pending === 0) {
-                $queue->complete();
-                $nats->unsubscribe($sid);
+            if ($metadata?->pending === 0) {
+                $sink->close();
+                $subscription->stop();
             }
         });
 
-        return $object;
+        return new StoredObject(
+            $info,
+            new ReadableIterableStream($sink->getIterator()),
+        );
     }
 
     /**
@@ -248,12 +233,13 @@ final readonly class Store
     }
 
     /**
-     * @return Iterator<ObjectInfo>
+     * @param callable(ObjectInfo, Subscription): void $handler
      */
     public function watch(
+        callable $handler,
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
-    ): Iterator {
+    ): Subscription {
         $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
             description: 'object store consumer',
             deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
@@ -261,12 +247,15 @@ final readonly class Store
             filterSubject: "\$O.{$this->name}.M.>",
         ));
 
-        return $this->nats
-            ->subscribeIterator($id, cancellation: $cancellation)
-            ->select(function (Delivery $delivery) use ($config): Iterator\Outcome {
+        return $this->nats->subscribe(
+            subject: $id,
+            handler: function (Delivery $delivery, Subscription $subscription) use (
+                $config,
+                $handler,
+            ): void {
                 $payload = $delivery->message->payload ?? '{}';
                 if ($payload === '') {
-                    return Iterator\Discard::It;
+                    return;
                 }
 
                 $info = $this->serializer->deserialize(
@@ -275,11 +264,13 @@ final readonly class Store
                 );
 
                 if ($config->ignoreDeletes && $info->deleted) {
-                    return Iterator\Discard::It;
+                    return;
                 }
 
-                return new Iterator\Emit($info);
-            });
+                $handler($info, $subscription);
+            },
+            cancellation: $cancellation,
+        );
     }
 
     /**
