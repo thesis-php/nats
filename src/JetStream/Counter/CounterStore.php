@@ -85,19 +85,17 @@ final readonly class CounterStore
             $subjects,
         );
 
-        $consumer = $this->stream
-            ->createOrUpdateConsumer(new Api\ConsumerConfig(
-                deliverPolicy: DeliverPolicy::LastPerSubject,
-                ackPolicy: AckPolicy::None,
-                replayPolicy: ReplayPolicy::Instant,
-                filterSubjects: $subjects,
-            ))
-            ->asPull();
+        $consumer = $this->stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+            deliverPolicy: DeliverPolicy::LastPerSubject,
+            ackPolicy: AckPolicy::None,
+            replayPolicy: ReplayPolicy::Instant,
+            filterSubjects: $subjects,
+        ));
 
         /** @var Pipeline\Queue<Entry> $queue */
         $queue = new Pipeline\Queue($buffer = 1_000);
 
-        $consumer->consume(
+        $consumer->pull(
             function (JetStream\Delivery $delivery, Subscription $subscription) use ($queue): void {
                 if ($delivery->message->headers?->statusCode() === Status::NoMessages) {
                     $queue->complete();

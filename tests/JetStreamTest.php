@@ -669,7 +669,7 @@ final class JetStreamTest extends NatsTestCase
         $counter = 0;
         $messages = [];
 
-        $subscription = $consumer->asPull()->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use (
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery, Subscription $subscription) use (
             &$messages,
             &$counter,
         ): void {
@@ -817,7 +817,7 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $ts = now();
-        $subscription = $consumer->asPull()->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use ($ts): void {
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery, Subscription $subscription) use ($ts): void {
             self::assertTrue(now() - $ts > 0.5);
             self::assertSame('{"id":1}', $delivery->message->payload);
             self::assertNotNull($delivery->message->headers);
@@ -849,7 +849,7 @@ final class JetStreamTest extends NatsTestCase
                 durableName: generateUniqueId(10),
                 ackPolicy: AckPolicy::Explicit,
             ))
-            ->asPull();
+            ->pulling();
 
         $completedCount = 0;
         $subscriptions = [];
@@ -888,7 +888,7 @@ final class JetStreamTest extends NatsTestCase
                 durableName: generateUniqueId(10),
                 ackPolicy: AckPolicy::Explicit,
             ))
-            ->asPull();
+            ->pulling();
 
         $consumer->unsubscribeAll();
 

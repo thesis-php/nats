@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Amp\Cancellation;
 use Thesis\Nats\Client;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\Router;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Subscription;
 
 /**
  * @api
@@ -32,7 +34,7 @@ final readonly class Consumer
         $this->stream = $info->streamName;
     }
 
-    public function asPull(): PullConsumer
+    public function pulling(): PullConsumer
     {
         return new PullConsumer(
             info: $this->info,
@@ -40,6 +42,20 @@ final readonly class Consumer
             router: $this->router,
             json: $this->json,
         );
+    }
+
+    /**
+     * @param callable(Delivery, Subscription): void $handler
+     * @throws NatsException
+     */
+    public function pull(
+        callable $handler,
+        ConsumeConfig $config = new ConsumeConfig(),
+        ?Cancellation $cancellation = null,
+    ): Subscription {
+        return $this
+            ->pulling()
+            ->consume($handler, $config, $cancellation);
     }
 
     /**

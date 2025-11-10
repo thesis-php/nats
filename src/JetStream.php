@@ -210,7 +210,7 @@ final readonly class JetStream
      */
     public function pullConsumer(string $stream, string $consumer): JetStream\PullConsumer
     {
-        return $this->consumer($stream, $consumer)->asPull();
+        return $this->consumer($stream, $consumer)->pulling();
     }
 
     /**

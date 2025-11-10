@@ -182,42 +182,36 @@ $stream = $js->createStream(new StreamConfig(
     subjects: ['events.*'],
 ));
 
-$logConsumer = $stream
+$logSubscription = $stream
     ->createConsumer(new ConsumerConfig(
         durableName: 'EventLog',
         ackPolicy: AckPolicy::None,
     ))
-    ->asPull()
-    ;
+    ->pull(
+        static function (Nats\JetStream\Delivery $delivery): void {
+            dump("Log event with ack=none: {$delivery->message->payload} ({$delivery->subject})");
+        },
+        new ConsumeConfig(
+            batch: 10,
+            heartbeat: TimeSpan::fromSeconds(5),
+        ),
+    );
 
-$logSubscription = $logConsumer->consume(
-    static function (Nats\JetStream\Delivery $delivery): void {
-        dump("Log event with ack=none: {$delivery->message->payload} ({$delivery->subject})");
-    },
-    new ConsumeConfig(
-        batch: 10,
-        heartbeat: TimeSpan::fromSeconds(5),
-    ),
-);
-
-$handleConsumer = $stream
+$handleSubscription = $stream
     ->createConsumer(new ConsumerConfig(
         durableName: 'EventHandle',
         ackPolicy: AckPolicy::Explicit,
     ))
-    ->asPull()
-    ;
-
-$handleSubscription = $handleConsumer->consume(
-    static function (Nats\JetStream\Delivery $delivery): void {
-        dump("Handle event with ack=explicit: {$delivery->message->payload} ({$delivery->subject})");
-        $delivery->ack();
-    },
-    new ConsumeConfig(
-        batch: 10,
-        heartbeat: TimeSpan::fromSeconds(5),
-    ),
-);
+    ->pull(
+        static function (Nats\JetStream\Delivery $delivery): void {
+            dump("Handle event with ack=explicit: {$delivery->message->payload} ({$delivery->subject})");
+            $delivery->ack();
+        },
+        new ConsumeConfig(
+            batch: 10,
+            heartbeat: TimeSpan::fromSeconds(5),
+        ),
+    );
 
 for ($i = 0; $i < 10; ++$i) {
     $js->publish(
@@ -529,6 +523,7 @@ use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
+use function Amp\trapSignal;
 
 $nc = new Nats\Client(Nats\Config::default());
 $js = $nc->jetStream();
@@ -549,23 +544,24 @@ $js->publish('scheduler.recurrents.1', new Nats\Message(
         ->with(Header\ScheduleTarget::header(), 'recurrents'),
 ));
 
-$consumer = $stream
+$subscription = $stream
     ->createOrUpdateConsumer(new ConsumerConfig(
         durableName: 'RecurrentsConsumer',
         deliverPolicy: DeliverPolicy::New,
         ackPolicy: AckPolicy::None,
         filterSubjects: ['recurrents'],
     ))
-    ->asPull()
-    ;
+    ->pull(static function (Nats\JetStream\Delivery $delivery): void {
+        dump([
+            $delivery->message->payload,
+            $delivery->message->headers?->get(Header\Scheduler::header()),
+            $delivery->message->headers?->get(Header\ScheduleNext::header()),
+        ]);
+    });
 
-$consumer->consume(static function (Nats\JetStream\Delivery $delivery): void {
-    dump([
-        $delivery->message->payload,
-        $delivery->message->headers?->get(Header\Scheduler::header()),
-        $delivery->message->headers?->get(Header\ScheduleNext::header()),
-    ]);
-});
+trapSignal([\SIGINT, \SIGTERM]);
+
+$subscription->awaitCompletion();
 ```
 
 ## NATS JetStream Batch Publishing
