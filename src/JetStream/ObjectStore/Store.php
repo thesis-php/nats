@@ -8,7 +8,7 @@ use Amp\ByteStream\ReadableIterableStream;
 use Amp\ByteStream\WritableIterableStream;
 use Amp\Cancellation;
 use Thesis\Nats\Client;
-use Thesis\Nats\Delivery;
+use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Exception\ObjectIsInvalid;
 use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
@@ -16,6 +16,7 @@ use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
@@ -85,7 +86,7 @@ final readonly class Store
         ));
 
         $this->nats->subscribe($id, static function (
-            Delivery $delivery,
+            NatsDelivery $delivery,
             Subscription $subscription,
         ) use ($sink): void {
             $metadata = $delivery->replyTo !== null ? JetStream\Metadata::parse($delivery->replyTo) : null;
@@ -240,37 +241,38 @@ final readonly class Store
         WatchConfig $config = new WatchConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            description: 'object store consumer',
-            deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
-            deliverSubject: $id = Id\generateInboxId(),
-            filterSubject: "\$O.{$this->name}.M.>",
-        ));
+        $serializer = $this->serializer;
+        $json = $this->json;
 
-        return $this->nats->subscribe(
-            subject: $id,
-            handler: function (Delivery $delivery, Subscription $subscription) use (
-                $config,
-                $handler,
-            ): void {
-                $payload = $delivery->message->payload ?? '{}';
-                if ($payload === '') {
-                    return;
-                }
+        return $this->stream
+            ->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+                description: 'object store consumer',
+                deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
+                deliverSubject: Id\generateInboxId(),
+                filterSubject: "\$O.{$this->name}.M.>",
+            ))
+            ->push(
+                static function (JetStreamDelivery $delivery, Subscription $subscription) use (
+                    $config,
+                    $handler,
+                    $serializer,
+                    $json,
+                ): void {
+                    $payload = $delivery->message->payload ?? '{}';
+                    if ($payload === '') {
+                        return;
+                    }
 
-                $info = $this->serializer->deserialize(
-                    ObjectInfo::class,
-                    $this->json->decode($payload),
-                );
+                    $info = $serializer->deserialize(ObjectInfo::class, $json->decode($payload));
 
-                if ($config->ignoreDeletes && $info->deleted) {
-                    return;
-                }
+                    if ($config->ignoreDeletes && $info->deleted) {
+                        return;
+                    }
 
-                $handler($info, $subscription);
-            },
-            cancellation: $cancellation,
-        );
+                    $handler($info, $subscription);
+                },
+                $cancellation,
+            );
     }
 
     /**

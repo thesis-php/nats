@@ -21,5 +21,6 @@ final readonly class Entry
         public int $revision,
         public ?string $value = null,
         public int $delta = 0,
+        public EntryState $state = EntryState::Created,
     ) {}
 }

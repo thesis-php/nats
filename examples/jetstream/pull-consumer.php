@@ -13,15 +13,20 @@ use function Amp\trapSignal;
 $nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
 $js = $nc->jetStream();
 
-$js->deleteStreams(...$js->streamNames('events.*'));
-
-$stream = $js->createStream(new Api\StreamConfig(
+$stream = $js->createOrUpdateStream(new Api\StreamConfig(
     name: 'EventsStream',
     description: 'Testing Stream',
     subjects: ['events.*'],
 ));
 
-$consumer = $stream->createConsumer(new Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Api\AckPolicy::Explicit));
+try {
+    $stream->deleteConsumer('EventPullConsumer');
+} catch (Nats\Exception\ConsumerNotFound) {
+}
+
+$consumer = $stream->createOrUpdateConsumer(
+    new Api\ConsumerConfig(durableName: 'EventPullConsumer', ackPolicy: Api\AckPolicy::Explicit),
+);
 
 $subscription = $consumer->pull(
     static function (Nats\JetStream\Delivery $delivery): void {
@@ -33,19 +38,6 @@ $subscription = $consumer->pull(
         heartbeat: TimeSpan::fromSeconds(5),
     ),
 );
-
-for ($i = 0; $i < 10; ++$i) {
-    $response = $js->publish(
-        subject: 'events.activated',
-        message: new Nats\Message(
-            payload: "Message#{$i}",
-            headers: (new Nats\Headers())
-                ->with(Nats\Header\MsgId::header(), "id:{$i}"),
-        ),
-    );
-
-    dump($response->seq);
-}
 
 trapSignal([\SIGINT, \SIGTERM]);
 

@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\KeyValue;
 
 use Amp\Cancellation;
-use Thesis\Nats\Client;
-use Thesis\Nats\Delivery;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
+use Thesis\Nats\JetStream\Delivery;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Subscription;
@@ -32,7 +31,6 @@ final readonly class Bucket
      */
     public function __construct(
         public string $name,
-        private Client $nats,
         private JetStream $js,
         private JetStream\Stream $stream,
         private string $prefix,
@@ -56,9 +54,7 @@ final readonly class Bucket
             return null;
         }
 
-        if (\in_array($message->headers->get(Header\KvOperation::header()), [Header\KvOperation::OP_DEL, Header\KvOperation::OP_PURGE], true)) {
-            return null;
-        }
+        $state = EntryState::fromKVOperation($message->headers->get(Header\KvOperation::header()));
 
         return new Entry(
             bucket: $this->stream->name,
@@ -66,6 +62,7 @@ final readonly class Bucket
             created: $message->headers->get(Header\Timestamp::Header) ?? new \DateTimeImmutable(),
             revision: $message->headers->get(Header\Sequence::header()) ?? 1,
             value: $message->payload,
+            state: $state,
         );
     }
 
@@ -170,56 +167,55 @@ final readonly class Bucket
             $keys !== [] ? $keys : [self::ALL_KEYS],
         );
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            description: 'kv watch consumer',
-            deliverPolicy: DeliverPolicy::New,
-            deliverSubject: $id = Id\generateInboxId(),
-            replayPolicy: ReplayPolicy::Instant,
-            headersOnly: $config->headersOnly,
-            filterSubjects: $keys,
-        ));
-
         $name = $this->name;
         $prefix = $this->prefix;
 
-        return $this->nats->subscribe(
-            subject: $id,
-            handler: static function (Delivery $delivery, Subscription $subscription) use (
-                $config,
-                $handler,
-                $name,
-                $prefix,
-            ): void {
-                $key = substr($delivery->subject, \strlen($prefix));
-                if ($key === '') {
-                    return;
-                }
+        return $this->stream
+            ->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+                description: 'kv watch consumer',
+                deliverPolicy: DeliverPolicy::New,
+                deliverSubject: Id\generateInboxId(),
+                replayPolicy: ReplayPolicy::Instant,
+                headersOnly: $config->headersOnly,
+                filterSubjects: $keys,
+            ))
+            ->push(
+                static function (Delivery $delivery, Subscription $subscription) use (
+                    $config,
+                    $handler,
+                    $name,
+                    $prefix,
+                ): void {
+                    $metadata = $delivery->metadata;
+                    if ($metadata === null) {
+                        return;
+                    }
 
-                $op = $delivery->message->headers?->get(Header\KvOperation::header());
+                    $key = substr($delivery->subject, \strlen($prefix));
+                    if ($key === '') {
+                        return;
+                    }
 
-                if ($config->ignoreDeletes && \in_array($op, [Header\KvOperation::OP_PURGE, Header\KvOperation::OP_DEL], true)) {
-                    return;
-                }
+                    $state = EntryState::fromKVOperation($delivery->message->headers?->get(Header\KvOperation::header()));
 
-                $metadata = $delivery->replyTo !== null ? JetStream\Metadata::parse($delivery->replyTo) : null;
-                if ($metadata === null) {
-                    return;
-                }
+                    if ($config->ignoreDeletes && \in_array($state, [EntryState::Deleted, EntryState::Purged], true)) {
+                        return;
+                    }
 
-                $handler(
-                    new Entry(
+                    $entry = new Entry(
                         bucket: $name,
                         key: $key,
                         created: $metadata->timestamp,
                         revision: max($metadata->streamSequence, 0),
                         value: $delivery->message->payload,
                         delta: $metadata->pending,
-                    ),
-                    $subscription,
-                );
-            },
-            cancellation: $cancellation,
-        );
+                        state: $state,
+                    );
+
+                    $handler($entry, $subscription);
+                },
+                $cancellation,
+            );
     }
 
     /**

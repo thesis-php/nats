@@ -2,14 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats;
+namespace Thesis\Nats\JetStream;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
-use Thesis\Nats\JetStream\Consumer;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Nats\Message;
+use Thesis\Nats\NatsTestCase;
+use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 

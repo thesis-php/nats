@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\Internal;
 
 use Amp\Cancellation;
+use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Message;
 use Thesis\Time\TimeSpan;
@@ -14,6 +15,18 @@ use Thesis\Time\TimeSpan;
  */
 final readonly class Acks
 {
+    public static function fromClient(Client $nc): self
+    {
+        return new self(
+            static fn(string $subject, Message $message, ?Cancellation $cancellation = null) => $nc->publish(
+                $subject,
+                $message,
+                cancellation: $cancellation,
+            ),
+            $nc->request(...),
+        );
+    }
+
     /**
      * @param \Closure(non-empty-string, Message, ?Cancellation=): void $publish
      * @param \Closure(non-empty-string, Message, ?Cancellation=): Delivery $request

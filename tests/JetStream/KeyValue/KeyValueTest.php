@@ -123,7 +123,7 @@ final class KeyValueTest extends NatsTestCase
         self::assertNotNull($entry);
 
         $kv->delete('x');
-        self::assertNull($kv->get('x'));
+        self::assertSame(EntryState::Deleted, $kv->get('x')?->state);
 
         $js->deleteKeyValue($bucket);
     }
@@ -140,7 +140,7 @@ final class KeyValueTest extends NatsTestCase
         self::assertNotNull($entry);
 
         $kv->purge('x');
-        self::assertNull($kv->get('x'));
+        self::assertSame(EntryState::Purged, $kv->get('x')?->state);
 
         $js->deleteKeyValue($bucket);
     }

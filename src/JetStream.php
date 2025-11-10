@@ -405,7 +405,6 @@ final readonly class JetStream
 
         return new KeyValue\Bucket(
             name: $config->bucket,
-            nats: $this->nats,
             js: $this,
             stream: $stream,
             prefix: "\$KV.{$config->bucket}.",
@@ -435,7 +434,6 @@ final readonly class JetStream
         if ($stream !== null) {
             return new KeyValue\Bucket(
                 name: $bucket,
-                nats: $this->nats,
                 js: $this,
                 stream: $stream,
                 prefix: "\$KV.{$bucket}.",
