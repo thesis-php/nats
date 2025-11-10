@@ -82,7 +82,12 @@ final class ClientTest extends NatsTestCase
 
         $count = 0;
 
-        $subscription = $client->subscribe("{$id}.*", static function () use (&$count): void {
+        $subscription = $client->subscribe("{$id}.*", static function (Delivery $delivery) use (&$count): void {
+            if ($count === 0) {
+                // Let the subscription accumulate messages in its local queue buffer.
+                delay(0.1);
+            }
+
             ++$count;
         });
 
@@ -90,10 +95,11 @@ final class ClientTest extends NatsTestCase
             $client->publish("{$id}.{$i}", new Message("{$i}"));
         }
 
+        delay(0.1);
         $subscription->stop();
         $subscription->suspend();
 
-        self::assertSame(0, $count);
+        self::assertSame(1, $count);
     }
 
     public function testDrainSubscription(): void

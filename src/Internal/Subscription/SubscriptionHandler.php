@@ -101,7 +101,6 @@ final readonly class SubscriptionHandler
                             try {
                                 $handler($delivery, $subscription);
                             } catch (\Throwable $e) {
-                                $unsubscribe();
                                 $completeSubscriptionMarker->error($e);
 
                                 return;
