@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream;
 
 use Amp\Cancellation;
+use Amp\Future;
 use Thesis\Nats\Client;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\JetStream\Api\Router;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Subscription;
+use function Amp\async;
 
 /**
  * @api
@@ -60,12 +62,30 @@ final class PullConsumer
         return $subscription;
     }
 
-    public function unsubscribeAll(?Cancellation $cancellation = null): void
+    public function stop(?Cancellation $cancellation = null): void
+    {
+        $this->complete(static fn(Subscription $subscription) => $subscription->stop($cancellation));
+    }
+
+    public function drain(?Cancellation $cancellation = null): void
+    {
+        $this->complete(static fn(Subscription $subscription) => $subscription->drain($cancellation));
+    }
+
+    /**
+     * @param \Closure(Subscription): void $complete
+     */
+    private function complete(\Closure $complete): void
     {
         [$subscribers, $this->subscribers] = [$this->subscribers, []];
 
+        /** @var list<Future<void>> $futures */
+        $futures = [];
+
         foreach ($subscribers as $subscriber) {
-            $subscriber->stop($cancellation);
+            $futures[] = async($complete, $subscriber);
         }
+
+        Future\awaitAll($futures);
     }
 }

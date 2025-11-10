@@ -864,7 +864,7 @@ final class JetStreamTest extends NatsTestCase
 
         delay(0.01);
 
-        $consumer->unsubscribeAll();
+        $consumer->stop();
 
         awaitAll(array_map(static fn(Subscription $subscription): Future => async($subscription->awaitCompletion(...)), $subscriptions));
 
@@ -890,7 +890,7 @@ final class JetStreamTest extends NatsTestCase
             ))
             ->pulling();
 
-        $consumer->unsubscribeAll();
+        $consumer->stop();
 
         $stream->delete();
     }
