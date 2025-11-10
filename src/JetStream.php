@@ -205,15 +205,33 @@ final readonly class JetStream
 
     /**
      * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function pullConsumer(string $stream, string $consumer): JetStream\PullConsumer
+    {
+        return $this->consumer($stream, $consumer)->pulling();
+    }
+
+    /**
+     * @param non-empty-string $stream
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function consumer(string $stream, string $consumer): JetStream\Consumer
+    {
+        return $this->setupConsumer($this->consumerInfo($stream, $consumer));
+    }
+
+    /**
+     * @param non-empty-string $stream
      * @throws NatsException
      */
     public function createConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
     ): JetStream\Consumer {
-        return $this->setupConsumer(
-            $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE),
-        );
+        return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_CREATE);
     }
 
     /**
@@ -223,7 +241,7 @@ final readonly class JetStream
     public function updateConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
-    ): Api\ConsumerInfo {
+    ): JetStream\Consumer {
         return $this->upsertConsumer($stream, $config, Api\CreateConsumerRequest::ACTION_UPDATE);
     }
 
@@ -235,9 +253,7 @@ final readonly class JetStream
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
     ): JetStream\Consumer {
-        return $this->setupConsumer(
-            $this->upsertConsumer($stream, $config),
-        );
+        return $this->upsertConsumer($stream, $config);
     }
 
     /**
@@ -639,7 +655,7 @@ final readonly class JetStream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
      */
-    private function upsertConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): Api\ConsumerInfo
+    private function upsertConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): JetStream\Consumer
     {
         $consumerName = $config->name ?? $config->durableName;
 
@@ -647,20 +663,20 @@ final readonly class JetStream
             $consumerName = Id\generateUniqueId(10);
         }
 
-        return $this->request(new Api\CreateConsumerRequest(
+        $info = $this->request(new Api\CreateConsumerRequest(
             stream: $stream,
             consumer: $consumerName,
             config: $config,
             action: $action,
         ));
+
+        return $this->setupConsumer($info);
     }
 
     private function setupConsumer(Api\ConsumerInfo $info): JetStream\Consumer
     {
         return new JetStream\Consumer(
             info: $info,
-            name: $info->name,
-            stream: $info->streamName,
             js: $this,
             nats: $this->nats,
             router: $this->router,

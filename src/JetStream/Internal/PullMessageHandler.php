@@ -17,8 +17,9 @@ use Thesis\Time\TimeSpan;
 
 /**
  * @internal
+ * @TODO Consider for future refactoring:
  */
-final readonly class MessageHandler
+final readonly class PullMessageHandler
 {
     private Acks $acks;
 
@@ -67,16 +68,17 @@ final readonly class MessageHandler
             return;
         }
 
-        ($this->handler)(
-            new JetStreamDelivery(
+        if (\in_array($statusCode ?? Status::OK, [Status::OK, Status::NoMessages], true)) {
+            $jsDelivery = new JetStreamDelivery(
                 message: $delivery->message,
                 subject: $delivery->subject,
                 acks: $this->acks,
                 metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
                 replyTo: $delivery->replyTo,
-            ),
-            $subscription,
-        );
+            );
+
+            ($this->handler)($jsDelivery, $subscription);
+        }
 
         $this->heartbeats->reset();
         $this->pulls->request();

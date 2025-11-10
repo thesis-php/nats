@@ -62,11 +62,37 @@ final readonly class Stream
     }
 
     /**
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function pullConsumer(string $consumer): PullConsumer
+    {
+        return $this->js->pullConsumer($this->name, $consumer);
+    }
+
+    /**
+     * @param non-empty-string $consumer
+     * @throws NatsException
+     */
+    public function consumer(string $consumer): Consumer
+    {
+        return $this->js->consumer($this->name, $consumer);
+    }
+
+    /**
      * @throws NatsException
      */
     public function createConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
     {
         return $this->js->createConsumer($this->name, $config);
+    }
+
+    /**
+     * @throws NatsException
+     */
+    public function updateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
+    {
+        return $this->js->updateConsumer($this->name, $config);
     }
 
     /**

@@ -95,7 +95,7 @@ final readonly class CounterStore
         /** @var Pipeline\Queue<Entry> $queue */
         $queue = new Pipeline\Queue($buffer = 1_000);
 
-        $consumer->consume(
+        $consumer->pull(
             function (JetStream\Delivery $delivery, Subscription $subscription) use ($queue): void {
                 if ($delivery->message->headers?->statusCode() === Status::NoMessages) {
                     $queue->complete();

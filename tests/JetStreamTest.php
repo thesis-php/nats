@@ -231,7 +231,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumer = $stream->createConsumer(new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumerName, $consumer->info->name);
+        self::assertSame($consumerName, $consumer->name);
         self::assertSame(AckPolicy::Explicit, $consumer->info->config->ackPolicy);
         self::assertSame(0, $consumer->info->numPending);
 
@@ -249,14 +249,14 @@ final class JetStreamTest extends NatsTestCase
 
         $consumerName = generateUniqueId(10);
 
-        $consumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
+        $createdConsumer = $js->createConsumer($stream, new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit));
 
-        $updatedInfo = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
+        $updatedConsumer = $js->updateConsumer($stream, new ConsumerConfig(durableName: $consumerName, description: 'Test Consumer', ackPolicy: AckPolicy::Explicit));
 
-        self::assertSame($consumer->info->config->durableName, $updatedInfo->config->durableName);
-        self::assertSame($consumer->info->config->ackPolicy, $updatedInfo->config->ackPolicy);
-        self::assertNull($consumer->info->config->description);
-        self::assertSame('Test Consumer', $updatedInfo->config->description);
+        self::assertSame($createdConsumer->info->config->durableName, $updatedConsumer->info->config->durableName);
+        self::assertSame($createdConsumer->info->config->ackPolicy, $updatedConsumer->info->config->ackPolicy);
+        self::assertNull($createdConsumer->info->config->description);
+        self::assertSame('Test Consumer', $updatedConsumer->info->config->description);
 
         $js->deleteStream($stream);
     }
@@ -669,7 +669,7 @@ final class JetStreamTest extends NatsTestCase
         $counter = 0;
         $messages = [];
 
-        $subscription = $consumer->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use (
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery, Subscription $subscription) use (
             &$messages,
             &$counter,
         ): void {
@@ -817,7 +817,7 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $ts = now();
-        $subscription = $consumer->consume(static function (JetStreamDelivery $delivery, Subscription $subscription) use ($ts): void {
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery, Subscription $subscription) use ($ts): void {
             self::assertTrue(now() - $ts > 0.5);
             self::assertSame('{"id":1}', $delivery->message->payload);
             self::assertNotNull($delivery->message->headers);
@@ -844,10 +844,12 @@ final class JetStreamTest extends NatsTestCase
             subjects: ["{$subject}.*"],
         ));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(
-            durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit,
-        ));
+        $consumer = $stream
+            ->createConsumer(new ConsumerConfig(
+                durableName: generateUniqueId(10),
+                ackPolicy: AckPolicy::Explicit,
+            ))
+            ->pulling();
 
         $completedCount = 0;
         $subscriptions = [];
@@ -862,7 +864,7 @@ final class JetStreamTest extends NatsTestCase
 
         delay(0.01);
 
-        $consumer->unsubscribeAll();
+        $consumer->stop();
 
         awaitAll(array_map(static fn(Subscription $subscription): Future => async($subscription->awaitCompletion(...)), $subscriptions));
 
@@ -881,12 +883,14 @@ final class JetStreamTest extends NatsTestCase
 
         $stream = $js->createStream(new StreamConfig($streamName));
 
-        $consumer = $stream->createConsumer(new ConsumerConfig(
-            durableName: generateUniqueId(10),
-            ackPolicy: AckPolicy::Explicit,
-        ));
+        $consumer = $stream
+            ->createConsumer(new ConsumerConfig(
+                durableName: generateUniqueId(10),
+                ackPolicy: AckPolicy::Explicit,
+            ))
+            ->pulling();
 
-        $consumer->unsubscribeAll();
+        $consumer->stop();
 
         $stream->delete();
     }
