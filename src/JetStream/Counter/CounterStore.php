@@ -85,12 +85,14 @@ final readonly class CounterStore
             $subjects,
         );
 
-        $consumer = $this->stream->createOrUpdateConsumer(new Api\ConsumerConfig(
-            deliverPolicy: DeliverPolicy::LastPerSubject,
-            ackPolicy: AckPolicy::None,
-            replayPolicy: ReplayPolicy::Instant,
-            filterSubjects: $subjects,
-        ));
+        $consumer = $this->stream
+            ->createOrUpdateConsumer(new Api\ConsumerConfig(
+                deliverPolicy: DeliverPolicy::LastPerSubject,
+                ackPolicy: AckPolicy::None,
+                replayPolicy: ReplayPolicy::Instant,
+                filterSubjects: $subjects,
+            ))
+            ->asPull();
 
         /** @var Pipeline\Queue<Entry> $queue */
         $queue = new Pipeline\Queue($buffer = 1_000);

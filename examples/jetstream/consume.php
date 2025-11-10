@@ -21,7 +21,9 @@ $stream = $js->createStream(new Api\StreamConfig(
     subjects: ['events.*'],
 ));
 
-$consumer = $stream->createConsumer(new Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Api\AckPolicy::Explicit));
+$consumer = $stream
+    ->createConsumer(new Api\ConsumerConfig(durableName: 'EventsConsumer', ackPolicy: Api\AckPolicy::Explicit))
+    ->asPull();
 
 $subscription = $consumer->consume(
     static function (Nats\JetStream\Delivery $delivery): void {

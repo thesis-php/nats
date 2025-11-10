@@ -18,7 +18,7 @@ use Thesis\Time\TimeSpan;
 /**
  * @internal
  */
-final readonly class MessageHandler
+final readonly class PullMessageHandler
 {
     private Acks $acks;
 

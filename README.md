@@ -182,10 +182,13 @@ $stream = $js->createStream(new StreamConfig(
     subjects: ['events.*'],
 ));
 
-$logConsumer = $stream->createConsumer(new ConsumerConfig(
-    durableName: 'EventLog',
-    ackPolicy: AckPolicy::None,
-));
+$logConsumer = $stream
+    ->createConsumer(new ConsumerConfig(
+        durableName: 'EventLog',
+        ackPolicy: AckPolicy::None,
+    ))
+    ->asPull()
+    ;
 
 $logSubscription = $logConsumer->consume(
     static function (Nats\JetStream\Delivery $delivery): void {
@@ -197,10 +200,13 @@ $logSubscription = $logConsumer->consume(
     ),
 );
 
-$handleConsumer = $stream->createConsumer(new ConsumerConfig(
-    durableName: 'EventHandle',
-    ackPolicy: AckPolicy::Explicit,
-));
+$handleConsumer = $stream
+    ->createConsumer(new ConsumerConfig(
+        durableName: 'EventHandle',
+        ackPolicy: AckPolicy::Explicit,
+    ))
+    ->asPull()
+    ;
 
 $handleSubscription = $handleConsumer->consume(
     static function (Nats\JetStream\Delivery $delivery): void {
@@ -543,12 +549,15 @@ $js->publish('scheduler.recurrents.1', new Nats\Message(
         ->with(Header\ScheduleTarget::header(), 'recurrents'),
 ));
 
-$consumer = $stream->createOrUpdateConsumer(new ConsumerConfig(
-    durableName: 'RecurrentsConsumer',
-    deliverPolicy: DeliverPolicy::New,
-    ackPolicy: AckPolicy::None,
-    filterSubjects: ['recurrents'],
-));
+$consumer = $stream
+    ->createOrUpdateConsumer(new ConsumerConfig(
+        durableName: 'RecurrentsConsumer',
+        deliverPolicy: DeliverPolicy::New,
+        ackPolicy: AckPolicy::None,
+        filterSubjects: ['recurrents'],
+    ))
+    ->asPull()
+    ;
 
 $consumer->consume(static function (Nats\JetStream\Delivery $delivery): void {
     dump([
