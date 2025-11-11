@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api;
-use Thesis\Nats\JetStream\ConsumeConfig;
+use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Time\TimeSpan;
 use function Amp\trapSignal;
 
@@ -33,7 +33,7 @@ $subscription = $consumer->pull(
         dump($delivery->message->payload);
         $delivery->ack();
     },
-    config: new ConsumeConfig(
+    config: new PullConsumeConfig(
         batch: 2,
         heartbeat: TimeSpan::fromSeconds(5),
     ),

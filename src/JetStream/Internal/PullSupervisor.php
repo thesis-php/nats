@@ -6,7 +6,7 @@ namespace Thesis\Nats\JetStream\Internal;
 
 use Revolt\EventLoop;
 use Thesis\Nats\Client;
-use Thesis\Nats\JetStream\ConsumeConfig;
+use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 
@@ -24,7 +24,7 @@ final readonly class PullSupervisor
     public function __construct(
         Client $nats,
         Encoder $json,
-        ConsumeConfig $config,
+        PullConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {

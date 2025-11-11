@@ -113,7 +113,7 @@ final readonly class CounterStore
                     $subscription->stop();
                 }
             },
-            new JetStream\ConsumeConfig(
+            new JetStream\PullConsumeConfig(
                 expires: TimeSpan::fromSeconds(0),
                 batch: $buffer,
                 noWait: true,

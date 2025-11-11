@@ -62,7 +62,7 @@ final readonly class Consumer
      */
     public function pull(
         callable $handler,
-        ConsumeConfig $config = new ConsumeConfig(),
+        PullConsumeConfig $config = new PullConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
         return $this

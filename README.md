@@ -167,7 +167,7 @@ use Thesis\Nats;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
-use Thesis\Nats\JetStream\ConsumeConfig;
+use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Time\TimeSpan;
 use function Amp\trapSignal;
 
@@ -191,7 +191,7 @@ $logSubscription = $stream
         static function (Nats\JetStream\Delivery $delivery): void {
             dump("Log event with ack=none: {$delivery->message->payload} ({$delivery->subject})");
         },
-        new ConsumeConfig(
+        new PullConsumeConfig(
             batch: 10,
             heartbeat: TimeSpan::fromSeconds(5),
         ),
@@ -207,7 +207,7 @@ $handleSubscription = $stream
             dump("Handle event with ack=explicit: {$delivery->message->payload} ({$delivery->subject})");
             $delivery->ack();
         },
-        new ConsumeConfig(
+        new PullConsumeConfig(
             batch: 10,
             heartbeat: TimeSpan::fromSeconds(5),
         ),

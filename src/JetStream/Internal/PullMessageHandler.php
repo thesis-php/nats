@@ -7,9 +7,9 @@ namespace Thesis\Nats\JetStream\Internal;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
-use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
+use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
@@ -36,7 +36,7 @@ final readonly class PullMessageHandler
         private mixed $handler,
         Client $nats,
         Encoder $json,
-        ConsumeConfig $config,
+        PullConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {

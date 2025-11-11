@@ -56,16 +56,16 @@ final class PushConsumer
             ): void {
                 $status = $delivery->message->headers?->statusCode();
 
-                if ($status !== null) {
+                if (($status ?? Status::OK) !== Status::OK) {
                     $description = $delivery->message->headers?->statusDescription();
 
                     if ($status === Status::Control && $description?->value === Description::FlowControl) {
                         $delivery->reply(new Message());
                     } elseif ($status === Status::Conflict && $description?->value === Description::ConsumerDeleted) {
                         $subscription->stop();
-
-                        return;
                     }
+
+                    return;
                 }
 
                 if (($replyTo = $delivery->replyTo) !== null) {
