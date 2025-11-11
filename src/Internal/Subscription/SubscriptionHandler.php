@@ -35,7 +35,7 @@ final readonly class SubscriptionHandler
         /** @var Pipeline\Queue<Delivery> $queue */
         $queue = new Pipeline\Queue($bufferSize);
 
-        /** @var DeferredFuture<Operation<never>> */
+        /** @var DeferredFuture<Operation<*>> */
         $completeSubscriptionDeferred = new DeferredFuture();
 
         /** @var DeferredFuture<void> */
@@ -84,6 +84,12 @@ final readonly class SubscriptionHandler
                     }
                 } else {
                     $queue->complete();
+
+                    if ($op instanceof Error) {
+                        $completeSubscriptionMarker->error($op->exception);
+
+                        return;
+                    }
 
                     if ($op instanceof Drain) {
                         $messages = [...$mq];
