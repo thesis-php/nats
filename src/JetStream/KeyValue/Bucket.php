@@ -214,7 +214,7 @@ final readonly class Bucket
 
                     $handler($entry, $subscription);
                 },
-                $cancellation,
+                cancellation: $cancellation,
             );
     }
 

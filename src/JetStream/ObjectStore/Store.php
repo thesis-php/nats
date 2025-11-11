@@ -271,7 +271,7 @@ final readonly class Store
 
                     $handler($info, $subscription);
                 },
-                $cancellation,
+                cancellation: $cancellation,
             );
     }
 

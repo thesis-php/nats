@@ -42,6 +42,16 @@ final class Subscription
         return $this;
     }
 
+    public function awaitCompletion(?Cancellation $cancellation = null): void
+    {
+        $this->completeMarker->await($cancellation);
+    }
+
+    public function completed(): bool
+    {
+        return $this->completeMarker->isComplete();
+    }
+
     public function stop(?Cancellation $cancellation = null): void
     {
         $this->complete(Stop::It, $cancellation);
@@ -55,11 +65,6 @@ final class Subscription
     public function error(\Throwable $e, ?Cancellation $cancellation = null): void
     {
         $this->complete(new Error($e), $cancellation);
-    }
-
-    public function awaitCompletion(?Cancellation $cancellation = null): void
-    {
-        $this->completeMarker->await($cancellation);
     }
 
     /**

@@ -27,3 +27,6 @@ nats-help:
 
 nats-latency:
 	docker run --rm --network host bitnamilegacy/natscli:latest --server localhost:4222 --user user --password Pswd1 latency --server-b localhost:4223 --rate 500000
+
+nats-stop:
+	docker compose down nats-1 nats-2 nats-3

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Time\TimeSpan;
+use function Amp\async;
 use function Amp\trapSignal;
 
 $nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
@@ -37,9 +38,11 @@ $subscription = $consumer->push(
     },
 );
 
-trapSignal([\SIGINT, \SIGTERM]);
+async(static function () use ($subscription): void {
+    trapSignal([\SIGINT, \SIGTERM]);
+    $subscription->stop();
+});
 
-$subscription->stop();
 $subscription->awaitCompletion();
 
 $nc->disconnect();

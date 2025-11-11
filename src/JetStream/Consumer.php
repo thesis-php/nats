@@ -77,11 +77,12 @@ final readonly class Consumer
      */
     public function push(
         callable $handler,
+        PushConsumeConfig $config = new PushConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
         return $this
             ->pushing()
-            ->consume($handler, $cancellation);
+            ->consume($handler, $config, $cancellation);
     }
 
     /**
