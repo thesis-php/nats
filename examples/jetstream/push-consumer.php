@@ -29,6 +29,7 @@ $consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
     deliverSubject: 'push-consumer-delivery',
     ackPolicy: Api\AckPolicy::Explicit,
     idleHeartbeat: TimeSpan::fromSeconds(1),
+    maxAckPending: 1,
 ));
 
 $subscription = $consumer->push(

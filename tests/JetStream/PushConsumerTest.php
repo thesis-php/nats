@@ -14,6 +14,7 @@ use Thesis\Nats\Message;
 use Thesis\Nats\NatsTestCase;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
+use function Amp\delay;
 use function Thesis\Nats\Internal\Id\generateInboxId;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 

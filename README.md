@@ -8,7 +8,7 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
 - [NATS JetStream](https://docs.nats.io/nats-concepts/jetstream)
-  - [Consume](#consume)
+  - [Pull consumer](#pull-consumer)
   - [Get message](#get-message)
 - [NATS KV](https://docs.nats.io/nats-concepts/jetstream/key-value-store)
   - [Store key values](#store-key-values)
@@ -76,7 +76,7 @@ $nc->publish('foo.bar', new Nats\Message('Hello World!')); // visible for 1-2 co
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nc->stop();
+$nc->drain();
 ```
 
 #### Queues
@@ -123,7 +123,7 @@ $nc->publish('foo.bar.baz', new Nats\Message('z'));
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nc->stop();
+$nc->drain();
 ```
 
 #### Request-reply
@@ -147,14 +147,14 @@ $nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
 $response = $nc->request('foo.bar', new Nats\Message('Hello World!'));
 dump("Received response {$response->message->payload}");
 
-$nc->stop();
+$nc->drain();
 ```
 
 ## Nats JetStream
 
 JetStream is the built-in NATS persistence system. The library provides both JetStream entity management (streams, consumers) and message publishing/consumption capabilities.
 
-#### Consume
+#### Pull Consumer
 
 ```php
 <?php
@@ -229,8 +229,92 @@ trapSignal([\SIGINT, \SIGTERM]);
 $logSubscription->drain();
 $handleSubscription->drain();
 
-$nc->stop();
+$nc->drain();
 ```
+
+#### Push Consumer
+
+NATS offers two message delivery models: **pull** and **push**. Although the NATS documentation [recommends](https://docs.nats.io/nats-concepts/jetstream/consumers#dispatch-type-pull-push) the pull approach, for most PHP use cases push consumers are often preferable.
+Similar to RabbitMQ, push consumers can be configured to avoid negative impacts on both the consumers and the messages themselves.
+Key configuration parameters include `maxAckPending`, which limits the number of unacknowledged messages NATS will deliver before waiting (analogous to `prefetch count` in RabbitMQ),
+and the `ackPolicy`. This setup allows you to scale message processing by increasing the number of consumers and distribute messages among them more evenly.
+
+For example, if you want to process messages one by one with explicit acknowledgments, you would set `maxAckPending=1` and `ackPolicy=explicit`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+use Thesis\Time\TimeSpan;
+use function Amp\async;
+use function Amp\trapSignal;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$stream = $js->createOrUpdateStream(new Api\StreamConfig(
+    name: 'EventsStream',
+    description: 'Testing Stream',
+    subjects: ['events.*'],
+));
+
+$consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+    durableName: 'EventPushConsumer',
+    deliverSubject: 'push-consumer-delivery',
+    ackPolicy: Api\AckPolicy::Explicit,
+    idleHeartbeat: TimeSpan::fromSeconds(5),
+    maxAckPending: 1,
+));
+
+$subscription = $consumer->push(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        dump($delivery->message->payload);
+        $delivery->ack();
+    },
+);
+
+async(static function () use ($subscription): void {
+    trapSignal([\SIGINT, \SIGTERM]);
+    $subscription->stop();
+});
+
+$subscription->awaitCompletion();
+
+$nc->drain();
+```
+
+Additionally, for push consumers, the `deliverSubject` parameter is mandatory, as it is this very parameter that distinguishes the push model from pull.
+
+If you want to distribute messages from a single consumer across different subscriptions, you should use the `deliverGroup` parameter.
+This enables you to scale processing across multiple consumer instances. This parameter functions identically to `queueGroup` in NATS Core.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+use Thesis\Time\TimeSpan;
+
+$consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+    durableName: 'EventPushConsumer',
+    deliverSubject: 'push-consumer-delivery',
+    deliverGroup: 'testing',
+    ackPolicy: Api\AckPolicy::Explicit,
+    idleHeartbeat: TimeSpan::fromSeconds(5),
+    maxAckPending: 1,
+));
+```
+
+Please refer to the push consumer configuration [documentation](https://docs.nats.io/nats-concepts/jetstream/consumers#push-specific) to understand the purpose of each parameter.
 
 #### Get message
 
@@ -268,7 +352,7 @@ for ($i = 0; $i < 5; ++$i) {
 
 dump($stream->getLastMessageForSubject('events.payment_rejected')?->payload);
 
-$nc->stop();
+$nc->drain();
 ```
 
 ## NATS Key Value Store
@@ -302,7 +386,7 @@ dump(
     $kv->get('database.dsn')?->value,
 );
 
-$nc->stop();
+$nc->drain();
 ```
 
 #### Watch KV
@@ -338,7 +422,7 @@ trapSignal([\SIGTERM, \SIGINT]);
 
 $subscription->stop();
 
-$nc->stop();
+$nc->drain();
 ```
 
 ## NATS Object Store
@@ -381,7 +465,7 @@ dump(
     (string) $store->get('config.php'),
 );
 
-$nc->stop();
+$nc->drain();
 ```
 
 #### Watch Object Store
@@ -419,7 +503,7 @@ delay(0.5);
 
 $subscription->stop();
 
-$nc->stop();
+$nc->drain();
 ```
 
 ## NATS CRDT
