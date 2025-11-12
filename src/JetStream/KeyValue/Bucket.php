@@ -61,6 +61,7 @@ final readonly class Bucket
             key: $key,
             created: $message->headers->get(Header\Timestamp::Header) ?? new \DateTimeImmutable(),
             revision: $message->headers->get(Header\Sequence::header()) ?? 1,
+            size: \strlen($message->payload ?? ''),
             value: $message->payload,
             state: $state,
         );
@@ -202,12 +203,17 @@ final readonly class Bucket
                         return;
                     }
 
+                    $payload = $delivery->message->payload;
+
                     $entry = new Entry(
                         bucket: $name,
                         key: $key,
                         created: $metadata->timestamp,
                         revision: max($metadata->streamSequence, 0),
-                        value: $delivery->message->payload,
+                        size: $payload !== null ? \strlen($payload) : (
+                            $delivery->message->headers?->get(Header\MsgSize::header()) ?? 0
+                        ),
+                        value: $payload,
                         delta: $metadata->pending,
                         state: $state,
                     );

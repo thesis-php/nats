@@ -49,6 +49,7 @@ final class KeyValueTest extends NatsTestCase
         self::assertSame('x', $entry->key);
         self::assertEquals('y', $entry->value);
         self::assertSame(1, $entry->revision);
+        self::assertSame(1, $entry->size);
         self::assertGreaterThanOrEqual($ts->getTimestamp(), $entry->created->getTimestamp());
 
         $js->deleteKeyValue($bucket);
@@ -179,7 +180,7 @@ final class KeyValueTest extends NatsTestCase
             &$changes,
             &$count,
         ): void {
-            $changes["{$entry->key}:{$entry->revision}"] = $entry->value;
+            $changes["{$entry->key}:{$entry->revision}"] = [$entry->value, $entry->size];
 
             if (++$count >= 3) {
                 $subscription->stop();
@@ -187,16 +188,16 @@ final class KeyValueTest extends NatsTestCase
         });
 
         $kv->put('x', 'y');
-        $kv->put('a', 'b');
-        $kv->put('x', 'w');
+        $kv->put('a', 'bb');
+        $kv->put('x', 'www');
 
         $subscription->awaitCompletion();
 
         self::assertSame(
             [
-                'x:1' => 'y',
-                'a:2' => 'b',
-                'x:3' => 'w',
+                'x:1' => ['y', 1],
+                'a:2' => ['bb', 2],
+                'x:3' => ['www', 3],
             ],
             $changes,
         );
@@ -302,7 +303,6 @@ final class KeyValueTest extends NatsTestCase
             config: new WatchConfig(ignoreDeletes: true),
         );
 
-
         $kv->put('x', 'y');
         $kv->put('a', 'b');
         $kv->delete('x');
@@ -312,6 +312,42 @@ final class KeyValueTest extends NatsTestCase
         self::assertSame(
             [
                 'x:1' => 'y',
+            ],
+            $changes,
+        );
+
+        $js->deleteKeyValue($bucket);
+    }
+
+    public function testWatchHeadersOnly(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $kv = $js->createOrUpdateKeyValue(new BucketConfig($bucket = generateUniqueId(10)));
+
+        $changes = [];
+        $count = 0;
+
+        $subscription = $kv->watch(
+            static function (Entry $entry, Subscription $subscription) use (&$changes, &$count): void {
+                $changes["{$entry->key}:{$entry->revision}"] = [$entry->value, $entry->size];
+
+                if (++$count >= 2) {
+                    $subscription->stop();
+                }
+            },
+            config: new WatchConfig(headersOnly: true),
+        );
+
+        $kv->put('x', 'y');
+        $kv->put('a', 'bb');
+
+        $subscription->awaitCompletion();
+
+        self::assertSame(
+            [
+                'x:1' => [null, 1],
+                'a:2' => [null, 2],
             ],
             $changes,
         );

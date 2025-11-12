@@ -13,12 +13,14 @@ final readonly class Entry
      * @param non-empty-string $bucket
      * @param non-empty-string $key
      * @param non-negative-int $revision
+     * @param non-negative-int $size
      */
     public function __construct(
         public string $bucket,
         public string $key,
         public \DateTimeImmutable $created,
         public int $revision,
+        public int $size,
         public ?string $value = null,
         public int $delta = 0,
         public EntryState $state = EntryState::Created,
