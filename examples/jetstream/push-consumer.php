@@ -45,4 +45,4 @@ async(static function () use ($subscription): void {
 
 $subscription->awaitCompletion();
 
-$nc->disconnect();
+$nc->stop();

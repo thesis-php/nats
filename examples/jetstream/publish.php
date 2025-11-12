@@ -29,4 +29,4 @@ for ($i = 0; $i < 10; ++$i) {
     dump($response->seq);
 }
 
-$nc->disconnect();
+$nc->stop();

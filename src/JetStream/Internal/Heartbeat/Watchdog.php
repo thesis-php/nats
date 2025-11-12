@@ -12,7 +12,7 @@ use Thesis\Time\TimeSpan;
 /**
  * @internal
  */
-final class Timer
+final class Watchdog
 {
     private ?string $callbackId = null;
 
@@ -64,13 +64,13 @@ final class Timer
         }
     }
 
-    private function schedule(): void
-    {
-        $this->callbackId = EventLoop::repeat($this->interval, $this->func);
-    }
-
     public function __destruct()
     {
         $this->stop();
+    }
+
+    private function schedule(): void
+    {
+        $this->callbackId = EventLoop::repeat($this->interval, $this->func);
     }
 }

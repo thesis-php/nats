@@ -41,8 +41,8 @@ abstract class NatsTestCase extends TestCase
     {
         parent::tearDown();
 
-        $this->client?->disconnect();
-        $this->jwtClient?->disconnect();
+        $this->client?->stop();
+        $this->jwtClient?->stop();
     }
 
     final protected function client(): Client

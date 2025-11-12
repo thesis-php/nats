@@ -26,7 +26,7 @@ final class PushConsumer
 
     private ?Subscription $subscription = null;
 
-    private ?Heartbeat\Timer $timer = null;
+    private ?Heartbeat\Watchdog $watchdog = null;
 
     /**
      * @param non-empty-string $deliverSubject
@@ -53,45 +53,27 @@ final class PushConsumer
         }
 
         $acks = $this->acks;
-        $timer = &$this->timer;
+        $watchdog = &$this->watchdog;
 
         $subscription = $this->nats->subscribe(
             subject: $this->deliverSubject,
             handler: static function (NatsDelivery $delivery, Subscription $subscription) use (
                 $handler,
                 $acks,
-                &$timer,
+                &$watchdog,
             ): void {
-                $status = $delivery->message->headers?->statusCode();
+                // When we begin processing a message, we disable the heartbeat watchdog to prevent the subscription from being canceled
+                // if the processing time exceeds the heartbeat interval. This is necessary because during this time
+                // we cannot signal to the watchdog that heartbeats are being received.
+                $watchdog?->stop();
 
-                if (($status ?? Status::OK) !== Status::OK) {
-                    $description = $delivery->message->headers?->statusDescription();
+                self::handleDelivery($delivery, $handler, $subscription, $acks);
 
-                    switch ([$status, $description]) {
-                        case [Status::Control, Description::FlowControl]:
-                            $delivery->reply(new Message());
-                            break;
-                        case [Status::Conflict, Description::ConsumerDeleted]:
-                            $subscription->stop();
-                            break;
-                        case [Status::Control, Description::IdleHeartbeat]:
-                            $timer?->reset();
-                            break;
-                    }
-
-                    return;
-                }
-
-                if (($replyTo = $delivery->replyTo) !== null) {
-                    $jsDelivery = new JetStreamDelivery(
-                        message: $delivery->message,
-                        subject: $delivery->subject,
-                        acks: $acks,
-                        metadata: Metadata::parse($replyTo),
-                        replyTo: $replyTo,
-                    );
-
-                    $handler($jsDelivery, $subscription);
+                // If the subscription was not completed during message processing,
+                // we must resume the watchdog in any case, even if the received message wasn't a heartbeat,
+                // because any message from the NATS server proves its availability.
+                if (!$subscription->completed()) {
+                    $watchdog?->reset();
                 }
             },
             queueGroup: $this->info->config->deliverGroup,
@@ -99,7 +81,7 @@ final class PushConsumer
         );
 
         if ($this->info->config->idleHeartbeat?->isPositive()) {
-            $this->timer = new Heartbeat\Timer(
+            $this->watchdog = new Heartbeat\Watchdog(
                 $this->info->config->idleHeartbeat->mul(2),
                 $subscription,
                 $config->maxMissedHeartbeats,
@@ -129,8 +111,47 @@ final class PushConsumer
                 $do($this->subscription);
             }
         } finally {
-            $this->timer = null;
+            $this->watchdog = null;
             $this->subscription = null;
+        }
+    }
+
+    /**
+     * @param callable(JetStreamDelivery, Subscription): void $handler
+     */
+    private static function handleDelivery(
+        NatsDelivery $delivery,
+        callable $handler,
+        Subscription $subscription,
+        Acks $acks,
+    ): void {
+        $status = $delivery->message->headers?->statusCode();
+
+        if (($status ?? Status::OK) !== Status::OK) {
+            $description = $delivery->message->headers?->statusDescription();
+
+            switch ([$status, $description]) {
+                case [Status::Control, Description::FlowControl]:
+                    $delivery->reply(new Message());
+                    break;
+                case [Status::Conflict, Description::ConsumerDeleted]:
+                    $subscription->stop();
+                    break;
+            }
+
+            return;
+        }
+
+        if (($replyTo = $delivery->replyTo) !== null) {
+            $jsDelivery = new JetStreamDelivery(
+                message: $delivery->message,
+                subject: $delivery->subject,
+                acks: $acks,
+                metadata: Metadata::parse($replyTo),
+                replyTo: $replyTo,
+            );
+
+            $handler($jsDelivery, $subscription);
         }
     }
 }

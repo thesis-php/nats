@@ -44,4 +44,4 @@ trapSignal([\SIGINT, \SIGTERM]);
 $subscription->stop();
 $subscription->awaitCompletion();
 
-$nc->disconnect();
+$nc->stop();

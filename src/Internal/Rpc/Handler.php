@@ -14,11 +14,9 @@ use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
-use Thesis\Nats\Subscription;
 
 /**
  * @internal
- * @phpstan-import-type Subscribe from Client
  */
 final class Handler
 {
@@ -28,7 +26,8 @@ final class Handler
     /** @var non-empty-string */
     private readonly string $inboxId;
 
-    private ?Subscription $subscription = null;
+    /** @var ?\Closure(?Cancellation=): void */
+    private ?\Closure $unsubscribe = null;
 
     public function __construct()
     {
@@ -37,14 +36,14 @@ final class Handler
     }
 
     /**
-     * @param Subscribe $subscribe
+     * @param \Closure(non-empty-string, callable(Delivery): void, ?Cancellation=): (\Closure(): void) $subscribe
      */
-    public function setup(\Closure $subscribe): void
+    public function setup(\Closure $subscribe, ?Cancellation $cancellation = null): void
     {
         $futures = &$this->futures;
         $inboxId = $this->inboxId;
 
-        $this->subscription = $subscribe(
+        $this->unsubscribe = $subscribe(
             "{$inboxId}*",
             static function (Delivery $delivery) use (
                 &$futures,
@@ -58,15 +57,18 @@ final class Handler
                     unset($futures[$replyTo->token]);
                 }
             },
+            $cancellation,
         );
     }
 
     public function shutdown(?Cancellation $cancellation = null): void
     {
         try {
-            $this->subscription?->stop($cancellation);
+            if ($this->unsubscribe !== null) {
+                ($this->unsubscribe)($cancellation);
+            }
         } finally {
-            $this->subscription = null;
+            $this->unsubscribe = null;
             $this->futures = [];
         }
     }

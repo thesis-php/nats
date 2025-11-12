@@ -76,7 +76,7 @@ $nc->publish('foo.bar', new Nats\Message('Hello World!')); // visible for 1-2 co
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 #### Queues
@@ -123,7 +123,7 @@ $nc->publish('foo.bar.baz', new Nats\Message('z'));
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 #### Request-reply
@@ -147,7 +147,7 @@ $nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
 $response = $nc->request('foo.bar', new Nats\Message('Hello World!'));
 dump("Received response {$response->message->payload}");
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 ## Nats JetStream
@@ -229,7 +229,7 @@ trapSignal([\SIGINT, \SIGTERM]);
 $logSubscription->drain();
 $handleSubscription->drain();
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 #### Get message
@@ -268,7 +268,7 @@ for ($i = 0; $i < 5; ++$i) {
 
 dump($stream->getLastMessageForSubject('events.payment_rejected')?->payload);
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 ## NATS Key Value Store
@@ -302,7 +302,7 @@ dump(
     $kv->get('database.dsn')?->value,
 );
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 #### Watch KV
@@ -338,7 +338,7 @@ trapSignal([\SIGTERM, \SIGINT]);
 
 $subscription->stop();
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 ## NATS Object Store
@@ -381,7 +381,7 @@ dump(
     (string) $store->get('config.php'),
 );
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 #### Watch Object Store
@@ -419,7 +419,7 @@ delay(0.5);
 
 $subscription->stop();
 
-$nc->disconnect();
+$nc->stop();
 ```
 
 ## NATS CRDT

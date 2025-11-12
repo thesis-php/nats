@@ -36,7 +36,7 @@ final class Client
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpc = null;
 
-    /** @var array<non-empty-string, array{callable(Delivery): bool, Subscription}> */
+    /** @var array<non-empty-string, array{callable(Delivery): bool, ?Subscription}> */
     private array $subscribers = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
@@ -171,10 +171,13 @@ final class Client
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
     ): Delivery {
-        $subscribe = $this->subscribe(...);
-        $this->rpc ??= async(static function () use ($subscribe): Rpc\Handler {
+        $subscribe = $this->subscribeCallback(...);
+        $this->rpc ??= async(static function () use (
+            $subscribe,
+            $cancellation,
+        ): Rpc\Handler {
             $handler = new Rpc\Handler();
-            $handler->setup($subscribe);
+            $handler->setup($subscribe, $cancellation);
 
             return $handler;
         });
@@ -202,27 +205,50 @@ final class Client
         );
     }
 
-    public function disconnect(?Cancellation $cancellation = null): void
+    public function stop(?Cancellation $cancellation = null): void
     {
-        $connection = $this->connection?->await($cancellation);
-        if ($connection === null) {
-            return;
-        }
+        $this->disconnect(static fn(Subscription $subscription) => $subscription->stop($cancellation), $cancellation);
+    }
 
-        /** @var Subscription $subscription */
-        foreach ($this->subscribers as [$_, $subscription]) {
-            $subscription->stop($cancellation);
-        }
-
-        $this->connection = null;
-        $connection->close();
+    public function drain(?Cancellation $cancellation = null): void
+    {
+        $this->disconnect(static fn(Subscription $subscription) => $subscription->drain($cancellation), $cancellation);
     }
 
     public function __destruct()
     {
         if (\PHP_VERSION_ID >= 80400) {
-            $this->disconnect();
+            $this->stop();
         }
+    }
+
+    /**
+     * @param non-empty-string $subject
+     * @param callable(Delivery): void $handler
+     * @return \Closure(?Cancellation=): void
+     * @throws NatsException
+     */
+    private function subscribeCallback(
+        string $subject,
+        callable $handler,
+        ?Cancellation $cancellation = null,
+    ): \Closure {
+        $subscriptionId = $this->subscriptionIdGenerator->nextId();
+
+        $this->subscribers[$subscriptionId] = [
+            static function (Delivery $delivery) use ($handler): bool {
+                $handler($delivery);
+
+                return true;
+            },
+            null,
+        ];
+
+        $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId));
+
+        return function (?Cancellation $cancellation = null) use ($subscriptionId): void {
+            $this->unsubscribe($subscriptionId, $cancellation);
+        };
     }
 
     /**
@@ -257,6 +283,32 @@ final class Client
         if (!$pushed) {
             $subscription?->stop();
         }
+    }
+
+    /**
+     * @param \Closure(Subscription): void $do
+     */
+    private function disconnect(
+        \Closure $do,
+        ?Cancellation $cancellation = null,
+    ): void {
+        $connection = $this->connection?->await($cancellation);
+        if ($connection === null) {
+            return;
+        }
+
+        /** @var ?Subscription $subscription */
+        foreach ($this->subscribers as [$_, $subscription]) {
+            if ($subscription !== null) {
+                $do($subscription);
+            }
+        }
+
+        $this->rpc?->await($cancellation)?->shutdown($cancellation);
+
+        $this->rpc = null;
+        $this->connection = null;
+        $connection->close();
     }
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
