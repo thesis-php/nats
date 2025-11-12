@@ -34,4 +34,4 @@ for ($i = 0; $i < 10_000; ++$i) {
 
 trapSignal([\SIGINT, \SIGTERM]);
 
-$nc->disconnect();
+$nc->stop();

@@ -32,4 +32,4 @@ dump(await($futures));
 
 dump(sprintf('elapsed: %ss', microtime(true) - $start));
 
-$nc->disconnect();
+$nc->stop();

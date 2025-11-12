@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Internal;
 
-use Amp\Cancellation;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
-use Thesis\Nats\JetStream\ConsumeConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Metadata;
+use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
-use Thesis\Nats\Message;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
@@ -38,18 +36,11 @@ final readonly class PullMessageHandler
         private mixed $handler,
         Client $nats,
         Encoder $json,
-        ConsumeConfig $config,
+        PullConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
-        $this->acks = new Acks(
-            static fn(string $subject, Message $message, ?Cancellation $cancellation = null) => $nats->publish(
-                $subject,
-                $message,
-                cancellation: $cancellation,
-            ),
-            $nats->request(...),
-        );
+        $this->acks = Acks::fromClient($nats);
         $this->heartbeats = new Heartbeat\Monitor(
             interval: $config->heartbeat ?? TimeSpan::fromSeconds(-1),
         );

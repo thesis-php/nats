@@ -20,6 +20,14 @@ final class Headers implements
         private array $values = [],
     ) {}
 
+    /**
+     * @internal
+     */
+    public function isHeartbeat(): bool
+    {
+        return $this->statusCode() === Status::Control && $this->statusDescription()->value === Description::IdleHeartbeat;
+    }
+
     public function statusCode(): Status
     {
         return $this->get(Header\StatusCode::Header);

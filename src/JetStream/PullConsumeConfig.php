@@ -9,7 +9,7 @@ use Thesis\Time\TimeSpan;
 /**
  * @api
  */
-final readonly class ConsumeConfig implements \JsonSerializable
+final readonly class PullConsumeConfig implements \JsonSerializable
 {
     private const int DEFAULT_PULL_EXPIRES_SECS = 30;
 

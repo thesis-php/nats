@@ -45,16 +45,43 @@ final readonly class Consumer
     }
 
     /**
+     * @throws \LogicException
+     */
+    public function pushing(): PushConsumer
+    {
+        return new PushConsumer(
+            info: $this->info,
+            nats: $this->nats,
+            deliverSubject: $this->info->config->deliverSubject ?? throw new \LogicException('For push consumers deliver subject is required.'),
+        );
+    }
+
+    /**
      * @param callable(Delivery, Subscription): void $handler
      * @throws NatsException
      */
     public function pull(
         callable $handler,
-        ConsumeConfig $config = new ConsumeConfig(),
+        PullConsumeConfig $config = new PullConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
         return $this
             ->pulling()
+            ->consume($handler, $config, $cancellation);
+    }
+
+    /**
+     * @param callable(Delivery, Subscription): void $handler
+     * @throws \LogicException
+     * @throws NatsException
+     */
+    public function push(
+        callable $handler,
+        PushConsumeConfig $config = new PushConsumeConfig(),
+        ?Cancellation $cancellation = null,
+    ): Subscription {
+        return $this
+            ->pushing()
             ->consume($handler, $config, $cancellation);
     }
 

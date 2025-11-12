@@ -29,7 +29,7 @@ final class ClientTest extends NatsTestCase
         self::assertEquals('events.happens', $delivery->subject);
         self::assertEquals('ok', $delivery->message->payload);
 
-        $client->disconnect();
+        $client->stop();
     }
 
     public function testPublishSubscribeIterator(): void
@@ -59,7 +59,7 @@ final class ClientTest extends NatsTestCase
 
         self::assertEquals('ok', $client->request("{$id}.happens", new Message('Are you ok?'))->message->payload);
 
-        $client->disconnect();
+        $client->stop();
     }
 
     public function testUnsubscribe(): void
@@ -155,7 +155,7 @@ final class ClientTest extends NatsTestCase
         $id = Id\generateUniqueId();
 
         $subscription = $client->subscribe("{$id}.*", static function (): void {});
-        $client->disconnect();
+        $client->stop();
         $subscription->awaitCompletion();
     }
 }

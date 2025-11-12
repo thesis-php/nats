@@ -15,12 +15,14 @@ use function Amp\async;
 /**
  * @internal
  */
-final readonly class SubscriptionHandler
+final class SubscriptionHandler
 {
-    public Subscription $subscription;
+    public readonly Subscription $subscription;
 
     /** @var MessageQueue<Delivery> */
-    private MessageQueue $mq;
+    private readonly MessageQueue $mq;
+
+    private bool $inflight = false;
 
     /**
      * @param \Closure(): void $unsubscribe
@@ -35,7 +37,7 @@ final readonly class SubscriptionHandler
         /** @var Pipeline\Queue<Delivery> $queue */
         $queue = new Pipeline\Queue($bufferSize);
 
-        /** @var DeferredFuture<Operation<never>> */
+        /** @var DeferredFuture<Operation<*>> */
         $completeSubscriptionDeferred = new DeferredFuture();
 
         /** @var DeferredFuture<void> */
@@ -53,6 +55,8 @@ final readonly class SubscriptionHandler
             },
         );
 
+        $inflight = &$this->inflight;
+
         EventLoop::queue(static function () use (
             $queue,
             $completeSubscriptionDeferred,
@@ -61,6 +65,7 @@ final readonly class SubscriptionHandler
             $subscription,
             $handler,
             $unsubscribe,
+            &$inflight,
         ): void {
             while (!$queue->isComplete()) {
                 /** @var Future<Stop|Emit<Delivery>> $pop */
@@ -72,6 +77,8 @@ final readonly class SubscriptionHandler
                 ]);
 
                 if ($op instanceof Emit) {
+                    $inflight = true;
+
                     try {
                         /** @phpstan-ignore argument.type */
                         $handler($op->value, $subscription);
@@ -81,9 +88,17 @@ final readonly class SubscriptionHandler
                         $queue->complete();
 
                         return;
+                    } finally {
+                        $inflight = false;
                     }
                 } else {
                     $queue->complete();
+
+                    if ($op instanceof Error) {
+                        $completeSubscriptionMarker->error($op->exception);
+
+                        return;
+                    }
 
                     if ($op instanceof Drain) {
                         $messages = [...$mq];
@@ -119,6 +134,13 @@ final readonly class SubscriptionHandler
      */
     public function push(Delivery $delivery): bool
     {
+        // If we are busy processing a message, we are unlikely to be interested in receiving heartbeats since we cannot process them.
+        // To prevent accumulating them in memory and avoid triggering a flood of watchdog interactions after processing completes,
+        // we silently discard heartbeat messages.
+        if ($this->inflight && $delivery->message->headers?->isHeartbeat()) {
+            return true;
+        }
+
         return $this->mq->push($delivery);
     }
 }

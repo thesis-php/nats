@@ -35,7 +35,7 @@ final class PullConsumer
      */
     public function consume(
         callable $handler,
-        ConsumeConfig $config = new ConsumeConfig(),
+        PullConsumeConfig $config = new PullConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
         $id = Id\generateInboxId();

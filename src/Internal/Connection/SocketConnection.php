@@ -115,7 +115,7 @@ final class SocketConnection implements Connection
 
     public function info(): ConnectionInfo
     {
-        return $this->info ?: throw new ConnectionIsNotAvailable();
+        return $this->info ?? throw new ConnectionIsNotAvailable();
     }
 
     public function close(): void
@@ -133,7 +133,12 @@ final class SocketConnection implements Connection
         $hooks = $this->hooks;
         $running = &$this->running;
 
-        EventLoop::queue(static function () use ($framer, $queue, $hooks, &$running): void {
+        EventLoop::queue(static function () use (
+            $framer,
+            $queue,
+            $hooks,
+            &$running,
+        ): void {
             while ($running) {
                 try {
                     while (($frame = $framer->readFrame()) !== null) {
@@ -157,6 +162,8 @@ final class SocketConnection implements Connection
                             $deferred->complete($frame);
                         }
                     }
+
+                    return;
                 } catch (\Throwable $e) {
                     foreach ($queue as $deferred) {
                         $deferred->error($e);

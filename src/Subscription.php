@@ -7,6 +7,7 @@ namespace Thesis\Nats;
 use Amp\Cancellation;
 use Amp\Future;
 use Thesis\Nats\Internal\Subscription\Drain;
+use Thesis\Nats\Internal\Subscription\Error;
 use Thesis\Nats\Internal\Subscription\Operation;
 use Thesis\Nats\Internal\Subscription\Stop;
 use function Amp\async;
@@ -24,7 +25,7 @@ final class Subscription
 
     /**
      * @param Future<void> $completeMarker
-     * @param \Closure(Operation<never>): void $complete
+     * @param \Closure(Operation<*>): void $complete
      */
     public function __construct(
         private readonly Future $completeMarker,
@@ -41,6 +42,16 @@ final class Subscription
         return $this;
     }
 
+    public function awaitCompletion(?Cancellation $cancellation = null): void
+    {
+        $this->completeMarker->await($cancellation);
+    }
+
+    public function completed(): bool
+    {
+        return $this->completeMarker->isComplete();
+    }
+
     public function stop(?Cancellation $cancellation = null): void
     {
         $this->complete(Stop::It, $cancellation);
@@ -51,18 +62,13 @@ final class Subscription
         $this->complete(Drain::It, $cancellation);
     }
 
-    public function awaitCompletion(?Cancellation $cancellation = null): void
+    public function error(\Throwable $e, ?Cancellation $cancellation = null): void
     {
-        $this->completeMarker->await($cancellation);
-    }
-
-    public function suspend(?Cancellation $cancellation = null): void
-    {
-        $this->completeMarker->await($cancellation);
+        $this->complete(new Error($e), $cancellation);
     }
 
     /**
-     * @param Operation<never> $op
+     * @param Operation<*> $op
      */
     private function complete(Operation $op, ?Cancellation $cancellation = null): void
     {
