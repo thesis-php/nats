@@ -8,7 +8,6 @@ use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
-use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Status;
@@ -21,8 +20,6 @@ use Thesis\Time\TimeSpan;
  */
 final readonly class PullMessageHandler
 {
-    private Acks $acks;
-
     private Heartbeat\Monitor $heartbeats;
 
     private PullSupervisor $pulls;
@@ -34,13 +31,12 @@ final readonly class PullMessageHandler
      */
     public function __construct(
         private mixed $handler,
-        Client $nats,
+        private Client $nats,
         Encoder $json,
         PullConsumeConfig $config,
         string $subject,
         string $replyTo,
     ) {
-        $this->acks = Acks::fromClient($nats);
         $this->heartbeats = new Heartbeat\Monitor(
             interval: $config->heartbeat ?? TimeSpan::fromSeconds(-1),
         );
@@ -69,15 +65,7 @@ final readonly class PullMessageHandler
         }
 
         if (\in_array($statusCode ?? Status::OK, [Status::OK, Status::NoMessages], true)) {
-            $jsDelivery = new JetStreamDelivery(
-                message: $delivery->message,
-                subject: $delivery->subject,
-                acks: $this->acks,
-                metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
-                replyTo: $delivery->replyTo,
-            );
-
-            ($this->handler)($jsDelivery, $subscription);
+            ($this->handler)($this->nats->toJetStreamDelivery($delivery), $subscription);
         }
 
         $this->heartbeats->reset();

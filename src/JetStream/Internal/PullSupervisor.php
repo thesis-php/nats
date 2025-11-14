@@ -6,6 +6,7 @@ namespace Thesis\Nats\JetStream\Internal;
 
 use Revolt\EventLoop;
 use Thesis\Nats\Client;
+use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
@@ -44,7 +45,17 @@ final readonly class PullSupervisor
             foreach ($barrier as $_) {
                 $nats->publish(
                     subject: $subject,
-                    message: new Message($json->encode($config)),
+                    message: new Message($json->encode(new PullRequest(
+                        expires: $config->expires,
+                        batch: $config->batch,
+                        maxBytes: $config->maxBytes,
+                        noWait: $config->noWait,
+                        heartbeat: $config->heartbeat,
+                        minPending: $config->minPending,
+                        minAckPending: $config->minAckPending,
+                        pinId: $config->pinId,
+                        group: $config->group,
+                    ))),
                     replyTo: $replyTo,
                 );
             }

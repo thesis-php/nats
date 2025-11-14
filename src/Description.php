@@ -16,6 +16,8 @@ final readonly class Description implements \Stringable
     public const string MaxBytesExceeded = 'message size exceeds maxbytes';
     public const string BatchCompleted = 'batch completed';
     public const string ServerShutdown = 'server shutdown';
+    public const string NoMessages = 'no messages';
+    public const string RequestTimeout = 'request timeout';
     public const string OK = 'OK';
 
     /**
@@ -24,6 +26,14 @@ final readonly class Description implements \Stringable
     public function __construct(
         public string $value,
     ) {}
+
+    /**
+     * @param self::* ...$values
+     */
+    public function is(string ...$values): bool
+    {
+        return \in_array($this->value, $values, true);
+    }
 
     /**
      * @return non-empty-string

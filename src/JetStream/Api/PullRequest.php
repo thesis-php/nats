@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\JetStream;
+namespace Thesis\Nats\JetStream\Api;
 
 use Thesis\Time\TimeSpan;
 
 /**
  * @api
  */
-final readonly class PullConsumeConfig
+final readonly class PullRequest implements \JsonSerializable
 {
     private const int DEFAULT_PULL_EXPIRES_SECS = 30;
 
@@ -33,5 +33,26 @@ final readonly class PullConsumeConfig
         public ?string $group = null,
     ) {
         $this->expires = $expires ?? TimeSpan::fromSeconds(self::DEFAULT_PULL_EXPIRES_SECS);
+    }
+
+    /**
+     * @return array<non-empty-string, mixed>
+     */
+    public function jsonSerialize(): array
+    {
+        return array_filter(
+            [
+                'expires' => $this->expires->toNanoseconds(),
+                'batch' => $this->batch,
+                'max_bytes' => $this->maxBytes,
+                'no_wait' => $this->noWait,
+                'idle_heartbeat' => $this->heartbeat?->toNanoseconds(),
+                'min_pending' => $this->minPending,
+                'min_ack_pending' => $this->minAckPending,
+                'pin_id' => $this->pinId,
+                'group' => $this->group,
+            ],
+            static fn(mixed $value): bool => $value !== null,
+        );
     }
 }

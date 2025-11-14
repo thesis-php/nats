@@ -6,7 +6,6 @@ namespace Thesis\Nats\JetStream\Internal\Heartbeat;
 
 use Revolt\EventLoop;
 use Thesis\Nats\Exception\NoHeartbeatsReceived;
-use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -21,31 +20,43 @@ final class Watchdog
     /** @var \Closure(): void */
     private readonly \Closure $func;
 
+    /** @var list<\Closure(\Throwable): void> */
+    private array $subscribers = [];
+
     private int $missed = 0;
 
     /**
      * @param positive-int $heartbeatsThreshold
      */
     public function __construct(
-        TimeSpan $time,
-        Subscription $subscription,
+        ?TimeSpan $time,
         int $heartbeatsThreshold,
     ) {
-        $subscription = $subscription->onComplete($this->stop(...));
         $missed = &$this->missed;
+        $subscribers = &$this->subscribers;
 
-        $this->interval = $time->toSeconds();
+        $this->interval = $time?->toSeconds(PHP_ROUND_HALF_DOWN) ?? 0;
         $this->func = static function () use (
-            $subscription,
-            $heartbeatsThreshold,
             &$missed,
+            &$subscribers,
+            $heartbeatsThreshold,
         ): void {
             if (++$missed >= $heartbeatsThreshold) {
-                $subscription->error(new NoHeartbeatsReceived());
+                foreach ($subscribers as $subscriber) {
+                    $subscriber(new NoHeartbeatsReceived());
+                }
             }
         };
 
         $this->schedule();
+    }
+
+    /**
+     * @param \Closure(\Throwable): void $subscriber
+     */
+    public function subscribe(\Closure $subscriber): void
+    {
+        $this->subscribers[] = $subscriber;
     }
 
     public function reset(): void
@@ -71,6 +82,8 @@ final class Watchdog
 
     private function schedule(): void
     {
-        $this->callbackId = EventLoop::repeat($this->interval, $this->func);
+        if ($this->interval > 0) {
+            $this->callbackId = EventLoop::repeat($this->interval, $this->func);
+        }
     }
 }

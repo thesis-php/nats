@@ -16,15 +16,17 @@ $stream = $js->createOrUpdateStream(new Api\StreamConfig(
     subjects: ['events.*'],
 ));
 
-for ($i = 0; $i < 10; ++$i) {
-    $response = $js->publish(
-        subject: 'events.activated',
-        message: new Nats\Message(
-            payload: "Message#{$i}",
-        ),
-    );
+$consumer = $stream->createOrUpdateConsumer(
+    new Api\ConsumerConfig(durableName: 'EventPullConsumer', ackPolicy: Api\AckPolicy::Explicit),
+);
 
-    dump($response->seq);
+$batch = $consumer
+    ->pulling()
+    ->fetch(Nats\JetStream\FetchConfig::batch(5));
+
+foreach ($batch as $delivery) {
+    dump($delivery->message->payload);
+    $delivery->ack();
 }
 
 $nc->stop();

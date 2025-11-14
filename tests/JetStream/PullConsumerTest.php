@@ -128,4 +128,135 @@ final class PullConsumerTest extends NatsTestCase
 
         $stream->delete();
     }
+
+    public function testFetchBatch(): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        for ($i = 0; $i < 10; ++$i) {
+            $js->publish("{$subject}.{$i}", new Message("{$i}"));
+        }
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        self::assertSame(10, $pending = $consumer->actualInfo()->numPending);
+
+        for ($i = 0; $i < 2; ++$i) {
+            $count = 0;
+
+            $deliveries = $consumer
+                ->pulling()
+                ->fetch(FetchConfig::batch(5));
+
+            foreach ($deliveries as $delivery) {
+                ++$count;
+                $delivery->ack();
+            }
+
+            $pending -= $count;
+            self::assertSame(5, $count);
+            self::assertSame($pending, $consumer->actualInfo()->numPending);
+        }
+
+        $stream->delete();
+    }
+
+    public function testFetchBytes(): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        for ($i = 0; $i < 10; ++$i) {
+            $js->publish("{$subject}.{$i}", new Message("{$i}"));
+        }
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        self::assertSame(10, $consumer->actualInfo()->numPending);
+
+        $tooSmallBatch = [...$consumer->pulling()->fetch(FetchConfig::bytes(20))];
+
+        self::assertCount(0, $tooSmallBatch);
+
+        $deliveries = $consumer
+            ->pulling()
+            ->fetch(FetchConfig::bytes(300));
+
+        $count = 0;
+
+        foreach ($deliveries as $delivery) {
+            ++$count;
+            $delivery->ack();
+        }
+
+        self::assertSame(3, $count);
+        self::assertSame(7, $consumer->actualInfo()->numPending);
+
+        $stream->delete();
+    }
+
+    public function testFetchImmediate(): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        $noMessagesBatch = [...$consumer->pulling()->fetch(FetchConfig::immediate())];
+        self::assertCount(0, $noMessagesBatch);
+
+        for ($i = 0; $i < 10; ++$i) {
+            $js->publish("{$subject}.{$i}", new Message("{$i}"));
+        }
+
+        self::assertSame(10, $consumer->actualInfo()->numPending);
+
+        $deliveries = [...$consumer
+            ->pulling()
+            ->fetch(FetchConfig::immediate()),
+        ];
+
+        $count = 0;
+
+        foreach ($deliveries as $delivery) {
+            ++$count;
+            $delivery->ack();
+        }
+
+        self::assertSame(10, $count);
+        self::assertSame(0, $consumer->actualInfo()->numPending);
+
+        $stream->delete();
+    }
 }

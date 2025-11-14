@@ -28,6 +28,14 @@ final class Headers implements
         return $this->statusCode() === Status::Control && $this->statusDescription()->value === Description::IdleHeartbeat;
     }
 
+    /**
+     * @internal
+     */
+    public function ok(): bool
+    {
+        return $this->statusCode() === Status::OK;
+    }
+
     public function statusCode(): Status
     {
         return $this->get(Header\StatusCode::Header);
