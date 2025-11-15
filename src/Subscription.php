@@ -33,11 +33,11 @@ final class Subscription
     ) {}
 
     /**
-     * @param callable(): void $callback
+     * @param callable(): void ...$callbacks
      */
-    public function onComplete(callable $callback): self
+    public function onComplete(callable ...$callbacks): self
     {
-        $this->onComplete[] = $callback;
+        $this->onComplete = array_values([...$this->onComplete, ...$callbacks]);
 
         return $this;
     }

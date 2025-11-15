@@ -8,8 +8,11 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
 - [NATS JetStream](https://docs.nats.io/nats-concepts/jetstream)
-  - [Pull Consumer](#pull-consumer)
+  - [Fetch Batch](#fetch-batch)
+  - [Fetch Bytes](#fetch-bytes)
+  - [Fetch Immediate](#fetch-immediate)
   - [Push Consumer](#push-consumer)
+  - [Pull Consumer](#pull-consumer)
   - [Get message](#get-message)
 - [NATS KV](https://docs.nats.io/nats-concepts/jetstream/key-value-store)
   - [Store key values](#store-key-values)
@@ -155,82 +158,78 @@ $nc->drain();
 
 JetStream is the built-in NATS persistence system. The library provides both JetStream entity management (streams, consumers) and message publishing/consumption capabilities.
 
-#### Pull Consumer
+#### Fetch Batch
+
+You can request a specific number of messages at once using `PullConsumer::fetch` with `FetchConfig::batch(number_of_messages)`. For example:
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream;
+
+$consumer = $stream->createOrUpdateConsumer(...);
+
+$batch = $consumer
+    ->pulling()
+    ->fetch(JetStream\FetchConfig::batch(10));
+
+foreach ($batch as $delivery) {
+    // handle message
+    $delivery->ack();
+}
+```
+
+You can also configure the batch retrieval timeout and heartbeat settings using `FetchConfig::maxWait` and `FetchConfig::heartbeat` parameters.
+
+#### Fetch Bytes
+
+If you want to retrieve a batch of a specific size in bytes, you can use `FetchConfig::bytes(byte_size)`:
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream;
+
+$consumer = $stream->createOrUpdateConsumer(...);
+
+$batch = $consumer
+    ->pulling()
+    ->fetch(JetStream\FetchConfig::bytes(1024));
+
+foreach ($batch as $delivery) {
+    // handle message
+    $delivery->ack();
+}
+```
+
+And you can also configure the timeout and heartbeat settings.
+
+#### Fetch Immediate
+
+If you simply want to retrieve a batch of messages currently available in the stream, use `FetchConfig::immediate()`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/vendor/autoload.php';
-
 use Thesis\Nats;
-use Thesis\Nats\JetStream\Api\AckPolicy;
-use Thesis\Nats\JetStream\Api\ConsumerConfig;
-use Thesis\Nats\JetStream\Api\StreamConfig;
-use Thesis\Nats\JetStream\PullConsumeConfig;
-use Thesis\Time\TimeSpan;
-use function Amp\trapSignal;
+use Thesis\Nats\JetStream;
 
-$nc = new Nats\Client(Nats\Config::default());
-$js = $nc->jetStream();
+$consumer = $stream->createOrUpdateConsumer(...);
 
-$js->deleteStream('EventStream');
+$batch = $consumer
+    ->pulling()
+    ->fetch(JetStream\FetchConfig::immediate());
 
-$stream = $js->createStream(new StreamConfig(
-    name: 'EventStream',
-    description: 'Application events',
-    subjects: ['events.*'],
-));
-
-$logSubscription = $stream
-    ->createConsumer(new ConsumerConfig(
-        durableName: 'EventLog',
-        ackPolicy: AckPolicy::None,
-    ))
-    ->pull(
-        static function (Nats\JetStream\Delivery $delivery): void {
-            dump("Log event with ack=none: {$delivery->message->payload} ({$delivery->subject})");
-        },
-        new PullConsumeConfig(
-            batch: 10,
-            heartbeat: TimeSpan::fromSeconds(5),
-        ),
-    );
-
-$handleSubscription = $stream
-    ->createConsumer(new ConsumerConfig(
-        durableName: 'EventHandle',
-        ackPolicy: AckPolicy::Explicit,
-    ))
-    ->pull(
-        static function (Nats\JetStream\Delivery $delivery): void {
-            dump("Handle event with ack=explicit: {$delivery->message->payload} ({$delivery->subject})");
-            $delivery->ack();
-        },
-        new PullConsumeConfig(
-            batch: 10,
-            heartbeat: TimeSpan::fromSeconds(5),
-        ),
-    );
-
-for ($i = 0; $i < 10; ++$i) {
-    $js->publish(
-        subject: 'events.payment_rejected',
-        message: new Nats\Message(
-            payload: "Message#{$i}",
-            headers: (new Nats\Headers())
-                ->with(Nats\Header\MsgId::header(), "id:{$i}"),
-        ),
-    );
+foreach ($batch as $delivery) {
+    // handle message
+    $delivery->ack();
 }
-
-trapSignal([\SIGINT, \SIGTERM]);
-
-$logSubscription->drain();
-$handleSubscription->drain();
-
-$nc->drain();
 ```
 
 #### Push Consumer
@@ -252,17 +251,6 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Thesis\Nats;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Time\TimeSpan;
-use function Amp\async;
-use function Amp\trapSignal;
-
-$nc = new Nats\Client(Nats\Config::default());
-$js = $nc->jetStream();
-
-$stream = $js->createOrUpdateStream(new Api\StreamConfig(
-    name: 'EventsStream',
-    description: 'Testing Stream',
-    subjects: ['events.*'],
-));
 
 $consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
     durableName: 'EventPushConsumer',
@@ -278,15 +266,6 @@ $subscription = $consumer->push(
         $delivery->ack();
     },
 );
-
-async(static function () use ($subscription): void {
-    trapSignal([\SIGINT, \SIGTERM]);
-    $subscription->stop();
-});
-
-$subscription->awaitCompletion();
-
-$nc->drain();
 ```
 
 Additionally, for push consumers, the `deliverSubject` parameter is mandatory, as it is this very parameter that distinguishes the push model from pull.
@@ -316,6 +295,99 @@ $consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
 ```
 
 Please refer to the push consumer configuration [documentation](https://docs.nats.io/nats-concepts/jetstream/consumers#push-specific) to understand the purpose of each parameter.
+
+#### Pull Consumer
+
+Additionally, you can use `PullConsumer::consume`. This method handles message buffering, periodically requests the server and monitors timeouts to automatically request the next message batch.
+
+Just like with push consumers, you can call `pull` directly on the `Consumer` object:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+use Thesis\Time\TimeSpan;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+    durableName: 'EventPullConsumer',
+    ackPolicy: Api\AckPolicy::Explicit,
+));
+
+$subscription = $consumer->pull(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        dump($delivery->message->payload);
+        $delivery->ack();
+    },
+);
+```
+
+However, if you want to read messages with multiple consumers within the same process, you need to create a `PullConsumer` using `Consumer::pulling()`, and then create multiple consumer instances:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+use Thesis\Time\TimeSpan;
+use function Amp\trapSignal;
+
+$consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
+    durableName: 'EventPullConsumer',
+    ackPolicy: Api\AckPolicy::Explicit,
+));
+
+$consumer = $consumer->pulling();
+
+$consumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        dump("Consumer#1: {$delivery->message->payload}");
+        $delivery->ack();
+    },
+);
+
+$consumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        dump("Consumer#2: {$delivery->message->payload}");
+        $delivery->ack();
+    },
+);
+
+trapSignal([\SIGINT, \SIGTERM]);
+
+$consumer->drain();
+```
+
+To stop all subscriptions, use `Consumer::drain()` or `Consumer::stop()`.
+
+You can control the number of requested messages per batch or the batch size using the `PullConsumeConfig::maxMessages` and `PullConsumeConfig::maxBytes` parameters respectively.
+However, only one of these parameters can be set at a time.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats\JetStream;;
+
+$consumer->consume(
+    static function (Nats\JetStream\Delivery $delivery): void {},
+    new JetStream\PullConsumeConfig(
+        maxMessages: 1_000,
+    ),
+);
+```
 
 #### Get message
 

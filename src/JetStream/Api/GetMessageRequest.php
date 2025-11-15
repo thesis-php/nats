@@ -13,12 +13,14 @@ final readonly class GetMessageRequest implements Request, \JsonSerializable
     /**
      * @param non-empty-string $stream
      * @param ?non-negative-int $seq
+     * @param ?list<non-empty-string> $multiLast
      */
     public function __construct(
         private string $stream,
         private ?int $seq = null,
         private ?string $lastBySubject = null,
         private ?string $nextBySubject = null,
+        private ?array $multiLast = null,
     ) {}
 
     public function endpoint(): string
@@ -36,6 +38,7 @@ final readonly class GetMessageRequest implements Request, \JsonSerializable
                 'seq' => $this->seq,
                 'last_by_subj' => $this->lastBySubject,
                 'next_by_subj' => $this->nextBySubject,
+                'multi_last' => $this->multiLast,
             ],
             static fn(mixed $value): bool => $value !== null,
         );

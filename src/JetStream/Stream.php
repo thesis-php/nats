@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Thesis\Nats\Client;
+use Thesis\Nats\Description;
 use Thesis\Nats\Exception\HeadersIsInvalid;
 use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
+use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\Status;
 
 /**
  * @api
@@ -25,6 +29,7 @@ final readonly class Stream
         public Api\StreamInfo $info,
         public string $name,
         private JetStream $js,
+        private Client $nc,
     ) {}
 
     /**
@@ -119,6 +124,39 @@ final readonly class Stream
     public function deleteConsumer(string $consumer): Api\ConsumerDeleted
     {
         return $this->js->deleteConsumer($this->name, $consumer);
+    }
+
+    /**
+     * @param list<non-empty-string> $subjects
+     * @return iterable<Message>
+     */
+    public function getMessages(array $subjects): iterable
+    {
+        $reply = Id\generateInboxId();
+
+        $deliveries = $this->nc->subscribeIterator($reply);
+
+        $this->js->rawPublish(
+            subject: Api\ApiMethod::DirectMsgGet->compile($this->name),
+            payload: new Api\GetMessageRequest(
+                stream: $this->name,
+                multiLast: $subjects,
+            ),
+            replyTo: $reply,
+        );
+
+        foreach ($deliveries as $delivery) {
+            $status = $delivery->message->headers?->statusCode();
+            $description = $delivery->message->headers?->statusDescription();
+
+            if (\in_array($status, [Status::NoContent, Status::NoMessages], true) && $description?->is(Description::Eob, Description::NoResults)) {
+                $deliveries->stop();
+
+                return;
+            }
+
+            yield $delivery->message;
+        }
     }
 
     /**

@@ -13,6 +13,9 @@ use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Iter;
 use Thesis\Nats\Internal\Rpc;
 use Thesis\Nats\Internal\Subscription\SubscriptionHandler;
+use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Nats\JetStream\Internal\Acks;
+use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
@@ -41,6 +44,8 @@ final class Client
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
 
+    private readonly Acks $acks;
+
     public function __construct(
         private readonly Config $config,
         private readonly Serializer $serializer = new ValinorSerializer(),
@@ -48,6 +53,7 @@ final class Client
     ) {
         $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
         $this->subscriptionIdGenerator = new Id\SubscriptionIdGenerator();
+        $this->acks = Acks::fromClient($this);
     }
 
     /**
@@ -202,6 +208,20 @@ final class Client
             identity: $identity,
             config: $config,
             encoder: $this->encoder,
+        );
+    }
+
+    /**
+     * @internal
+     */
+    public function toJetStreamDelivery(Delivery $delivery): JetStreamDelivery
+    {
+        return new JetStreamDelivery(
+            message: $delivery->message,
+            subject: $delivery->subject,
+            acks: $this->acks,
+            metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
+            replyTo: $delivery->replyTo,
         );
     }
 

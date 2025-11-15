@@ -7,16 +7,15 @@ namespace Thesis\Nats\Header;
 /**
  * @api
  */
-final class Subject
+final readonly class PinId
 {
-    private const string HEADER = 'Nats-Subject';
+    private const string HEADER = 'Nats-Pin-Id';
 
     /**
      * @return ScalarKey<non-empty-string>
      */
     public static function header(): ScalarKey
     {
-        /** @var ScalarKey<non-empty-string> */
-        return ScalarKey::string(self::HEADER);
+        return ScalarKey::nonEmptyString(self::HEADER);
     }
 }
