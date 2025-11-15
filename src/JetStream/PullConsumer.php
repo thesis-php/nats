@@ -131,21 +131,6 @@ final class PullConsumer
             cancellation: $cancellation,
         );
 
-        $this->nats->publish(
-            subject: $this->subject,
-            message: new Message($this->json->encode(new PullRequest(
-                expires: $config->expires,
-                batch: $config->maxMessages,
-                maxBytes: $config->maxBytes,
-                noWait: $config->noWait,
-                heartbeat: $config->heartbeat,
-                minPending: $config->minPending,
-                minAckPending: $config->minAckPending,
-                group: $config->group,
-            ))),
-            replyTo: $reply,
-        );
-
         $this->subscriptions[] = $subscription->onComplete(
             $messageHandler->stop(...),
         );

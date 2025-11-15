@@ -55,46 +55,23 @@ final class PullMessageHandler
     ) {
         $this->pendingMessages = $config->maxMessages;
         $this->pendingBytes = $config->maxBytes;
-        $pinId = &$this->pinId;
 
         /** @var Pipeline\Queue<PullRequest> $queue */
         $queue = new Pipeline\Queue();
         $this->pulls = $queue;
 
         $this->watchdog = new Heartbeat\Watchdog($this->config->heartbeat->mul(2));
-        $this->watchdog->subscribe(static function () use (
-            $queue,
-            $config,
-            &$pinId,
-        ): void {
-            $queue->push(new PullRequest(
-                expires: $config->expires,
-                batch: $config->maxMessages,
-                maxBytes: $config->maxBytes,
-                noWait: $config->noWait,
-                heartbeat: $config->heartbeat,
-                minPending: $config->minPending,
-                minAckPending: $config->minAckPending,
-                pinId: $pinId,
-                group: $config->group,
-            ));
-        });
+        $this->watchdog->subscribe(fn() => $this->pull());
 
-        EventLoop::queue(static function () use (
-            $queue,
-            $subject,
-            $reply,
-            $json,
-            $nc,
-        ): void {
-            foreach ($queue->iterate() as $pull) {
-                $nc->publish(
-                    subject: $subject,
-                    message: new Message($json->encode($pull)),
-                    replyTo: $reply,
-                );
-            }
-        });
+        // The message retrieval loop. When a new request appears in the queue, we send it immediately.
+        // New requests can be triggered either by server heartbeat loss or when a new message batch needs to be requested.
+        $this->tick(
+            queue: $queue,
+            subject: $subject,
+            reply: $reply,
+            json: $json,
+            nc: $nc,
+        );
     }
 
     public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
@@ -104,10 +81,9 @@ final class PullMessageHandler
         $this->doHandle($delivery, $subscription);
 
         if (!$subscription->completed()) {
-            $this->fetch();
+            $this->watchdog->reset();
+            $this->replenish();
         }
-
-        $this->watchdog->reset();
     }
 
     public function stop(): void
@@ -170,7 +146,7 @@ final class PullMessageHandler
         }
     }
 
-    private function fetch(): void
+    private function replenish(): void
     {
         if ($this->pendingMessages > $this->config->messagesThreshold || ($this->pendingBytes !== null && $this->pendingBytes > $this->config->bytesThreshold)) {
             return;
@@ -185,18 +161,7 @@ final class PullMessageHandler
         }
 
         if ($batch > 0) {
-            $this->pulls->push(new PullRequest(
-                expires: $this->config->expires,
-                batch: $batch,
-                maxBytes: $maxBytes !== null ? max($maxBytes, 0) : null,
-                noWait: $this->config->noWait,
-                heartbeat: $this->config->heartbeat,
-                minPending: $this->config->minPending,
-                minAckPending: $this->config->minAckPending,
-                pinId: $this->pinId,
-                group: $this->config->group,
-            ));
-
+            $this->pull($batch, $maxBytes !== null ? max($maxBytes, 0) : null);
             $this->reset();
         }
     }
@@ -205,5 +170,56 @@ final class PullMessageHandler
     {
         $this->pendingMessages = $this->config->maxMessages;
         $this->pendingBytes = $this->config->maxBytes;
+    }
+
+    /**
+     * @param Pipeline\Queue<PullRequest> $queue
+     * @param non-empty-string $subject
+     * @param non-empty-string $reply
+     */
+    private function tick(
+        Pipeline\Queue $queue,
+        string $subject,
+        string $reply,
+        Encoder $json,
+        Client $nc,
+    ): void {
+        EventLoop::queue(static function () use (
+            $queue,
+            $subject,
+            $reply,
+            $json,
+            $nc,
+        ): void {
+            foreach ($queue->iterate() as $pull) {
+                $nc->publish(
+                    subject: $subject,
+                    message: new Message($json->encode($pull)),
+                    replyTo: $reply,
+                );
+            }
+        });
+
+        // Initial pull request to begin message consumption.
+        $this->pull();
+    }
+
+    /**
+     * @param ?positive-int $batch
+     * @param ?non-negative-int $bytes
+     */
+    private function pull(?int $batch = null, ?int $bytes = null): void
+    {
+        $this->pulls->push(new PullRequest(
+            expires: $this->config->expires,
+            batch: $batch ?? $this->config->maxMessages,
+            maxBytes: $bytes ?? $this->config->maxBytes,
+            noWait: $this->config->noWait,
+            heartbeat: $this->config->heartbeat,
+            minPending: $this->config->minPending,
+            minAckPending: $this->config->minAckPending,
+            pinId: $this->pinId,
+            group: $this->config->group,
+        ));
     }
 }
