@@ -26,11 +26,11 @@ final class Watchdog
     private int $missed = 0;
 
     /**
-     * @param positive-int $heartbeatsThreshold
+     * @param ?positive-int $heartbeatsThreshold
      */
     public function __construct(
         ?TimeSpan $time,
-        int $heartbeatsThreshold,
+        ?int $heartbeatsThreshold = null,
     ) {
         $missed = &$this->missed;
         $subscribers = &$this->subscribers;
@@ -41,7 +41,7 @@ final class Watchdog
             &$subscribers,
             $heartbeatsThreshold,
         ): void {
-            if (++$missed >= $heartbeatsThreshold) {
+            if ($heartbeatsThreshold === null || ++$missed >= $heartbeatsThreshold) {
                 foreach ($subscribers as $subscriber) {
                     $subscriber(new NoHeartbeatsReceived());
                 }

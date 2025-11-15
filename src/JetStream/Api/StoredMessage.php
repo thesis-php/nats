@@ -10,6 +10,7 @@ namespace Thesis\Nats\JetStream\Api;
 final readonly class StoredMessage
 {
     /**
+     * @param non-empty-string $subject
      * @param non-negative-int $seq
      */
     public function __construct(

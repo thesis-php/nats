@@ -17,5 +17,6 @@ enum Status: int
     case Conflict = 409;
     case NoResponders = 503;
     case PinIdMismatch = 423;
+    case NoContent = 204;
     case Unknown = -1;
 }

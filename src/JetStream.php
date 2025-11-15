@@ -137,6 +137,7 @@ final readonly class JetStream
             info: $info,
             name: $name,
             js: $this,
+            nc: $this->nats,
         );
     }
 
@@ -629,6 +630,22 @@ final readonly class JetStream
 
     /**
      * @internal
+     * @param non-empty-string $subject
+     * @param ?non-empty-string $replyTo
+     */
+    public function rawPublish(string $subject, mixed $payload = null, ?string $replyTo = null): void
+    {
+        $this->nats->publish(
+            subject: $this->router->route($subject),
+            message: new Message(
+                payload: $payload !== null ? $this->encoder->encode($payload) : null,
+            ),
+            replyTo: $replyTo,
+        );
+    }
+
+    /**
+     * @internal
      * @param non-empty-string $endpoint
      */
     public function rawRequest(string $endpoint, mixed $payload = null): Message
@@ -698,6 +715,7 @@ final readonly class JetStream
             info: $info,
             name: $info->config->name,
             js: $this,
+            nc: $this->nats,
         );
     }
 

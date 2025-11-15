@@ -4,18 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Counter;
 
-use Amp\Pipeline;
 use Thesis\Nats\Header\Incr;
 use Thesis\Nats\Header\Subject;
 use Thesis\Nats\JetStream;
-use Thesis\Nats\JetStream\Api;
-use Thesis\Nats\JetStream\Api\AckPolicy;
-use Thesis\Nats\JetStream\Api\DeliverPolicy;
-use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\Message;
-use Thesis\Nats\Status;
-use Thesis\Nats\Subscription;
-use Thesis\Time\TimeSpan;
 
 /**
  * @api
@@ -57,7 +49,7 @@ final readonly class CounterStore
 
         if ($message !== null) {
             $subject = $message->headers?->get(Subject::header());
-            if ($subject === null || $subject === '') {
+            if ($subject === null) {
                 throw new \LogicException('Message has no subject.');
             }
 
@@ -85,42 +77,13 @@ final readonly class CounterStore
             $subjects,
         );
 
-        $consumer = $this->stream->createOrUpdateConsumer(new Api\ConsumerConfig(
-            deliverPolicy: DeliverPolicy::LastPerSubject,
-            ackPolicy: AckPolicy::None,
-            replayPolicy: ReplayPolicy::Instant,
-            filterSubjects: $subjects,
-        ));
+        foreach ($this->stream->getMessages($subjects) as $message) {
+            $subject = $message->headers?->get(Subject::header());
 
-        /** @var Pipeline\Queue<Entry> $queue */
-        $queue = new Pipeline\Queue($buffer = 1_000);
-
-        $consumer->pull(
-            function (JetStream\Delivery $delivery, Subscription $subscription) use ($queue): void {
-                if ($delivery->message->headers?->statusCode() === Status::NoMessages) {
-                    $queue->complete();
-                    $subscription->stop();
-
-                    return;
-                }
-
-                $entry = $this->entryFromMessage($delivery->message, $this->normalizeSubject($delivery->subject));
-
-                $queue->push($entry);
-
-                if ($delivery->metadata?->pending === 0) {
-                    $queue->complete();
-                    $subscription->stop();
-                }
-            },
-            new JetStream\PullConsumeConfig(
-                expires: TimeSpan::fromSeconds(0),
-                batch: $buffer,
-                noWait: true,
-            ),
-        );
-
-        return $queue->iterate();
+            if ($subject !== null) {
+                yield $this->entryFromMessage($message, $this->normalizeSubject($subject));
+            }
+        }
     }
 
     /**

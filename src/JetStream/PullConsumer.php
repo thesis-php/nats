@@ -114,21 +114,36 @@ final class PullConsumer
         PullConsumeConfig $config = new PullConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
-        $id = Id\generateInboxId();
+        $reply = Id\generateInboxId();
 
         $messageHandler = new Internal\PullMessageHandler(
             handler: $handler,
-            nats: $this->nats,
-            json: $this->json,
+            nc: $this->nats,
             config: $config,
+            json: $this->json,
             subject: $this->subject,
-            replyTo: $id,
+            reply: $reply,
         );
 
         $subscription = $this->nats->subscribe(
-            subject: $id,
+            subject: $reply,
             handler: $messageHandler,
             cancellation: $cancellation,
+        );
+
+        $this->nats->publish(
+            subject: $this->subject,
+            message: new Message($this->json->encode(new PullRequest(
+                expires: $config->expires,
+                batch: $config->maxMessages,
+                maxBytes: $config->maxBytes,
+                noWait: $config->noWait,
+                heartbeat: $config->heartbeat,
+                minPending: $config->minPending,
+                minAckPending: $config->minAckPending,
+                group: $config->group,
+            ))),
+            replyTo: $reply,
         );
 
         $this->subscriptions[] = $subscription->onComplete(

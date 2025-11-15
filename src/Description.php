@@ -17,7 +17,9 @@ final readonly class Description implements \Stringable
     public const string BatchCompleted = 'batch completed';
     public const string ServerShutdown = 'server shutdown';
     public const string NoMessages = 'no messages';
+    public const string NoResults = 'no results';
     public const string RequestTimeout = 'request timeout';
+    public const string Eob = 'eob';
     public const string OK = 'OK';
 
     /**
