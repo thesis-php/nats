@@ -214,12 +214,12 @@ final class PullMessageHandler
             expires: $this->config->expires,
             batch: $batch ?? $this->config->maxMessages,
             maxBytes: $bytes ?? $this->config->maxBytes,
-            noWait: $this->config->noWait,
             heartbeat: $this->config->heartbeat,
             minPending: $this->config->minPending,
             minAckPending: $this->config->minAckPending,
             pinId: $this->pinId,
             group: $this->config->group,
+            priority: $this->config->priority,
         ));
     }
 }

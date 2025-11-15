@@ -37,17 +37,18 @@ final readonly class PullConsumeConfig
      * @param ?positive-int $maxBytes
      * @param ?non-empty-string $pinId
      * @param ?non-empty-string $group
+     * @param ?non-negative-int $priority
      */
     public function __construct(
         ?TimeSpan $expires = null,
         ?int $maxMessages = null,
         ?int $maxBytes = null,
-        public ?bool $noWait = null,
         ?TimeSpan $heartbeat = null,
         public ?int $minPending = null,
         public ?int $minAckPending = null,
         public ?string $pinId = null,
         public ?string $group = null,
+        public ?int $priority = null,
     ) {
         $expires ??= TimeSpan::fromSeconds(self::DEFAULT_PULL_EXPIRES_SECS);
 
