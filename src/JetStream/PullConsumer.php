@@ -114,6 +114,18 @@ final class PullConsumer
         PullConsumeConfig $config = new PullConsumeConfig(),
         ?Cancellation $cancellation = null,
     ): Subscription {
+        if (\count($priorityGroups = $this->info->config->priorityGroups ?? []) > 0) {
+            if ($config->group === null) {
+                throw new \LogicException('Priority group is required for priority consumer.');
+            }
+
+            if (!\in_array($config->group, $priorityGroups, true)) {
+                throw new \LogicException(\sprintf('Priority group "%s" must be one of: "%s".', $config->group, implode(', ', $priorityGroups)));
+            }
+        } elseif ($config->group !== null) {
+            throw new \LogicException('Priority group can only be used for priority consumer.');
+        }
+
         $reply = Id\generateInboxId();
 
         $messageHandler = new Internal\PullMessageHandler(
