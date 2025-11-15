@@ -101,6 +101,8 @@ final class PullMessageHandler
 
     public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
     {
+        $this->watchdog->reset();
+
         if (!($delivery->message->headers?->ok() ?? true)) {
             $this->digest($delivery, $subscription);
         } else {
@@ -139,7 +141,7 @@ final class PullMessageHandler
             $subscription->error(new ConsumerDeleted());
         } elseif ($statusDescription?->is(Description::LeadershipChange)) {
             $this->reset();
-        } elseif ($statusCode !== Status::ReqTimeout && !$statusDescription?->is(Description::BatchCompleted, Description::MaxBytesExceeded)) {
+        } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout)) {
             $messagesLeft = $delivery->message->headers?->get(ScalarKey::int('Nats-Pending-Messages')) ?? 0;
             $bytesLeft = $delivery->message->headers?->get(ScalarKey::int('Nats-Pending-Bytes')) ?? 0;
 
