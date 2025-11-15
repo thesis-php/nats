@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] 2025-11-15
+
+### Added
+* Implement Consumer Push API (see [PR](https://github.com/thesis-php/nats/pull/40) for details).
+
+### Changed
+* Improve headers parsing.
+* Refactor nats subscription (see [PR](https://github.com/thesis-php/nats/pull/36) for details).
+* Refactor JetStream Consumer API (see [PR](https://github.com/thesis-php/nats/pull/37) for details).
+* Made the Delivery object lightweight (see [PR](https://github.com/thesis-php/nats/pull/39) for details).
+* Refactor pull consumers API (see [PR](https://github.com/thesis-php/nats/pull/41) for details).
+
+### Fixed
+
+* Fix empty payload serialization.
+
 ## [0.3.0] 2025-10-23
 
 ### Added
