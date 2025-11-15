@@ -142,7 +142,7 @@ final class PullMessageHandler
         ++$this->delivered;
 
         if ($this->pendingBytes !== null) {
-            $this->pendingBytes = max($this->pendingBytes - $delivery->size(), 0);
+            $this->pendingBytes -= $delivery->size();
         }
     }
 
