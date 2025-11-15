@@ -11,7 +11,7 @@ use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\BadRequestSent;
 use Thesis\Nats\Exception\ConsumerDeleted;
-use Thesis\Nats\Header\ScalarKey;
+use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\PullConsumeConfig;
@@ -25,11 +25,9 @@ use Thesis\Nats\Subscription;
  */
 final class PullMessageHandler
 {
-    /** @var non-negative-int */
-    private int $messages;
+    private int $pendingMessages;
 
-    /** @var ?non-negative-int */
-    private ?int $bytes;
+    private ?int $pendingBytes;
 
     /** @var non-negative-int */
     private int $delivered = 0;
@@ -55,8 +53,8 @@ final class PullMessageHandler
         string $subject,
         string $reply,
     ) {
-        $this->messages = $config->maxMessages;
-        $this->bytes = $config->maxBytes;
+        $this->pendingMessages = $config->maxMessages;
+        $this->pendingBytes = $config->maxBytes;
         $pinId = &$this->pinId;
 
         /** @var Pipeline\Queue<PullRequest> $queue */
@@ -101,21 +99,15 @@ final class PullMessageHandler
 
     public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
     {
-        $this->watchdog->reset();
+        $this->watchdog->stop();
 
-        if (!($delivery->message->headers?->ok() ?? true)) {
-            $this->digest($delivery, $subscription);
-        } else {
-            if (($pinId = $delivery->message->headers?->get(ScalarKey::string('Nats-Pin-Id'))) !== null && $pinId !== '') {
-                $this->pinId = $pinId;
-            }
-
-            $this->deliver($delivery, $subscription);
-        }
+        $this->doHandle($delivery, $subscription);
 
         if (!$subscription->completed()) {
             $this->fetch();
         }
+
+        $this->watchdog->reset();
     }
 
     public function stop(): void
@@ -125,6 +117,19 @@ final class PullMessageHandler
         if (!$this->pulls->isComplete()) {
             $this->pulls->complete();
         }
+    }
+
+    private function doHandle(NatsDelivery $delivery, Subscription $subscription): void
+    {
+        if ($delivery->message->headers !== null && !$delivery->message->headers->ok()) {
+            $this->digest($delivery, $subscription);
+
+            return;
+        }
+
+        $this->deliver($delivery, $subscription);
+
+        $this->pinId ??= $delivery->message->headers?->get(Header\PinId::header());
     }
 
     private function digest(NatsDelivery $delivery, Subscription $subscription): void
@@ -142,13 +147,13 @@ final class PullMessageHandler
         } elseif ($statusDescription?->is(Description::LeadershipChange)) {
             $this->reset();
         } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout)) {
-            $messagesLeft = $delivery->message->headers?->get(ScalarKey::int('Nats-Pending-Messages')) ?? 0;
-            $bytesLeft = $delivery->message->headers?->get(ScalarKey::int('Nats-Pending-Bytes')) ?? 0;
+            $messagesLeft = $delivery->message->headers?->get(Header\PendingMessages::header()) ?? 0;
+            $bytesLeft = $delivery->message->headers?->get(Header\PendingBytes::header()) ?? 0;
 
-            $this->messages = max($this->messages - $messagesLeft, 0);
+            $this->pendingMessages -= $messagesLeft;
 
-            if ($this->bytes !== null) {
-                $this->bytes = max($this->bytes - $bytesLeft, 0);
+            if ($this->pendingBytes !== null) {
+                $this->pendingBytes -= $bytesLeft;
             }
         }
     }
@@ -157,35 +162,33 @@ final class PullMessageHandler
     {
         ($this->handler)($this->nc->toJetStreamDelivery($delivery), $subscription);
 
-        $this->messages = max($this->messages - 1, 0);
+        --$this->pendingMessages;
         ++$this->delivered;
 
-        if ($this->bytes !== null) {
-            $this->bytes = max($this->bytes - $delivery->size(), 0);
+        if ($this->pendingBytes !== null) {
+            $this->pendingBytes = max($this->pendingBytes - $delivery->size(), 0);
         }
     }
 
     private function fetch(): void
     {
-        if ($this->messages >= $this->config->messagesThreshold || ($this->bytes !== null && $this->bytes >= $this->config->bytesThreshold)) {
+        if ($this->pendingMessages > $this->config->messagesThreshold || ($this->pendingBytes !== null && $this->pendingBytes > $this->config->bytesThreshold)) {
             return;
         }
 
-        $batch = $this->config->maxMessages - $this->messages;
-        $maxBytes = $this->bytes;
+        $batch = $this->config->maxMessages - $this->pendingMessages;
+        $maxBytes = $this->pendingBytes;
 
         if ($maxBytes !== null && $this->config->maxBytes !== null) {
+            $maxBytes = $this->config->maxBytes - $this->pendingBytes;
             $batch = $this->config->maxMessages;
-
-            /** @var non-negative-int $maxBytes */
-            $maxBytes = $this->config->maxBytes - $this->bytes;
         }
 
         if ($batch > 0) {
             $this->pulls->push(new PullRequest(
                 expires: $this->config->expires,
                 batch: $batch,
-                maxBytes: $maxBytes,
+                maxBytes: $maxBytes !== null ? max($maxBytes, 0) : null,
                 noWait: $this->config->noWait,
                 heartbeat: $this->config->heartbeat,
                 minPending: $this->config->minPending,
@@ -200,7 +203,7 @@ final class PullMessageHandler
 
     private function reset(): void
     {
-        $this->messages = $this->config->maxMessages;
-        $this->bytes = $this->config->maxBytes;
+        $this->pendingMessages = $this->config->maxMessages;
+        $this->pendingBytes = $this->config->maxBytes;
     }
 }
