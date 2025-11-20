@@ -15,8 +15,9 @@ use function Amp\async;
  * @internal
  * @template-covariant T
  * @template-implements Iterator<T>
+ * @template-implements \IteratorAggregate<mixed, T>
  */
-final class PipelineIterator implements Iterator
+final class PipelineIterator implements Iterator, \IteratorAggregate
 {
     /** @var ?Future<void> */
     private ?Future $complete = null;
