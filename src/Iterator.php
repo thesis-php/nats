@@ -9,9 +9,9 @@ use Amp\Cancellation;
 /**
  * @api
  * @template-covariant T
- * @template-extends \IteratorAggregate<T>
+ * @template-extends \Traversable<mixed, T>
  */
-interface Iterator extends \IteratorAggregate
+interface Iterator extends \Traversable
 {
     public function stop(?Cancellation $cancellation = null): void;
 
