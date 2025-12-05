@@ -53,10 +53,10 @@ final readonly class PushMessageHandler
             $description = $delivery->message->headers?->statusDescription();
 
             switch ([$status, $description]) {
-                case [Status::Control, Description::FlowControl]:
+                case [Status::Control, Description::FlowControl]: // @phpstan-ignore switch.type
                     $delivery->reply(new Message());
                     break;
-                case [Status::Conflict, Description::ConsumerDeleted]:
+                case [Status::Conflict, Description::ConsumerDeleted]: // @phpstan-ignore switch.type
                     $subscription->stop();
                     break;
             }

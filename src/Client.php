@@ -86,7 +86,7 @@ final class Client
             nats: $this,
             serializer: $this->serializer,
             encoder: $this->encoder,
-            domain: $domain ?: $this->config->jetStreamDomain,
+            domain: $domain ?? $this->config->jetStreamDomain,
         );
     }
 

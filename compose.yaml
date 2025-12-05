@@ -1,40 +1,40 @@
 services:
   php:
-    build:
-      dockerfile: docker/php/Dockerfile
+    # noinspection ComposeUnknownValues
+    image: ghcr.io/phpyh/php:${PHP_IMAGE_VERSION:?Make sure `PHP_IMAGE_VERSION` is declared in `.env`}
+    user: ${CONTAINER_USER:-}
+    environment:
+      INSIDE_DEVCONTAINER: true
+      HISTFILE: /workspace/var/.docker_history
+      COMPOSER_CACHE_DIR: /workspace/var/.composer_cache
+    tty: true
     volumes:
-      - .:/app:cached
-    command: sh -c 'trap "exit 0" TERM; tail -f /dev/null & wait'
+      - .:/workspace:cached
+    working_dir: /workspace
 
   nats-1:
     image: nats
     command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
-    ports:
-      - "4222:4222"
-      - "8222:8222"
 
   nats-2:
     image: nats
     command: -c /etc/server.conf --name nats-2 -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
-    ports:
-      - "4223:4222"
 
   nats-3:
     image: nats
     command: -c /etc/server.conf --name nats-3 -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
-    ports:
-      - "4224:4222"
 
   nats-jwt:
     image: nats
-    command: -c /etc/jwt-server.conf --name nats-3 -p 4222 -m 8222
+    command: -c /etc/jwt-server.conf --name nats-jwt -p 4222 -m 8222
     volumes:
       - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf
-    ports:
-      - "4225:4222"
+
+  nats-cli:
+    image: bitnamilegacy/natscli:latest

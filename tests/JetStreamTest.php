@@ -203,7 +203,7 @@ final class JetStreamTest extends NatsTestCase
 
         $js->createOrUpdateStream(new StreamConfig($stream, subjects: [$subject]));
 
-        $list = [...$js->streamList($subject)];
+        $list = iterator_to_array($js->streamList($subject), preserve_keys: false);
         self::assertCount(1, $list);
 
         self::assertSame([$subject], $list[0]->config->subjects);

@@ -118,11 +118,11 @@ final class PullMessageHandler
         } elseif ($statusCode === Status::PinIdMismatch) {
             $this->pinId = null;
             $this->reset();
-        } elseif ($statusDescription?->is(Description::ConsumerDeleted)) {
+        } elseif ($statusDescription?->is(Description::ConsumerDeleted) ?? false) {
             $subscription->error(new ConsumerDeleted());
-        } elseif ($statusDescription?->is(Description::LeadershipChange)) {
+        } elseif ($statusDescription?->is(Description::LeadershipChange) ?? false) {
             $this->reset();
-        } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout)) {
+        } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout) ?? false) {
             $messagesLeft = $delivery->message->headers?->get(Header\PendingMessages::header()) ?? 0;
             $bytesLeft = $delivery->message->headers?->get(Header\PendingBytes::header()) ?? 0;
 
@@ -156,7 +156,7 @@ final class PullMessageHandler
         $maxBytes = $this->pendingBytes;
 
         if ($maxBytes !== null && $this->config->maxBytes !== null) {
-            $maxBytes = $this->config->maxBytes - $this->pendingBytes;
+            $maxBytes = $this->config->maxBytes - ($this->pendingBytes ?? 0);
             $batch = $this->config->maxMessages;
         }
 

@@ -48,7 +48,7 @@ final readonly class Store
     public function get(string $name): ?StoredObject
     {
         $info = $this->info($name);
-        if ($info === null || $info->deleted) {
+        if ($info === null || $info->deleted === true) {
             return null;
         }
 
@@ -265,7 +265,7 @@ final readonly class Store
 
                     $info = $serializer->deserialize(ObjectInfo::class, $json->decode($payload));
 
-                    if ($config->ignoreDeletes && $info->deleted) {
+                    if ($config->ignoreDeletes && $info->deleted === true) {
                         return;
                     }
 
@@ -281,7 +281,7 @@ final readonly class Store
      */
     public function addLink(string $name, ObjectInfo $object): ObjectInfo
     {
-        if ($object->deleted) {
+        if ($object->deleted === true) {
             throw new ObjectIsInvalid('Not allowed to link to a deleted object.');
         }
 

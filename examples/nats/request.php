@@ -12,7 +12,7 @@ use function Amp\Future\await;
 $nc = new Nats\Client(Nats\Config::fromURI('tcp://user:Pswd1@nats-1:4222?no_responders=true'));
 
 $nc->subscribe('words.*', static function (Nats\Delivery $delivery): void {
-    $delivery->reply(new Nats\Message(strrev($delivery->message->payload ?: '')));
+    $delivery->reply(new Nats\Message(strrev($delivery->message->payload ?? '')));
 });
 
 $futures = [];

@@ -149,7 +149,9 @@ final readonly class Stream
             $status = $delivery->message->headers?->statusCode();
             $description = $delivery->message->headers?->statusDescription();
 
-            if (\in_array($status, [Status::NoContent, Status::NoMessages], true) && $description?->is(Description::Eob, Description::NoResults)) {
+            if (\in_array($status, [Status::NoContent, Status::NoMessages], true)
+                && ($description?->is(Description::Eob, Description::NoResults) ?? false)
+            ) {
                 $deliveries->stop();
 
                 return;
@@ -254,9 +256,13 @@ final readonly class Stream
         $headers = new Headers();
 
         if ($response->message->hdrs !== null) {
-            $headers = $headers->merge(Protocol\decodeHeaders(
-                base64_decode($response->message->hdrs, true) ?: throw new HeadersIsInvalid(),
-            ));
+            $base64Decoded = base64_decode($response->message->hdrs, true);
+
+            if ($base64Decoded === false) {
+                throw new HeadersIsInvalid();
+            }
+
+            $headers = $headers->merge(Protocol\decodeHeaders($base64Decoded));
         }
 
         $headers = $headers
@@ -265,8 +271,18 @@ final readonly class Stream
             ->with(Header\Sequence::header(), $response->message->seq)
             ->with(Header\Timestamp::Header, $response->message->time);
 
+        $payload = null;
+
+        if ($response->message->data !== null) {
+            $decoded = base64_decode($response->message->data, true);
+
+            if ($decoded !== false) {
+                $payload = $decoded;
+            }
+        }
+
         return new Message(
-            payload: $response->message->data !== null ? (base64_decode($response->message->data, true) ?: null) : null,
+            payload: $payload,
             headers: $headers,
         );
     }

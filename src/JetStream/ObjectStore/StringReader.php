@@ -34,6 +34,10 @@ final class StringReader implements Reader
         $chunk = substr($this->data, $this->cursor, $length);
         $this->cursor += $length;
 
-        return $chunk ?: null;
+        if ($chunk === '') {
+            return null;
+        }
+
+        return $chunk;
     }
 }

@@ -12,8 +12,8 @@
     <php>
         <ini name="display_errors" value="1"/>
         <ini name="error_reporting" value="-1"/>
-        <env name="THESIS_NATS_DSN" value="tcp://user:Pswd1@localhost:4222?no_responders=true" />
-        <env name="THESIS_NATS_JWT_DSN" value="tcp://localhost:4225?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJlZDI1NTE5LW5rZXkifQ.eyJqdGkiOiJVT1VSVldRTkpBSUgzSUhBSFRKQ1hOSEFFWTc2RzdXNEtBVlNQRUpZUDNQTTIyWEFDTTJBIiwiaWF0IjoxNzYxMjI0MDE4LCJpc3MiOiJBQlg1TVlTUUpCMlNWUUlXREo2SEZSWkxOM1ZMVzJQRkpOVDNHUDRDTUZHN0xRQ1M1SjM0RUdKSiIsIm5hbWUiOiJ1c2VyX25rZXkiLCJzdWIiOiJVRFBCNlRYV1VRMzNQUkhURjJGSlRQRVJISE43NldIS0VVWURNTEtRWlgyTTZIWUFHUkYySkpTWSIsIm5hdHMiOnsicHViIjp7fSwic3ViIjp7fSwic3VicyI6LTEsImRhdGEiOi0xLCJwYXlsb2FkIjotMSwidHlwZSI6InVzZXIiLCJ2ZXJzaW9uIjoyfX0.4D2PgQMgWzuIhy0LvE0Fy-w84I1AfEdXIb94nrVAkb_s_AdPOoCrQUANsGODLnXb_hel24vo7bATiCUeco1xDQ&amp;nkey=SUADBUTF4FNCHZ7O4BXK35KYAMMDRZFL2DOXCNRGHLQOC5HPJB6TOCTDCQ" />
+        <env name="THESIS_NATS_DSN" value="tcp://user:Pswd1@nats-1:4222?no_responders=true" />
+        <env name="THESIS_NATS_JWT_DSN" value="tcp://nats-jwt:4222?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJlZDI1NTE5LW5rZXkifQ.eyJqdGkiOiJVT1VSVldRTkpBSUgzSUhBSFRKQ1hOSEFFWTc2RzdXNEtBVlNQRUpZUDNQTTIyWEFDTTJBIiwiaWF0IjoxNzYxMjI0MDE4LCJpc3MiOiJBQlg1TVlTUUpCMlNWUUlXREo2SEZSWkxOM1ZMVzJQRkpOVDNHUDRDTUZHN0xRQ1M1SjM0RUdKSiIsIm5hbWUiOiJ1c2VyX25rZXkiLCJzdWIiOiJVRFBCNlRYV1VRMzNQUkhURjJGSlRQRVJISE43NldIS0VVWURNTEtRWlgyTTZIWUFHUkYySkpTWSIsIm5hdHMiOnsicHViIjp7fSwic3ViIjp7fSwic3VicyI6LTEsImRhdGEiOi0xLCJwYXlsb2FkIjotMSwidHlwZSI6InVzZXIiLCJ2ZXJzaW9uIjoyfX0.4D2PgQMgWzuIhy0LvE0Fy-w84I1AfEdXIb94nrVAkb_s_AdPOoCrQUANsGODLnXb_hel24vo7bATiCUeco1xDQ&amp;nkey=SUADBUTF4FNCHZ7O4BXK35KYAMMDRZFL2DOXCNRGHLQOC5HPJB6TOCTDCQ" />
     </php>
 
     <testsuites>
@@ -22,7 +22,7 @@
         </testsuite>
     </testsuites>
 
-    <source restrictDeprecations="true" restrictNotices="true" restrictWarnings="true">
+    <source restrictNotices="true" restrictWarnings="true" ignoreIndirectDeprecations="true">
         <include>
             <directory>src</directory>
         </include>

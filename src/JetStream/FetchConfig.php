@@ -65,7 +65,7 @@ final readonly class FetchConfig
     ) {
         $maxWait ??= TimeSpan::fromSeconds(30);
 
-        if ($this->noWait) {
+        if ($this->noWait === true) {
             $maxWait = TimeSpan::fromSeconds(0);
         }
 

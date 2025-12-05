@@ -195,10 +195,9 @@ final class ServiceTest extends NatsTestCase
                 queueGroup: "q-{$i}",
             ));
 
-            $srv
-                ->addEndpoint(new EndpointConfig('svc.echo'), static function (Request $request) use ($i): void {
-                    $request->respond(new Response("echo#{$i}"));
-                });
+            $srv->addEndpoint(new EndpointConfig('svc.echo'), static function (Request $request) use ($i): void {
+                $request->respond(new Response("echo#{$i}"));
+            });
         }
 
         $iterator = $nc->subscribeIterator('rply');
@@ -218,6 +217,6 @@ final class ServiceTest extends NatsTestCase
         self::assertCount(5, $replies);
         self::assertEqualsCanonicalizing(['echo#0', 'echo#1', 'echo#2', 'echo#3', 'echo#4'], $replies);
 
-        $srv->stop();
+        $srv->stop(); // @phpstan-ignore variable.undefined
     }
 }

@@ -20,17 +20,25 @@ enum Schedule: string implements HeaderKey
             return "@at {$value->format(\DateTimeInterface::RFC3339)}";
         }
 
-        return (string) $value;
+        return $value;
     }
 
     public function decode(string $value): \DateTimeImmutable|string
     {
         if (str_starts_with($value, '@at')) {
-            return \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, substr($value, 3)) ?: throw new \UnexpectedValueException(
-                "Unexpected time format: {$value}",
-            );
+            $date = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, substr($value, 3));
+
+            if ($date === false) {
+                throw new \UnexpectedValueException("Unexpected time format: {$value}");
+            }
+
+            return $date;
         }
 
-        return $value ?: throw new \UnexpectedValueException("Unexpected schedule format: {$value}");
+        if ($value === '') {
+            throw new \UnexpectedValueException("Unexpected schedule format: {$value}");
+        }
+
+        return $value;
     }
 }

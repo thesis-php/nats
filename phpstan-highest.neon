@@ -1,0 +1,16 @@
+includes:
+    - phpstan.dist.neon
+
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \#1 \.\.\.\$constructors of method CuyZ\\Valinor\\MapperBuilder\:\:registerConstructor\(\) expects \(pure\-callable\(\)\: mixed\)\|class\-string, Closure\(float\|int\)\: Thesis\\Time\\TimeSpan given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Serialization/ValinorSerializer.php
+
+		-
+			message: '#^Parameter \#2 \.\.\.\$constructors of method CuyZ\\Valinor\\MapperBuilder\:\:registerConstructor\(\) expects \(pure\-callable\(\)\: mixed\)\|class\-string, Closure\(string\)\: DateTimeImmutable given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Serialization/ValinorSerializer.php

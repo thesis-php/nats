@@ -52,7 +52,7 @@ final class SocketConnection implements Connection
      */
     public function startup(): void
     {
-        $frame = $this->framer->readFrame() ?: throw new ConnectionIsNotAvailable();
+        $frame = $this->framer->readFrame() ?? throw new ConnectionIsNotAvailable();
 
         if (!$frame instanceof Protocol\ServerInfo) {
             throw new \UnexpectedValueException(

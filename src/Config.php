@@ -128,7 +128,7 @@ final readonly class Config
         $urls = [];
         foreach (explode(',', $components['host'] ?? '') as $host) {
             $hostport = explode(':', $host);
-            $urls[] = \sprintf('%s:%d', $hostport[0] ?: self::DEFAULT_HOST, (int) ($hostport[1] ?? $port));
+            $urls[] = \sprintf('%s:%d', $hostport[0] === '' ? self::DEFAULT_HOST : $hostport[0], (int) ($hostport[1] ?? $port));
         }
 
         $user = null;
