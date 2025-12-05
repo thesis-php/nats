@@ -72,6 +72,30 @@ rescaffold:
 .PHONY: rescaffold
 
 ##
+## Nats
+## -----
+
+nats-help: up
+	$(DOCKER_COMPOSE) run --rm nats-cli --server nats-1:4222 --user user --password Pswd1 --help
+.PHONY: nats-help
+
+nats-kv-list: up
+	$(DOCKER_COMPOSE) run --rm nats-cli --server nats-1:4222 --user user --password Pswd1 kv ls
+.PHONY: nats-kv-list
+
+nats-object-list: up
+	$(DOCKER_COMPOSE) run --rm nats-cli --server nats-1:4222 --user user --password Pswd1 object ls
+.PHONY: nats-object-list
+
+nats-stream-list: up
+	$(DOCKER_COMPOSE) run --rm nats-cli --server nats-1:4222 --user user --password Pswd1 stream ls
+.PHONY: nats-stream-list
+
+nats-latency: up
+	$(DOCKER_COMPOSE) run --rm nats-cli --server nats-1:4222 --user user --password Pswd1 latency --server-b nats-2:4222 --rate 500000
+.PHONY: nats-latency
+
+##
 ## Tools
 ## -----
 

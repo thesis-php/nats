@@ -29,3 +29,6 @@ services:
     command: -c /etc/jwt-server.conf --name nats-jwt -p 4222 -m 8222
     volumes:
       - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf
+
+  nats-cli:
+    image: bitnamilegacy/natscli:latest
