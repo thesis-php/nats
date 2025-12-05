@@ -24,6 +24,12 @@ services:
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
 
+  nats-3:
+    image: nats
+    command: -c /etc/server.conf --name nats-3 -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/server.conf:/etc/server.conf
+
   nats-jwt:
     image: nats
     command: -c /etc/jwt-server.conf --name nats-jwt -p 4222 -m 8222
