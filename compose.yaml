@@ -1,0 +1,31 @@
+services:
+  php:
+    # noinspection ComposeUnknownValues
+    image: ghcr.io/phpyh/php:${PHP_IMAGE_VERSION:?Make sure `PHP_IMAGE_VERSION` is declared in `.env`}
+    user: ${CONTAINER_USER:-}
+    environment:
+      INSIDE_DEVCONTAINER: true
+      HISTFILE: /workspace/var/.docker_history
+      COMPOSER_CACHE_DIR: /workspace/var/.composer_cache
+    tty: true
+    volumes:
+      - .:/workspace:cached
+    working_dir: /workspace
+
+  nats-1:
+    image: nats
+    command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/server.conf:/etc/server.conf
+
+  nats-2:
+    image: nats
+    command: -c /etc/server.conf --name nats-2 -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/server.conf:/etc/server.conf
+
+  nats-jwt:
+    image: nats
+    command: -c /etc/jwt-server.conf --name nats-jwt -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf

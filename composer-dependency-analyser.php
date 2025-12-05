@@ -6,5 +6,4 @@ use ShipMonk\ComposerDependencyAnalyser\Config\Configuration;
 use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
 
 return (new Configuration())
-    ->ignoreErrorsOnExtension('ext-sodium', [ErrorType::SHADOW_DEPENDENCY])
-    ;
+    ->ignoreErrorsOnExtension('ext-sodium', [ErrorType::SHADOW_DEPENDENCY]);

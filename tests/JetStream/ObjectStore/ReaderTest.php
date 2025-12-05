@@ -2,13 +2,11 @@
 
 declare(strict_types=1);
 
-namespace JetStream\ObjectStore;
+namespace Thesis\Nats\JetStream\ObjectStore;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
-use Thesis\Nats\JetStream\ObjectStore\ResourceReader;
-use Thesis\Nats\JetStream\ObjectStore\StringReader;
 
 #[CoversClass(StringReader::class)]
 #[CoversClass(ResourceReader::class)]

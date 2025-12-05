@@ -83,7 +83,7 @@ final class PullConsumer
             replyTo: $reply,
         );
 
-        if (!$config->noWait) {
+        if ($config->noWait !== true) {
             $callbackId = EventLoop::delay(
                 $config->maxWait->add(TimeSpan::fromSeconds(1))->toSeconds(),
                 static fn() => $subscription->stop(),

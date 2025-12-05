@@ -16,7 +16,7 @@ final readonly class ConnectionInfo
         return new self(
             serverVersion: $info->version,
             allowHeaders: $info->headers,
-            supportJetstream: $info->jetstream ?: false,
+            supportJetstream: $info->jetstream ?? false,
         );
     }
 

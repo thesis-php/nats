@@ -25,11 +25,11 @@ final readonly class ServiceConfig
         public array $metadata = [],
         public ?string $queueGroup = null,
     ) {
-        if (!preg_match(self::NAME_REGEX, $this->name)) {
+        if (preg_match(self::NAME_REGEX, $this->name) !== 1) {
             throw new \InvalidArgumentException('Service name is not a valid string (only "A-Z, a-z, 0-9, _, -" are allowed).');
         }
 
-        if (!preg_match(self::SEMVER_REGEX, $this->version)) {
+        if (preg_match(self::SEMVER_REGEX, $this->version) !== 1) {
             throw new \InvalidArgumentException('Service version is not a valid semver string.');
         }
     }

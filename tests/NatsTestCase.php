@@ -20,8 +20,6 @@ abstract class NatsTestCase extends TestCase
 
     protected function setUp(): void
     {
-        parent::setUp();
-
         $dsn = getenv('THESIS_NATS_DSN');
         if (!\is_string($dsn) || $dsn === '') {
             self::markTestSkipped('THESIS_NATS_DSN must be set.');
@@ -39,8 +37,6 @@ abstract class NatsTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        parent::tearDown();
-
         $this->client?->stop();
         $this->jwtClient?->stop();
     }

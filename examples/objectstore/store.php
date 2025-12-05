@@ -16,7 +16,7 @@ $js->deleteObjectStore('test');
 $os = $js->createOrUpdateObjectStore(new ObjectStore\StoreConfig('test', description: 'test objects'));
 
 $subscription = $os->watch(static function (ObjectStore\ObjectInfo $info): void {
-    if ($info->deleted) {
+    if ($info->deleted === true) {
         dump("Object '{$info->name}' from bucket '{$info->bucket}' was deleted.");
     } else {
         dump("Object '{$info->name}' in bucket '{$info->bucket}' was uploaded.");

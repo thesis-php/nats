@@ -16,7 +16,10 @@ final readonly class BatchCommit
      */
     public static function header(): ScalarKey
     {
-        /** @var ScalarKey<1> */
+        /**
+         * @var ScalarKey<1>
+         * @phpstan-ignore varTag.type
+         */
         return ScalarKey::int(self::HEADER);
     }
 }

@@ -58,8 +58,8 @@ final readonly class Parser
     {
         return match ($type) {
             self::OP_OK => Ok::Frame,
-            self::OP_ERR => new Err(substr($payload, 4) ?: 'unknown'),
-            self::OP_INFO => ServerInfo::fromJson(substr($payload, 4) ?: '{}'),
+            self::OP_ERR => new Err(substr($payload, 4) ?: 'unknown'), // @phpstan-ignore ternary.shortNotAllowed
+            self::OP_INFO => ServerInfo::fromJson(substr($payload, 4) ?: '{}'), // @phpstan-ignore ternary.shortNotAllowed
             self::OP_PING_PONG => $payload === 'ING' ? Ping::Frame : Pong::Frame,
             self::OP_MSG => yield from self::parseMsg(substr($payload, 3)),
             self::OP_HMSG => yield from self::parseHMsg(substr($payload, 4)),
@@ -75,10 +75,20 @@ final readonly class Parser
         $chunks = explode(' ', $payload);
         $size = \count($chunks);
 
-        $subject = $chunks[0] ?: throw new \UnexpectedValueException('msg must contain subject.');
-        $sid = ($chunks[1] ?? '') ?: throw new \UnexpectedValueException('msg must contain sid.');
+        $subject = $chunks[0];
+        if ($subject === '') {
+            throw new \UnexpectedValueException('msg must contain subject.');
+        }
 
-        /** @var ?non-empty-string $replyTo */
+        $sid = $chunks[1] ?? '';
+        if ($sid === '') {
+            throw new \UnexpectedValueException('msg must contain sid.');
+        }
+
+        /**
+         * @var ?non-empty-string $replyTo
+         * @phpstan-ignore offsetAccess.notFound
+         */
         $replyTo = $size === 4 ? $chunks[2] : null;
 
         $length = (int) ($chunks[$size - 1] ?? 0);
@@ -102,10 +112,20 @@ final readonly class Parser
         $chunks = explode(' ', $payload);
         $size = \count($chunks);
 
-        $subject = $chunks[0] ?: throw new \UnexpectedValueException('msg must contain subject.');
-        $sid = ($chunks[1] ?? '') ?: throw new \UnexpectedValueException('msg must contain sid.');
+        $subject = $chunks[0];
+        if ($subject === '') {
+            throw new \UnexpectedValueException('msg must contain subject.');
+        }
 
-        /** @var ?non-empty-string $replyTo */
+        $sid = $chunks[1] ?? '';
+        if ($sid === '') {
+            throw new \UnexpectedValueException('msg must contain sid.');
+        }
+
+        /**
+         * @var ?non-empty-string $replyTo
+         * @phpstan-ignore offsetAccess.notFound
+         */
         $replyTo = $size === 5 ? $chunks[2] : null;
 
         $headersLength = (int) ($chunks[$size - 2] ?? 0);

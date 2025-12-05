@@ -20,7 +20,10 @@ final readonly class MsgRollup
      */
     public static function header(): ScalarKey
     {
-        /** @var ScalarKey<self::ROLLUP_*> */
+        /**
+         * @var ScalarKey<self::ROLLUP_*>
+         * @phpstan-ignore varTag.type
+         */
         return ScalarKey::nonEmptyString(self::HEADER);
     }
 }

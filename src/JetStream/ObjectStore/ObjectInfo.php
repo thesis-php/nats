@@ -97,8 +97,8 @@ final readonly class ObjectInfo implements \JsonSerializable
                 'name' => $this->name,
                 'bucket' => $this->bucket,
                 'description' => $this->description,
-                'headers' => $this->headers ?: null,
-                'metadata' => $this->metadata ?: null,
+                'headers' => $this->headers === [] ? null : $this->headers,
+                'metadata' => $this->metadata === [] ? null : $this->metadata,
                 'options' => [
                     'max_chunk_size' => $this->options?->maxChunkSize,
                     'link' => $this->options?->link,

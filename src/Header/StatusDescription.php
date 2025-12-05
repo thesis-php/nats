@@ -23,7 +23,7 @@ enum StatusDescription: string implements OptionalHeaderKey
 
     public function decode(string $value): Description
     {
-        return new Description($value ?: Description::OK);
+        return new Description($value === '' ? Description::OK : $value);
     }
 
     public function default(Headers $headers): Description

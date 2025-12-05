@@ -2,12 +2,9 @@
 
 declare(strict_types=1);
 
-namespace JetStream\Counter;
+namespace Thesis\Nats\JetStream\Counter;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use Thesis\Nats\JetStream\Counter\CounterConfig;
-use Thesis\Nats\JetStream\Counter\CounterStore;
-use Thesis\Nats\JetStream\Counter\Entry;
 use Thesis\Nats\NatsTestCase;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
@@ -52,16 +49,16 @@ final class CounterStoreTest extends NatsTestCase
         self::assertSame(1, $counter->add('x', 1));
         self::assertSame(2, $counter->add('y', 2));
 
-        $entries = [...$counter->getMultiple()];
+        $entries = iterator_to_array($counter->getMultiple(), preserve_keys: false);
         self::assertCount(2, $entries);
         self::assertEquals(new Entry('x', 1, 1), $entries[0]);
         self::assertEquals(new Entry('y', 2, 2), $entries[1]);
 
-        $entries = [...$counter->getMultiple(['x'])];
+        $entries = iterator_to_array($counter->getMultiple(['x']), preserve_keys: false);
         self::assertCount(1, $entries);
         self::assertEquals(new Entry('x', 1, 1), $entries[0]);
 
-        $entries = [...$counter->getMultiple(['z'])];
+        $entries = iterator_to_array($counter->getMultiple(['z']), preserve_keys: false);
         self::assertCount(0, $entries);
 
         $js->deleteCounter($name);

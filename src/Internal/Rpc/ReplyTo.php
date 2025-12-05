@@ -31,7 +31,11 @@ final readonly class ReplyTo
      */
     public static function parse(string $inboxId, string $subject): self
     {
-        $token = substr($subject, \strlen($inboxId)) ?: throw new \InvalidArgumentException("Invalid inbox id {$inboxId} received.");
+        $token = substr($subject, \strlen($inboxId));
+
+        if ($token === '') {
+            throw new \InvalidArgumentException("Invalid inbox id {$inboxId} received.");
+        }
 
         return new self(
             subject: $subject,

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace JetStream;
+namespace Thesis\Nats\JetStream;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use Thesis\Nats\Exception\ConsumerAlreadyConsuming;

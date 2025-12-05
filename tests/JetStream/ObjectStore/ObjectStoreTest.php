@@ -2,14 +2,9 @@
 
 declare(strict_types=1);
 
-namespace JetStream\ObjectStore;
+namespace Thesis\Nats\JetStream\ObjectStore;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use Thesis\Nats\JetStream\ObjectStore\ObjectInfo;
-use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
-use Thesis\Nats\JetStream\ObjectStore\ObjectStoreInfo;
-use Thesis\Nats\JetStream\ObjectStore\Store;
-use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
 use Thesis\Nats\NatsTestCase;
 use Thesis\Nats\Subscription;
 use function Thesis\Nats\Internal\Id\generateUniqueId;

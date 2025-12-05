@@ -19,7 +19,8 @@ final readonly class Err implements Frame
      */
     public function __construct(string $message)
     {
-        $this->message = trim($message, '\'') ?: 'unknown';
+        $message = trim($message, '\'');
+        $this->message = $message === '' ? 'unknown' : $message;
     }
 
     public function encode(): string

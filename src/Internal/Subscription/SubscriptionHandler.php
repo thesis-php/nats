@@ -137,7 +137,7 @@ final class SubscriptionHandler
         // If we are busy processing a message, we are unlikely to be interested in receiving heartbeats since we cannot process them.
         // To prevent accumulating them in memory and avoid triggering a flood of watchdog interactions after processing completes,
         // we silently discard heartbeat messages.
-        if ($this->inflight && $delivery->message->headers?->isHeartbeat()) {
+        if ($this->inflight && ($delivery->message->headers?->isHeartbeat() ?? false)) {
             return true;
         }
 

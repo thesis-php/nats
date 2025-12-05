@@ -16,7 +16,10 @@ final readonly class PendingBytes
      */
     public static function header(): ScalarKey
     {
-        /** @var ScalarKey<non-negative-int> */
+        /**
+         * @var ScalarKey<non-negative-int>
+         * @phpstan-ignore varTag.type
+         */
         return ScalarKey::int(self::HEADER);
     }
 }

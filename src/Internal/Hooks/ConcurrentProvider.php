@@ -53,7 +53,7 @@ final class ConcurrentProvider implements Provider
             $event instanceof MessageReceived => $this->messageCallbacks,
             $event instanceof PingReceived => $this->pingCallbacks,
             $event instanceof PongReceived => $this->pongCallbacks,
-            $event instanceof ConnectionClosed => $this->closeCallbacks,
+            $event instanceof ConnectionClosed => $this->closeCallbacks, // @phpstan-ignore instanceof.alwaysTrue
         };
 
         foreach ($callbacks as $callback) {

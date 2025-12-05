@@ -49,7 +49,8 @@ final class FetchMessageHandler
                     Description::ServerShutdown,
                     Description::NoMessages,
                     Description::RequestTimeout,
-                );
+                )
+                ?? false;
 
             if ($complete) {
                 $subscription->stop();
