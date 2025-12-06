@@ -42,6 +42,18 @@ final class ConfigTest extends TestCase
     )]
     #[TestWith(
         [
+            'tcp://admin:secret@127.0.0.1:4222?verbose=false&pedantic=true&client_name=prod',
+            new Config(
+                verbose: false,
+                pedantic: true,
+                user: 'admin',
+                password: 'secret',
+                clientName: 'prod',
+            ),
+        ],
+    )]
+    #[TestWith(
+        [
             'tcp://admin:secret@127.0.0.1:4222,127.0.0.1:4223?verbose=false&pedantic=true',
             new Config(
                 urls: [

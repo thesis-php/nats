@@ -15,6 +15,7 @@ final readonly class Config
     private const int DEFAULT_CONNECTION_TIMEOUT = 10;
     private const int DEFAULT_PING_INTERVAL = 10000;
     private const int DEFAULT_MAX_PINGS = 5;
+    private const string DEFAULT_CLIENT_NAME = 'thesis/nats';
 
     /** @var non-empty-string */
     public string $version;
@@ -29,6 +30,7 @@ final readonly class Config
      * @param ?positive-int $ping in milliseconds
      * @param positive-int $maxPings the maximum number of pings that we have not received a response to, after which the connection to the server will be closed
      * @param ?non-empty-string $jetStreamDomain
+     * @param non-empty-string $clientName
      */
     public function __construct(
         public array $urls = [self::DEFAULT_URL],
@@ -48,6 +50,7 @@ final readonly class Config
         public ?int $ping = self::DEFAULT_PING_INTERVAL,
         public int $maxPings = self::DEFAULT_MAX_PINGS,
         public ?string $jetStreamDomain = null,
+        public string $clientName = self::DEFAULT_CLIENT_NAME,
     ) {
         $this->version = '0.1.x'; // TODO: replace with actual version.
     }
@@ -151,6 +154,11 @@ final readonly class Config
             $nkey = $query['nkey'];
         }
 
+        $clientName = self::DEFAULT_CLIENT_NAME;
+        if (isset($query['client_name']) && \is_string($query['client_name']) && $query['client_name'] !== '') {
+            $clientName = $query['client_name'];
+        }
+
         return new self(
             urls: $urls,
             verbose: $verbose,
@@ -165,6 +173,7 @@ final readonly class Config
             ping: $ping,
             maxPings: $maxPings,
             jetStreamDomain: $jetStreamDomain,
+            clientName: $clientName,
         );
     }
 
@@ -183,6 +192,7 @@ final readonly class Config
      *     ping?: positive-int,
      *     max_pings?: positive-int,
      *     jetstream_domain?: non-empty-string,
+     *     client_name?: non-empty-string,
      * } $options
      */
     public static function fromArray(#[\SensitiveParameter] array $options): self
@@ -201,6 +211,7 @@ final readonly class Config
             ping: $options['ping'] ?? self::DEFAULT_PING_INTERVAL,
             maxPings: $options['max_pings'] ?? self::DEFAULT_MAX_PINGS,
             jetStreamDomain: $options['jetstream_domain'] ?? null,
+            clientName: $options['client_name'] ?? self::DEFAULT_CLIENT_NAME,
         );
     }
 }
