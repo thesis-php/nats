@@ -70,7 +70,7 @@ final class SocketConnection implements Connection
             verbose: $this->config->verbose,
             pedantic: $this->config->pedantic,
             tlsRequired: false,
-            name: 'thesis/nats',
+            name: $this->config->clientName,
             version: $this->config->version,
             user: $this->config->user,
             pass: $this->config->password,
