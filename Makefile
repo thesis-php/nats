@@ -11,24 +11,15 @@ COMPOSER ?= $(RUN) composer
 ## Project
 ## -----
 
-var:
-	mkdir var
+t: terminal
+terminal: var ## Start a terminal inside the php container
+	@$(if $(INSIDE_CONTAINER),echo 'Already inside docker container.'; exit 1,)
+	$(DOCKER_COMPOSE) run --rm $(ARGS) php bash
+.PHONY: t terminal
 
-vendor: composer.json $(wildcard composer.lock)
-	@if [ -f vendor/.lowest ]; then $(MAKE) install-lowest; else $(MAKE) install-highest; fi
-
-i: install-highest
-install-highest: ## Install highest Composer dependencies
-	$(COMPOSER) install
-	@rm -f vendor/.lowest
-	@touch vendor
-.PHONY: i install-highest
-
-install-lowest: ## Install lowest Composer dependencies
-	$(COMPOSER) update --prefer-lowest --prefer-stable
-	@touch vendor/.lowest
-	@touch vendor
-.PHONY: install-lowest
+run: ## Run a command using the php container: `make run CMD='php --version'`
+	$(RUN) $(CMD)
+.PHONY: run
 
 up: ## Docker compose up
 	$(DOCKER_COMPOSE) up --remove-orphans --build --detach $(ARGS)
@@ -43,20 +34,31 @@ docker-compose: ## Run docker compose command: `make dc CMD=start`
 	$(DOCKER_COMPOSE) $(CMD)
 .PHONY: dc docker-compose
 
+i: install
+install: ## Install Composer dependencies
+	$(COMPOSER) install
+	@rm -f vendor/.lowest
+	@touch vendor
+.PHONY: i install
+
+u: update
+update: ## Update Composer dependencies
+	$(COMPOSER) update
+	@rm -f vendor/.lowest
+	@touch vendor
+.PHONY: u update
+
+install-lowest: ## Install lowest Composer dependencies (libraries only)
+	@if [ -f composer.lock ]; then echo 'Recipe `install-lowest` is not available in projects with `composer.lock`'; exit 1; fi
+	$(COMPOSER) update --prefer-lowest --prefer-stable
+	@touch vendor/.lowest
+	@touch vendor
+.PHONY: install-lowest
+
 c: composer
 composer: ## Run Composer command: `make c CMD=start`
 	$(COMPOSER) $(CMD)
 .PHONY: c composer
-
-run: ## Run a command using the php container: `make run CMD='php --version'`
-	$(RUN) $(CMD)
-.PHONY: run
-
-t: terminal
-terminal: var ## Start a terminal inside the php container
-	@$(if $(INSIDE_CONTAINER),echo 'Already inside docker container.'; exit 1,)
-	$(DOCKER_COMPOSE) run --rm $(ARGS) php bash
-.PHONY: t terminal
 
 rescaffold:
 	$(DOCKER) run \
@@ -70,6 +72,12 @@ rescaffold:
 	  --package-project-default '$(shell basename $$(pwd))'
 	git add --all 2>/dev/null || true
 .PHONY: rescaffold
+
+var:
+	mkdir var
+
+vendor: composer.json $(wildcard composer.lock)
+	@if [ -f vendor/.lowest ]; then $(MAKE) install-lowest; else $(MAKE) install; fi
 
 ##
 ## Nats
