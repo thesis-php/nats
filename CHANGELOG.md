@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Fix empty payload serialization.
 
+### Deprecated
+
+* Deprecate `Config::$version`, will be removed in `0.5.0`.
+
 ## [0.3.0] 2025-10-23
 
 ### Added

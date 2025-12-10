@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Config;
 use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol\Connect;
+use function Thesis\Package\version;
 
 #[CoversClass(Connect::class)]
 #[CoversClass(Signer::class)]
@@ -26,7 +27,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
             sig: null,
@@ -59,7 +60,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
             sig: $signature,
@@ -94,7 +95,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
             sig: $signature,
@@ -122,7 +123,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
             sig: null,
@@ -168,7 +169,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             authToken: null,
             user: $config->user,
             pass: $config->password,
@@ -202,7 +203,7 @@ final class SocketConnectionJwtTest extends TestCase
             pedantic: $config->pedantic,
             tlsRequired: false,
             name: 'thesis/nats',
-            version: $config->version,
+            version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
             sig: $signature,

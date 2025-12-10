@@ -17,7 +17,10 @@ final readonly class Config
     private const int DEFAULT_MAX_PINGS = 5;
     private const string DEFAULT_CLIENT_NAME = 'thesis/nats';
 
-    /** @var non-empty-string */
+    /**
+     * @var non-empty-string
+     * @deprecated will be removed in 0.5.0
+     */
     public string $version;
 
     /**
@@ -52,7 +55,7 @@ final readonly class Config
         public ?string $jetStreamDomain = null,
         public string $clientName = self::DEFAULT_CLIENT_NAME,
     ) {
-        $this->version = '0.1.x'; // TODO: replace with actual version.
+        $this->version = '0.1.x';
     }
 
     public static function default(): self

@@ -12,12 +12,15 @@ use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol;
+use function Thesis\Package\version;
 
 /**
  * @internal
  */
 final class SocketConnection implements Connection
 {
+    private const string PACKAGE_NAME = 'thesis/nats';
+
     private readonly Framer $framer;
 
     /** @var \SplQueue<DeferredFuture<Protocol\Frame>> */
@@ -71,7 +74,7 @@ final class SocketConnection implements Connection
             pedantic: $this->config->pedantic,
             tlsRequired: false,
             name: $this->config->clientName,
-            version: $this->config->version,
+            version: version(self::PACKAGE_NAME),
             user: $this->config->user,
             pass: $this->config->password,
             sig: $this->generateSignature($frame->nonce, $this->config->nkey),
