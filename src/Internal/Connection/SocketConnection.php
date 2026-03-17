@@ -171,6 +171,11 @@ final class SocketConnection implements Connection
                     foreach ($queue as $deferred) {
                         $deferred->error($e);
                     }
+
+                    $running = false;
+                    $hooks->dispatch(Hooks\ConnectionClosed::Event);
+
+                    return;
                 }
             }
         });
