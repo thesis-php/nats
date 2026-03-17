@@ -123,8 +123,8 @@ final class PullMessageHandler
         } elseif ($statusDescription?->is(Description::LeadershipChange) ?? false) {
             $this->reset();
         } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout) ?? false) {
-            $messagesLeft = $delivery->message->headers?->get(Header\PendingMessages::header()) ?? 0;
-            $bytesLeft = $delivery->message->headers?->get(Header\PendingBytes::header()) ?? 0;
+            $messagesLeft = $delivery->message->headers->get(Header\PendingMessages::header()) ?? 0;
+            $bytesLeft = $delivery->message->headers->get(Header\PendingBytes::header()) ?? 0;
 
             $this->pendingMessages -= $messagesLeft;
 
