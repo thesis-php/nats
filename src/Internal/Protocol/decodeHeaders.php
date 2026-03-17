@@ -63,7 +63,6 @@ function parseStatus(string $line): ?array
     if (\count($chunks) > 1) {
         /**
          * @var numeric-string $code
-         * @phpstan-ignore offsetAccess.notFound
          */
         $code = $chunks[1];
         $description = implode(' ', \array_slice($chunks, 2));
