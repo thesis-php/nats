@@ -106,7 +106,7 @@ final class SocketConnection implements Connection
             $frame = $deferred->getFuture()->await();
 
             if ($frame instanceof Protocol\Err) {
-                throw new \RuntimeException($frame->message);
+                throw $frame->toException();
             }
         }
     }
