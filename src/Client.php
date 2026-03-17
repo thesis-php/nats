@@ -143,6 +143,7 @@ final class Client
      * @param ?non-empty-string $queueGroup
      * @param positive-int $bufferSize
      * @throws NatsException
+     * @throws \Throwable
      */
     public function subscribe(
         string $subject,
@@ -164,7 +165,13 @@ final class Client
 
         $this->subscribers[$subscriptionId] = [$handler->push(...), $subscription = $handler->subscription];
 
-        $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
+        try {
+            $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
+        } catch (\Throwable $e) {
+            unset($this->subscribers[$subscriptionId]);
+
+            throw $e;
+        }
 
         return $subscription;
     }
@@ -247,6 +254,7 @@ final class Client
      * @param callable(Delivery): void $handler
      * @return \Closure(?Cancellation=): void
      * @throws NatsException
+     * @throws \Throwable
      */
     private function subscribeCallback(
         string $subject,
@@ -264,7 +272,13 @@ final class Client
             null,
         ];
 
-        $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId));
+        try {
+            $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId));
+        } catch (\Throwable $e) {
+            unset($this->subscribers[$subscriptionId]);
+
+            throw $e;
+        }
 
         return function (?Cancellation $cancellation = null) use ($subscriptionId): void {
             $this->unsubscribe($subscriptionId, $cancellation);
