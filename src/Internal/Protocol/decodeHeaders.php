@@ -38,7 +38,7 @@ function decodeHeaders(string $encoded): Headers
     }
 
     foreach ($lines as $line) {
-        $keypair = explode(': ', $line);
+        $keypair = explode(': ', $line, limit: 2);
         if (\count($keypair) !== 2) {
             throw new \InvalidArgumentException(\sprintf('Invalid msg header line "%s" received.', $line));
         }

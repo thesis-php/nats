@@ -9,6 +9,7 @@ use Amp\DeferredFuture;
 use Amp\Future;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
+use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
@@ -20,8 +21,8 @@ use Thesis\Nats\Status;
  */
 final class Handler
 {
-    /** @var array<non-empty-string, callable(Delivery): void> */
-    private array $futures = [];
+    /** @var array<non-empty-string, PendingRequest> */
+    private array $pendings = [];
 
     /** @var non-empty-string */
     private readonly string $inboxId;
@@ -40,21 +41,24 @@ final class Handler
      */
     public function setup(\Closure $subscribe, ?Cancellation $cancellation = null): void
     {
-        $futures = &$this->futures;
+        $pendings = &$this->pendings;
         $inboxId = $this->inboxId;
 
         $this->unsubscribe = $subscribe(
             "{$inboxId}*",
             static function (Delivery $delivery) use (
-                &$futures,
+                &$pendings,
                 $inboxId,
             ): void {
                 $replyTo = ReplyTo::parse($inboxId, $delivery->subject);
 
                 try {
-                    ($futures[$replyTo->token] ?? static fn() => null)($delivery);
+                    $pending = $pendings[$replyTo->token] ?? null;
+                    if ($pending !== null) {
+                        $pending($delivery);
+                    }
                 } finally {
-                    unset($futures[$replyTo->token]);
+                    unset($pendings[$replyTo->token]);
                 }
             },
             $cancellation,
@@ -69,7 +73,14 @@ final class Handler
             }
         } finally {
             $this->unsubscribe = null;
-            $this->futures = [];
+
+            [$pendings, $this->pendings] = [$this->pendings, []];
+
+            $e = new ConnectionWasClosed();
+
+            foreach ($pendings as $pending) {
+                $pending->deferred->error($e);
+            }
         }
     }
 
@@ -86,13 +97,16 @@ final class Handler
 
         /** @var DeferredFuture<Delivery> $deferred */
         $deferred = new DeferredFuture();
-        $this->futures[$replyTo->token] = static function (Delivery $delivery) use ($deferred): void {
-            if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoResponders) {
-                $deferred->error(new RequestHasNoResponders());
-            } else {
-                $deferred->complete($delivery);
-            }
-        };
+        $this->pendings[$replyTo->token] = new PendingRequest(
+            handle: static function (Delivery $delivery) use ($deferred): void {
+                if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoResponders) {
+                    $deferred->error(new RequestHasNoResponders());
+                } else {
+                    $deferred->complete($delivery);
+                }
+            },
+            deferred: $deferred,
+        );
 
         $client->publish($subject, $message, $replyTo->subject);
 
