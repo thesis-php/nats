@@ -32,6 +32,7 @@ final class PingPongHandler
         $this->callbackId = EventLoop::repeat($interval, function () use ($maxPings): void {
             if (++$this->pings > $maxPings) {
                 $this->forceStop();
+
                 return;
             }
 
