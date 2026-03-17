@@ -331,8 +331,10 @@ final class Client
             return;
         }
 
+        [$subscribers, $this->subscribers] = [$this->subscribers, []];
+
         /** @var ?Subscription $subscription */
-        foreach ($this->subscribers as [$_, $subscription]) {
+        foreach ($subscribers as [$_, $subscription]) {
             if ($subscription !== null) {
                 $do($subscription);
             }

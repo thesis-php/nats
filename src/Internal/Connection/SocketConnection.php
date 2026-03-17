@@ -165,17 +165,13 @@ final class SocketConnection implements Connection
                             $deferred->complete($frame);
                         }
                     }
-
-                    return;
                 } catch (\Throwable $e) {
                     foreach ($queue as $deferred) {
                         $deferred->error($e);
                     }
-
+                } finally {
                     $running = false;
                     $hooks->dispatch(Hooks\ConnectionClosed::Event);
-
-                    return;
                 }
             }
         });

@@ -44,6 +44,10 @@ final class HeadersTest extends TestCase
         new Headers(['X' => ['Y'], StatusCode::Header->value => ['100'], StatusDescription::Header->value => ['idle heartbeat']]),
         "NATS/1.0 100 idle heartbeat\r\nX: Y\r\n\r\n",
     ])]
+    #[TestWith([
+        new Headers(['Bar' => ['Baz: Foo']]),
+        "NATS/1.0\r\nBar: Baz: Foo\r\n\r\n",
+    ])]
     public function testEncode(Headers $headers, string $encoded): void
     {
         self::assertEquals($encoded, encodeHeaders($headers));
