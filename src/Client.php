@@ -331,15 +331,13 @@ final class Client
             return;
         }
 
-        try {
-            /** @var ?Subscription $subscription */
-            foreach ($this->subscribers as [$_, $subscription]) {
-                if ($subscription !== null) {
-                    $do($subscription);
-                }
+        [$subscribers, $this->subscribers] = [$this->subscribers, []];
+
+        /** @var ?Subscription $subscription */
+        foreach ($subscribers as [$_, $subscription]) {
+            if ($subscription !== null) {
+                $do($subscription);
             }
-        } finally {
-            $this->subscribers = [];
         }
 
         $this->rpc?->await($cancellation)?->shutdown($cancellation);

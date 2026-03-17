@@ -67,20 +67,17 @@ final class Handler
 
     public function shutdown(?Cancellation $cancellation = null): void
     {
-        try {
-            if ($this->unsubscribe !== null) {
-                ($this->unsubscribe)($cancellation);
-            }
-        } finally {
-            $this->unsubscribe = null;
+        [$pendings, $this->pendings] = [$this->pendings, []];
 
-            [$pendings, $this->pendings] = [$this->pendings, []];
+        $e = new ConnectionWasClosed();
 
-            $e = new ConnectionWasClosed();
+        foreach ($pendings as $pending) {
+            $pending->deferred->error($e);
+        }
 
-            foreach ($pendings as $pending) {
-                $pending->deferred->error($e);
-            }
+        [$unsubscribe, $this->unsubscribe] = [$this->unsubscribe, null];
+        if ($unsubscribe !== null) {
+            $unsubscribe($cancellation);
         }
     }
 
