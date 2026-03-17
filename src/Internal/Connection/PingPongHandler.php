@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
-use Amp;
 use Revolt\EventLoop;
 use Thesis\Nats\Internal\Protocol;
 
@@ -18,8 +17,6 @@ final class PingPongHandler
     /** @var non-negative-int */
     private int $pings = 0;
 
-    private ?float $lastPingPongTime = null;
-
     public function __construct(
         private readonly Connection $connection,
     ) {}
@@ -32,23 +29,21 @@ final class PingPongHandler
     {
         $interval /= 1_000;
 
-        $this->callbackId = EventLoop::repeat($interval, function () use ($interval, $maxPings): void {
+        $this->callbackId = EventLoop::repeat($interval, function () use ($maxPings): void {
             if (++$this->pings > $maxPings) {
                 $this->forceStop();
-            } elseif ((Amp\now() - (int) $this->lastPingPongTime) > $interval) {
-                $this->lastPingPongTime = Amp\now();
-                $this->connection->execute(Protocol\Ping::Frame);
+                return;
             }
+
+            $this->connection->execute(Protocol\Ping::Frame);
         });
 
         $this->connection->hooks()->onPing(function (): void {
-            $this->lastPingPongTime = Amp\now();
             $this->connection->execute(Protocol\Pong::Frame);
         });
 
         $this->connection->hooks()->onPong(function (): void {
-            $this->lastPingPongTime = Amp\now();
-            $this->pings = max(0, $this->pings - 1);
+            $this->pings = 0;
         });
 
         $this->connection->hooks()->onClose($this->stop(...));
