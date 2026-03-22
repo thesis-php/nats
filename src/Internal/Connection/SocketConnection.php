@@ -32,7 +32,7 @@ final class SocketConnection implements Connection
 
     private ?ConnectionInfo $info = null;
 
-    private bool $running = false;
+    private ConnectionState $state = ConnectionState::Idle;
 
     private readonly Signer $signer;
 
@@ -63,7 +63,7 @@ final class SocketConnection implements Connection
             );
         }
 
-        if (!$this->running) {
+        if ($this->state !== ConnectionState::Alive) {
             $this->run();
         }
 
@@ -124,8 +124,7 @@ final class SocketConnection implements Connection
     public function close(): void
     {
         $this->hooks->dispatch(Hooks\ConnectionClosed::Event);
-
-        $this->running = false;
+        $this->state = ConnectionState::GracefulClosed;
         $this->socket->close();
     }
 
@@ -134,15 +133,17 @@ final class SocketConnection implements Connection
         $framer = $this->framer;
         $queue = $this->queue;
         $hooks = $this->hooks;
-        $running = &$this->running;
+        $socket = $this->socket;
+        $state = &$this->state;
 
         EventLoop::queue(static function () use (
             $framer,
             $queue,
             $hooks,
-            &$running,
+            $socket,
+            &$state,
         ): void {
-            while ($running) {
+            while ($state === ConnectionState::Alive) {
                 try {
                     while (($frame = $framer->readFrame()) !== null) {
                         $event = match (true) {
@@ -170,13 +171,16 @@ final class SocketConnection implements Connection
                         $deferred->error($e);
                     }
                 } finally {
-                    $running = false;
-                    $hooks->dispatch(Hooks\ConnectionClosed::Event);
+                    if ($state !== ConnectionState::GracefulClosed) { // @phpstan-ignore notIdentical.alwaysTrue
+                        $state = ConnectionState::Closed;
+                        $socket->close();
+                        $hooks->dispatch(Hooks\ConnectionClosed::Event);
+                    }
                 }
             }
         });
 
-        $this->running = true;
+        $this->state = ConnectionState::Alive;
     }
 
     /**
@@ -184,14 +188,10 @@ final class SocketConnection implements Connection
      */
     private function generateSignature(?string $nonce, ?string $nkey): ?string
     {
-        if ($nonce === null) {
-            return null;
+        if ($nonce !== null && $nkey !== null) {
+            return $this->signer->sign($nonce, $nkey);
         }
 
-        if ($nkey === null) {
-            return null;
-        }
-
-        return $this->signer->sign($nonce, $nkey);
+        return null;
     }
 }
