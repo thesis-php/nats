@@ -7,6 +7,7 @@ namespace Thesis\Nats;
 use Amp\Cancellation;
 use Amp\Future;
 use Amp\Pipeline;
+use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
@@ -21,6 +22,7 @@ use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
 use function Amp\async;
+use function Amp\weakClosure;
 
 /**
  * @api
@@ -331,36 +333,43 @@ final class Client
             return;
         }
 
-        [$subscribers, $this->subscribers] = [$this->subscribers, []];
+        $completes = [];
 
-        /** @var ?Subscription $subscription */
-        foreach ($subscribers as [$_, $subscription]) {
+        foreach ($this->subscribers as [$_, $subscription]) {
             if ($subscription !== null) {
-                $do($subscription);
+                $completes[] = async($do, $subscription);
             }
         }
 
-        $this->rpc?->await($cancellation)?->shutdown($cancellation);
+        $rpc = $this->rpc?->await($cancellation);
 
-        $this->rpc = null;
-        $this->connection = null;
-        $connection->close();
+        if ($rpc !== null) {
+            $completes[] = async($rpc->shutdown(...), $cancellation);
+        }
+
+        try {
+            Future\await($completes, $cancellation);
+        } finally {
+            $this->subscribers = [];
+            $this->rpc = null;
+            $this->connection = null;
+            $connection->close();
+        }
     }
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $connectionFactory = $this->connectionFactory;
-        $invokeSubscriber = $this->invokeSubscriber(...);
+        $this->connection ??= async(weakClosure(function () use ($cancellation): Connection\Connection {
+            $connection = $this->connectionFactory->connect();
+            $connection->hooks()->onMessage($this->invokeSubscriber(...));
+            $connection->hooks()->onClose(function () use ($cancellation): void {
+                $e = new ConnectionWasClosed();
 
-        $this->connection ??= async(static function () use (
-            $connectionFactory,
-            $invokeSubscriber,
-        ): Connection\Connection {
-            $connection = $connectionFactory->connect();
-            $connection->hooks()->onMessage($invokeSubscriber);
+                $this->disconnect(static fn(Subscription $subscription) => $subscription->error($e, $cancellation));
+            });
 
             return $connection;
-        });
+        }));
 
         return $this->connection->await($cancellation);
     }
