@@ -10,8 +10,8 @@ use Amp\Future;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Exception\RequestHasNoResponders;
-use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
@@ -96,8 +96,11 @@ final class Handler
         $deferred = new DeferredFuture();
         $this->pendings[$replyTo->token] = new PendingRequest(
             handle: static function (Delivery $delivery) use ($deferred): void {
-                if ($delivery->message->headers?->get(StatusCode::Header) === Status::NoResponders) {
+                $status = $delivery->message->headers?->statusCode();
+                if ($status === Status::NoResponders) {
                     $deferred->error(new RequestHasNoResponders());
+                } elseif ($status === Status::NoMessages) {
+                    $deferred->error(new MessageNotFound());
                 } else {
                     $deferred->complete($delivery);
                 }
