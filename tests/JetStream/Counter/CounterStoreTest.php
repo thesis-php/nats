@@ -63,4 +63,14 @@ final class CounterStoreTest extends NatsTestCase
 
         $js->deleteCounter($name);
     }
+
+    public function testGetUnknownCounter(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $counter = $js->createOrUpdateCounter(new CounterConfig(name: $name = generateUniqueId(10)));
+        $entry = $counter->get('x');
+        self::assertNull($entry);
+        $js->deleteCounter($name);
+    }
 }
