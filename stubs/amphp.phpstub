@@ -10,7 +10,13 @@ final class Future {}
 /**
  * @template T
  * @param \Closure(never, never): T $closure
- * @param mixed ...$args
  * @return Future<T>
  */
 function async(\Closure $closure, mixed ...$args): Future {}
+
+/**
+ * @template T
+ * @param \Closure(): T $closure
+ * @return \Closure(): T
+ */
+function weakClosure(\Closure $closure): \Closure {}
