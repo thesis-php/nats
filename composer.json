@@ -20,13 +20,13 @@
     "require": {
         "php": "^8.3",
         "ext-filter": "*",
-        "amphp/amp": "^3.1",
+        "amphp/amp": "^3.1.1",
         "amphp/byte-stream": "^2.1",
         "amphp/parser": "^1.1",
         "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.3.1",
         "cuyz/valinor": "^1.15 || ^2.3",
-        "revolt/event-loop": "^1.0.7",
+        "revolt/event-loop": "^1.0.8",
         "thesis/package-version": "^0.1.2",
         "thesis/time-span": "^0.2.3"
     },
