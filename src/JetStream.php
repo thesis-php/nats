@@ -501,7 +501,7 @@ final readonly class JetStream
                 "\$O.{$config->store}.M.>",
             ],
             discard: Api\DiscardPolicy::New,
-            maxBytes: $config->maxBytes ?? -1,
+            maxBytes: $config->maxBytes,
             maxAge: $config->ttl,
             storageType: $config->storageType,
             replicas: max($config->replicas, 1),
