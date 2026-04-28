@@ -71,10 +71,10 @@ final readonly class Bucket
      * @param non-empty-string $key
      * @return non-negative-int
      */
-    public function put(string $key, ?string $value = null): int
+    public function put(string $key, ?string $value = null, ?Headers $headers = null): int
     {
         return $this->js
-            ->publish($this->prefixedSubject($key), new Message($value))
+            ->publish($this->prefixedSubject($key), new Message($value, $headers))
             ->seq ?? throw new \LogicException('Sequence expected on kv publish');
     }
 
