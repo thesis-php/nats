@@ -13,21 +13,9 @@ services:
       - .:/workspace:cached
     working_dir: /workspace
 
-  nats-1:
+  nats:
     image: nats
-    command: -c /etc/server.conf --name nats-1 -p 4222 -m 8222
-    volumes:
-      - ./docker/nats/server.conf:/etc/server.conf
-
-  nats-2:
-    image: nats
-    command: -c /etc/server.conf --name nats-2 -p 4222 -m 8222
-    volumes:
-      - ./docker/nats/server.conf:/etc/server.conf
-
-  nats-3:
-    image: nats
-    command: -c /etc/server.conf --name nats-3 -p 4222 -m 8222
+    command: -c /etc/server.conf -p 4222 -m 8222
     volumes:
       - ./docker/nats/server.conf:/etc/server.conf
 
