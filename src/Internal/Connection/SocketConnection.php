@@ -40,7 +40,10 @@ final class SocketConnection implements Connection
         private readonly Config $config,
         private readonly Socket $socket,
     ) {
-        $this->framer = new Framer($this->socket);
+        // When a TLS context is configured, the Framer upgrades the socket to
+        // TLS inside its reader fiber (after the plaintext INFO, before its read
+        // loop) so the single socket reader also owns the handshake.
+        $this->framer = new Framer($this->socket, $this->config->tls !== null);
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
         $this->signer = new Signer();
@@ -55,6 +58,12 @@ final class SocketConnection implements Connection
      */
     public function startup(): void
     {
+        // The TLS upgrade (when configured) happens inside the Framer's reader
+        // fiber, BEFORE its read loop — see Framer. That keeps the socket's
+        // single-reader invariant: reading the plaintext INFO and running the
+        // TLS handshake are done by the one fiber that owns socket reads, so
+        // startup() here is unchanged from stock — it just reads the (now
+        // possibly TLS-delivered) INFO frame and sends CONNECT.
         $frame = $this->framer->readFrame() ?? throw new ConnectionIsNotAvailable();
 
         if (!$frame instanceof Protocol\ServerInfo) {

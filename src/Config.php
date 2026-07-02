@@ -54,6 +54,11 @@ final readonly class Config
         public int $maxPings = self::DEFAULT_MAX_PINGS,
         public ?string $jetStreamDomain = null,
         public string $clientName = self::DEFAULT_CLIENT_NAME,
+        // TLS client context. null keeps the existing plaintext behavior. When
+        // set, the connection upgrades to TLS after the server's plaintext INFO
+        // (the standard NATS tls_required flow, e.g. Synadia NGS). The upgrade is
+        // performed by the socket's single reader fiber — see Framer.
+        public ?\Amp\Socket\ClientTlsContext $tls = null,
     ) {
         $this->version = '0.1.x';
     }
@@ -74,6 +79,17 @@ final readonly class Config
         if ($components === false) {
             throw new \InvalidArgumentException("The uri '{$uri}' is invalid.");
         }
+
+        // A tls:// (or nats+tls://) scheme turns on TLS — the same convention the
+        // Go/JS clients use for connect.ngs.global. Default the SNI/peer name to
+        // the host so certificate verification works against NGS.
+        $tls = null;
+        $scheme = strtolower($components['scheme'] ?? '');
+        if (($scheme === 'tls' || $scheme === 'nats+tls' || $scheme === 'ssl') && ($components['host'] ?? '') !== '') {
+            $firstHost = explode(':', explode(',', $components['host'])[0])[0];
+            $tls = (new \Amp\Socket\ClientTlsContext($firstHost));
+        }
+
 
         $query = [];
         if (isset($components['query']) && $components['query'] !== '') {
@@ -177,6 +193,7 @@ final readonly class Config
             maxPings: $maxPings,
             jetStreamDomain: $jetStreamDomain,
             clientName: $clientName,
+            tls: $tls,
         );
     }
 
@@ -196,6 +213,7 @@ final readonly class Config
      *     max_pings?: positive-int,
      *     jetstream_domain?: non-empty-string,
      *     client_name?: non-empty-string,
+     *     tls?: \Amp\Socket\ClientTlsContext,
      * } $options
      */
     public static function fromArray(#[\SensitiveParameter] array $options): self
@@ -215,6 +233,7 @@ final readonly class Config
             maxPings: $options['max_pings'] ?? self::DEFAULT_MAX_PINGS,
             jetStreamDomain: $options['jetstream_domain'] ?? null,
             clientName: $options['client_name'] ?? self::DEFAULT_CLIENT_NAME,
+            tls: $options['tls'] ?? null,
         );
     }
 }
