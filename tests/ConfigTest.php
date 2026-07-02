@@ -188,6 +188,32 @@ final class ConfigTest extends TestCase
         self::assertEquals($config, Config::fromURI($uri));
     }
 
+    /**
+     * @param non-empty-string $uri
+     */
+    #[TestWith(['tls://connect.ngs.global:4222', 'connect.ngs.global'])]
+    #[TestWith(['nats+tls://example.com:4222', 'example.com'])]
+    #[TestWith(['ssl://nats.internal:4222', 'nats.internal'])]
+    public function testFromURIEnablesTlsFromScheme(string $uri, string $peerName): void
+    {
+        $config = Config::fromURI($uri);
+
+        self::assertNotNull($config->tls);
+        self::assertEquals(new \Amp\Socket\ClientTlsContext($peerName), $config->tls);
+    }
+
+    public function testFromURIWithoutTlsSchemeLeavesTlsNull(): void
+    {
+        self::assertNull(Config::fromURI('tcp://127.0.0.1:4222')->tls);
+    }
+
+    public function testFromArrayAcceptsTlsContext(): void
+    {
+        $tls = new \Amp\Socket\ClientTlsContext('nats.example.com');
+
+        self::assertSame($tls, Config::fromArray(['tls' => $tls])->tls);
+    }
+
     public function testFromArrayWithJwtAndNkey(): void
     {
         $config = Config::fromArray([
