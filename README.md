@@ -40,6 +40,29 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 composer require thesis/nats
 ```
 
+## TLS
+
+For servers that require TLS (for example [Synadia NGS](https://www.synadia.com/), `tls://connect.ngs.global`), use a `tls://` URI — TLS is enabled automatically with the host as the peer name for certificate verification:
+
+```php
+$nc = new Nats\Client(
+    Nats\Config::fromURI('tls://connect.ngs.global:4222?jwt=...&nkey=...'),
+);
+```
+
+To customise the TLS parameters (CA file, peer verification, minimum version, …), pass an `Amp\Socket\ClientTlsContext` explicitly:
+
+```php
+use Amp\Socket\ClientTlsContext;
+
+$nc = new Nats\Client(new Nats\Config(
+    urls: ['nats.internal:4222'],
+    tls: (new ClientTlsContext('nats.internal'))->withCaFile('/etc/ssl/ca.pem'),
+));
+```
+
+The client follows the standard NATS upgrade-after-`INFO` flow: it reads the plaintext `INFO`, then performs the TLS handshake before sending `CONNECT`. Servers configured with `tls { handshake_first: true }` are not currently supported.
+
 ## Nats Core
 
 The library implements the full functionality of NATS Core, including pub-sub, queues and request–reply.
