@@ -58,12 +58,6 @@ final class SocketConnection implements Connection
      */
     public function startup(): void
     {
-        // The TLS upgrade (when configured) happens inside the Framer's reader
-        // fiber, BEFORE its read loop — see Framer. That keeps the socket's
-        // single-reader invariant: reading the plaintext INFO and running the
-        // TLS handshake are done by the one fiber that owns socket reads, so
-        // startup() here is unchanged from stock — it just reads the (now
-        // possibly TLS-delivered) INFO frame and sends CONNECT.
         $frame = $this->framer->readFrame() ?? throw new ConnectionIsNotAvailable();
 
         if (!$frame instanceof Protocol\ServerInfo) {

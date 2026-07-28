@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\Socket\ClientTlsContext;
+
 /**
  * @api
  */
@@ -58,7 +60,7 @@ final readonly class Config
         // set, the connection upgrades to TLS after the server's plaintext INFO
         // (the standard NATS tls_required flow, e.g. Synadia NGS). The upgrade is
         // performed by the socket's single reader fiber — see Framer.
-        public ?\Amp\Socket\ClientTlsContext $tls = null,
+        public ?ClientTlsContext $tls = null,
     ) {
         $this->version = '0.1.x';
     }
@@ -87,7 +89,7 @@ final readonly class Config
         $scheme = strtolower($components['scheme'] ?? '');
         if (($scheme === 'tls' || $scheme === 'nats+tls' || $scheme === 'ssl') && ($components['host'] ?? '') !== '') {
             $firstHost = explode(':', explode(',', $components['host'])[0])[0];
-            $tls = (new \Amp\Socket\ClientTlsContext($firstHost));
+            $tls = new ClientTlsContext($firstHost);
         }
 
 
@@ -213,7 +215,7 @@ final readonly class Config
      *     max_pings?: positive-int,
      *     jetstream_domain?: non-empty-string,
      *     client_name?: non-empty-string,
-     *     tls?: \Amp\Socket\ClientTlsContext,
+     *     tls?: ClientTlsContext,
      * } $options
      */
     public static function fromArray(#[\SensitiveParameter] array $options): self
