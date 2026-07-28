@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 namespace Thesis\Nats;
-use Amp\Socket\ClientTlsContext;
+
 use Amp\Socket\ClientTlsContext;
 
 /**
