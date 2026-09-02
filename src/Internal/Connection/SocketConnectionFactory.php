@@ -29,6 +29,14 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
             $context = $context->withTcpNoDelay();
         }
 
+        // Attach the TLS context so the socket can be upgraded later. We do NOT
+        // connect over TLS immediately: NATS sends a plaintext INFO first, then
+        // the client upgrades. The upgrade itself runs in the Framer's reader
+        // fiber; setting the context here just makes setupTls() available to it.
+        if ($config->tls !== null) {
+            $context = $context->withTlsContext($config->tls);
+        }
+
         return new self($config, $context);
     }
 
