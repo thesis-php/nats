@@ -327,8 +327,13 @@ final readonly class Store
         $this->js->updateStream($info->config->seal());
     }
 
+    /**
+     * Padding must be kept: nats.go encodes object names in meta subjects and object
+     * digests with padded url-safe base64 (base64.URLEncoding) and rejects unpadded
+     * digests on read.
+     */
     private function base64encode(string $name): string
     {
-        return rtrim(strtr(base64_encode($name), '+/', '-_'), '=');
+        return strtr(base64_encode($name), '+/', '-_');
     }
 }

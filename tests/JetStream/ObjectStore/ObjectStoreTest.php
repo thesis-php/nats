@@ -91,6 +91,12 @@ final class ObjectStoreTest extends NatsTestCase
         self::assertSame(10, $info->size);
         self::assertSame(1, $info->chunks);
 
+        // Padded url-safe base64, as written by nats.go (base64.URLEncoding).
+        self::assertSame(
+            'SHA-256=' . strtr(base64_encode(hash('sha256', $body, true)), '+/', '-_'),
+            $info->digest,
+        );
+
         $object = $store->get('xfile');
         self::assertSame($body, (string) $object);
 

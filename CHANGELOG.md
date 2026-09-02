@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+* Keep base64url padding when encoding object store names and digests, matching the reference implementation (nats.go `base64.URLEncoding`). Objects written by previous versions use unpadded meta subjects and must be re-put to be visible to the fixed client and to other NATS clients.
+
 ## [0.4.1] 2026-04-21
 
 ### Added
