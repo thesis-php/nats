@@ -10,6 +10,7 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketConnector;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
+use Thesis\Nats\Internal\Nkey\KeyPair;
 
 /**
  * @internal
@@ -38,9 +39,13 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
 
     public function connect(): Connection
     {
+        // A malformed seed is rejected before the socket is opened: otherwise the server would be left waiting for CONNECT.
+        $keypair = $this->config->nkey !== null ? KeyPair::fromSeed($this->config->nkey) : null;
+
         $connection = new SocketConnection(
             $this->config,
             $this->createSocket(),
+            $keypair,
         );
 
         $connection->startup();

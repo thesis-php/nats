@@ -8,36 +8,27 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Config;
-use Thesis\Nats\Internal\Nkey\Signer;
+use Thesis\Nats\Internal\Nkey\KeyPair;
 use Thesis\Nats\Internal\Protocol\Connect;
 use function Thesis\Package\version;
 
 #[CoversClass(Connect::class)]
-#[CoversClass(Signer::class)]
+#[CoversClass(KeyPair::class)]
 final class SocketConnectionJwtTest extends TestCase
 {
+    private const string JWT = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
+    private const string SEED = 'SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY';
+    private const string PUBLIC_KEY = 'UDXU4RCSJNZOIQHZNWXHXORDPRTGNJAHAHFRGZNEEJCPQTT2M7NLCNF4';
+
     public function testConnectProtocolCreationWithJwtOnly(): void
     {
         $config = new Config(
-            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
+            jwt: self::JWT,
         );
 
-        $connect = new Connect(
-            verbose: $config->verbose,
-            pedantic: $config->pedantic,
-            tlsRequired: false,
-            name: 'thesis/nats',
-            version: version('thesis/nats'),
-            user: $config->user,
-            pass: $config->password,
-            sig: null,
-            jwt: $config->jwt,
-            nkey: null,
-        );
+        $encoded = self::connect($config)->encode();
 
-        $encoded = $connect->encode();
-
-        self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
+        self::assertStringContainsString('"jwt":"' . self::JWT . '"', $encoded);
         self::assertStringNotContainsString('"nkey":', $encoded);
         self::assertStringNotContainsString('"sig":', $encoded);
     }
@@ -46,69 +37,45 @@ final class SocketConnectionJwtTest extends TestCase
     public function testConnectProtocolCreationWithNkeyOnly(): void
     {
         $config = new Config(
-            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
+            nkey: self::SEED,
         );
 
-        $nonce = 'test-nonce';
-        $nkey = $config->nkey;
-        self::assertNotNull($nkey);
-        $signer = new Signer();
-        $signature = $signer->sign($nonce, $nkey);
+        $encoded = self::connect($config, 'test-nonce')->encode();
 
-        $connect = new Connect(
-            verbose: $config->verbose,
-            pedantic: $config->pedantic,
-            tlsRequired: false,
-            name: 'thesis/nats',
-            version: version('thesis/nats'),
-            user: $config->user,
-            pass: $config->password,
-            sig: $signature,
-            jwt: $config->jwt,
-            nkey: 'test-nkey',
-        );
-
-        $encoded = $connect->encode();
-
-        self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
-        self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
+        // The public key is sent instead of the seed.
+        self::assertStringContainsString('"nkey":"' . self::PUBLIC_KEY . '"', $encoded);
+        self::assertStringNotContainsString(self::SEED, $encoded);
+        self::assertStringContainsString('"sig":"' . KeyPair::fromSeed(self::SEED)->sign('test-nonce') . '"', $encoded);
         self::assertStringNotContainsString('"jwt":', $encoded);
+    }
+
+    #[RequiresPhpExtension('sodium')]
+    public function testConnectProtocolCreationWithNkeyWithoutNonce(): void
+    {
+        $config = new Config(
+            nkey: self::SEED,
+        );
+
+        $encoded = self::connect($config)->encode();
+
+        self::assertStringContainsString('"nkey":"' . self::PUBLIC_KEY . '"', $encoded);
+        self::assertStringNotContainsString('"sig":', $encoded);
     }
 
     #[RequiresPhpExtension('sodium')]
     public function testConnectProtocolCreationWithBothJwtAndNkey(): void
     {
         $config = new Config(
-            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
-            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
+            jwt: self::JWT,
+            nkey: self::SEED,
         );
 
-        $nonce = 'test-nonce';
-        $nkey = $config->nkey;
-        self::assertNotNull($nkey);
-        $signer = new Signer();
-        $signature = $signer->sign($nonce, $nkey);
+        $encoded = self::connect($config, 'test-nonce')->encode();
 
-        $connect = new Connect(
-            verbose: $config->verbose,
-            pedantic: $config->pedantic,
-            tlsRequired: false,
-            name: 'thesis/nats',
-            version: version('thesis/nats'),
-            user: $config->user,
-            pass: $config->password,
-            sig: $signature,
-            jwt: $config->jwt,
-            nkey: 'test-nkey',
-        );
-
-        $encoded = $connect->encode();
-
-        self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
-        self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
-        self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
+        self::assertStringContainsString('"jwt":"' . self::JWT . '"', $encoded);
+        self::assertStringContainsString('"nkey":"' . self::PUBLIC_KEY . '"', $encoded);
+        self::assertStringNotContainsString(self::SEED, $encoded);
+        self::assertStringContainsString('"sig":"' . KeyPair::fromSeed(self::SEED)->sign('test-nonce') . '"', $encoded);
     }
 
     public function testConnectProtocolCreationWithoutJwtAndNkey(): void
@@ -118,20 +85,7 @@ final class SocketConnectionJwtTest extends TestCase
             password: 'secret',
         );
 
-        $connect = new Connect(
-            verbose: $config->verbose,
-            pedantic: $config->pedantic,
-            tlsRequired: false,
-            name: 'thesis/nats',
-            version: version('thesis/nats'),
-            user: $config->user,
-            pass: $config->password,
-            sig: null,
-            jwt: $config->jwt,
-            nkey: null,
-        );
-
-        $encoded = $connect->encode();
+        $encoded = self::connect($config)->encode();
 
         self::assertStringContainsString('"user":"admin"', $encoded);
         self::assertStringContainsString('"pass":"secret"', $encoded);
@@ -141,64 +95,34 @@ final class SocketConnectionJwtTest extends TestCase
     }
 
     #[RequiresPhpExtension('sodium')]
-    public function testSignerIntegrationWithConfig(): void
-    {
-        $nkey = 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU';
-        $nonce = 'integration-test-nonce';
-        $signer = new Signer();
-        $signature = $signer->sign($nonce, $nkey);
-
-        self::assertEquals(88, \strlen($signature));
-
-        $signature2 = $signer->sign($nonce, $nkey);
-        self::assertEquals($signature, $signature2);
-
-        $signature3 = $signer->sign('different-nonce', $nkey);
-        self::assertNotEquals($signature, $signature3);
-    }
-
-    public function testConfigBackwardCompatibility(): void
-    {
-        $config = new Config(
-            user: 'testuser',
-            password: 'testpass',
-        );
-
-        $connect = new Connect(
-            verbose: $config->verbose,
-            pedantic: $config->pedantic,
-            tlsRequired: false,
-            name: 'thesis/nats',
-            version: version('thesis/nats'),
-            authToken: null,
-            user: $config->user,
-            pass: $config->password,
-        );
-
-        $encoded = $connect->encode();
-
-        self::assertStringContainsString('"user":"testuser"', $encoded);
-        self::assertStringContainsString('"pass":"testpass"', $encoded);
-        self::assertStringNotContainsString('"jwt":', $encoded);
-        self::assertStringNotContainsString('"nkey":', $encoded);
-    }
-
-    #[RequiresPhpExtension('sodium')]
-    public function testJwtAndNkeyPrecedenceOverUserPassword(): void
+    public function testJwtAndNkeyAreSentAlongWithUserPassword(): void
     {
         $config = new Config(
             user: 'olduser',
             password: 'oldpass',
-            jwt: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.',
-            nkey: 'SUAEZDQZKIU5Q7X5IWM7NDETHW4HEPXKNHI44TX3RKWXASGY74YQL5N6XU',
+            jwt: self::JWT,
+            nkey: self::SEED,
         );
 
-        $nkey = $config->nkey;
-        self::assertNotNull($nkey);
-        $signer = new Signer();
-        $signature = $signer->sign('test-nonce', $nkey);
+        $encoded = self::connect($config, 'test-nonce')->encode();
 
-        $connect = new Connect(
+        self::assertStringContainsString('"jwt":"' . self::JWT . '"', $encoded);
+        self::assertStringContainsString('"nkey":"' . self::PUBLIC_KEY . '"', $encoded);
+        self::assertStringContainsString('"sig":"', $encoded);
+        self::assertStringContainsString('"user":"olduser"', $encoded);
+        self::assertStringContainsString('"pass":"oldpass"', $encoded);
+    }
+
+    /**
+     * Builds the CONNECT frame the same way SocketConnection::startup() does it.
+     *
+     * @param ?non-empty-string $nonce
+     */
+    private static function connect(Config $config, ?string $nonce = null): Connect
+    {
+        $keypair = $config->nkey !== null ? KeyPair::fromSeed($config->nkey) : null;
+
+        return new Connect(
             verbose: $config->verbose,
             pedantic: $config->pedantic,
             tlsRequired: false,
@@ -206,19 +130,9 @@ final class SocketConnectionJwtTest extends TestCase
             version: version('thesis/nats'),
             user: $config->user,
             pass: $config->password,
-            sig: $signature,
+            sig: $keypair !== null && $nonce !== null ? $keypair->sign($nonce) : null,
             jwt: $config->jwt,
-            nkey: 'test-nkey',
+            nkey: $keypair?->publicKey,
         );
-
-        $encoded = $connect->encode();
-
-        self::assertStringContainsString('"jwt":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0."', $encoded);
-        self::assertStringContainsString('"nkey":"test-nkey"', $encoded);
-        self::assertStringContainsString('"sig":"', $encoded);
-        self::assertStringContainsString($signature, str_replace('\/', '/', $encoded));
-
-        self::assertStringContainsString('"user":"olduser"', $encoded);
-        self::assertStringContainsString('"pass":"oldpass"', $encoded);
     }
 }

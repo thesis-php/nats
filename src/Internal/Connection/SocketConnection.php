@@ -13,7 +13,7 @@ use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Internal\Hooks;
-use Thesis\Nats\Internal\Nkey\Signer;
+use Thesis\Nats\Internal\Nkey\KeyPair;
 use Thesis\Nats\Internal\Protocol;
 use function Thesis\Package\version;
 
@@ -44,16 +44,18 @@ final class SocketConnection implements Connection
      */
     private ?DeferredFuture $handshake = null;
 
-    private readonly Signer $signer;
-
+    /**
+     * @param ?KeyPair $keypair the NKey of the user: the server gets its public key and the nonce signed with the secret one,
+     *                          the seed itself never leaves the client
+     */
     public function __construct(
         private readonly Config $config,
         private readonly Socket $socket,
+        private readonly ?KeyPair $keypair = null,
     ) {
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pingpongs = new PingPongHandler($this);
-        $this->signer = new Signer();
 
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
@@ -92,11 +94,11 @@ final class SocketConnection implements Connection
                 version: version(self::PACKAGE_NAME),
                 user: $this->config->user,
                 pass: $this->config->password,
-                sig: $this->generateSignature($frame->nonce, $this->config->nkey),
+                sig: $this->keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $this->keypair->sign($frame->nonce) : null,
                 jwt: $this->config->jwt,
                 noResponders: $this->config->noResponders,
                 headers: $this->info->allowHeaders,
-                nkey: $this->config->nkey,
+                nkey: $this->keypair?->publicKey,
             ));
 
             // In non-verbose mode the server does not acknowledge CONNECT: it stays silent on success and answers
@@ -302,17 +304,5 @@ final class SocketConnection implements Connection
         while (!$queue->isEmpty()) {
             $queue->shift()->error($e);
         }
-    }
-
-    /**
-     * @throws \Exception
-     */
-    private function generateSignature(?string $nonce, ?string $nkey): ?string
-    {
-        if ($nonce !== null && $nkey !== null) {
-            return $this->signer->sign($nonce, $nkey);
-        }
-
-        return null;
     }
 }
