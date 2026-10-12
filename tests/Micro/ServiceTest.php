@@ -76,13 +76,13 @@ final class ServiceTest extends NatsTestCase
         self::assertSame($serviceConfig->version, $stats->identity->version);
         self::assertCount(2, $stats->endpoints);
         self::assertSame('echo', $stats->endpoints[0]->name);
-        self::assertSame(0.0, $stats->endpoints[0]->processingTime);
-        self::assertSame(0.0, $stats->endpoints[0]->averageProcessingTime);
+        self::assertSame(0, $stats->endpoints[0]->processingTime);
+        self::assertSame(0, $stats->endpoints[0]->averageProcessingTime);
         self::assertSame(0, $stats->endpoints[0]->numRequests);
         self::assertSame(0, $stats->endpoints[0]->numErrors);
         self::assertNull($stats->endpoints[0]->lastError);
-        self::assertSame(0.0, $stats->endpoints[1]->processingTime);
-        self::assertSame(0.0, $stats->endpoints[1]->averageProcessingTime);
+        self::assertSame(0, $stats->endpoints[1]->processingTime);
+        self::assertSame(0, $stats->endpoints[1]->averageProcessingTime);
         self::assertSame(0, $stats->endpoints[1]->numRequests);
         self::assertSame(0, $stats->endpoints[1]->numErrors);
         self::assertNull($stats->endpoints[1]->lastError);
@@ -111,6 +111,38 @@ final class ServiceTest extends NatsTestCase
         self::assertSame(1, $stats->endpoints[1]->numRequests);
         self::assertSame(1, $stats->endpoints[1]->numErrors);
         self::assertSame('Invalid request', $stats->endpoints[1]->lastError?->getMessage());
+
+        $srv->stop();
+    }
+
+    public function testControlResponsesMatchMicroSchema(): void
+    {
+        $nc = $this->client();
+
+        $srv = $nc->createService(new ServiceConfig(
+            name: 'SchemaService',
+            version: '1.0.0',
+            description: 'Service for schema testing',
+        ));
+
+        $srv->addEndpoint(new EndpointConfig('schema.echo'), static function (Request $request): void {
+            $request->respond(new Response($request->data));
+        });
+
+        $nc->request('schema.echo', new Message('Ping'));
+        $nc->request('schema.echo', new Message('Ping'));
+
+        /** @var array{description?: mixed} $info */
+        $info = json_decode((string) $nc->request('$SRV.INFO.SchemaService')->message->payload, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('Service for schema testing', $info['description'] ?? null);
+
+        /** @var array{endpoints: list<array{processing_time: mixed, average_processing_time: mixed}>} $stats */
+        $stats = json_decode((string) $nc->request('$SRV.STATS.SchemaService')->message->payload, true, flags: JSON_THROW_ON_ERROR);
+        self::assertCount(1, $stats['endpoints']);
+        self::assertIsInt($stats['endpoints'][0]['processing_time']);
+        self::assertIsInt($stats['endpoints'][0]['average_processing_time']);
+        self::assertGreaterThan(0, $stats['endpoints'][0]['processing_time']);
+        self::assertSame(intdiv($stats['endpoints'][0]['processing_time'], 2), $stats['endpoints'][0]['average_processing_time']);
 
         $srv->stop();
     }
