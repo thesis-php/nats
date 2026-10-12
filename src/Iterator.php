@@ -26,7 +26,7 @@ interface Iterator extends \Traversable
     /**
      * @template R
      * @param \Closure(T): R $map
-     * @return static<R>
+     * @return self<R>
      */
-    public function map(\Closure $map): static;
+    public function map(\Closure $map): self;
 }
