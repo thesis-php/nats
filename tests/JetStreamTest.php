@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\CancelledException;
 use Amp\Future;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Thesis\Nats\Exception\ConsumerDoesNotExist;
 use Thesis\Nats\Exception\ConsumerNotFound;
+use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Exception\StreamDoesNotMatch;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Exception\WrongLastMessageId;
@@ -28,6 +31,7 @@ use Thesis\Nats\Header\Subject;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Header\UpToSequence;
 use Thesis\Nats\JetStream\Api\AckPolicy;
+use Thesis\Nats\JetStream\Api\AckResponse;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
@@ -682,6 +686,220 @@ final class JetStreamTest extends NatsTestCase
         self::assertNull($response->duplicate);
 
         $stream->delete();
+    }
+
+    public function testPublishOptions(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $name = generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            duplicateWindow: TimeSpan::fromSeconds(10),
+        ));
+
+        try {
+            $ack = $js->publish("{$subject}.a", new Message('first'), new PublishOptions(
+                msgId: 'id-1',
+                expectedStream: $name,
+                expectedLastSequence: 0,
+            ));
+
+            self::assertSame(1, $ack->seq);
+            self::assertNull($ack->duplicate);
+
+            $ack = $js->publish("{$subject}.a", new Message('first'), new PublishOptions(msgId: 'id-1'));
+
+            self::assertSame(1, $ack->seq);
+            self::assertTrue($ack->duplicate);
+
+            $ack = $js->publish("{$subject}.a", new Message('second'), new PublishOptions(
+                msgId: 'id-2',
+                expectedLastSequence: 1,
+                expectedLastSubjectSequence: 1,
+                expectedLastMsgId: 'id-1',
+            ));
+
+            self::assertSame(2, $ack->seq);
+
+            foreach ([
+                [new PublishOptions(expectedStream: 'xxx'), StreamDoesNotMatch::class],
+                [new PublishOptions(expectedLastSequence: 1), WrongLastSequence::class],
+                [new PublishOptions(expectedLastSubjectSequence: 1), WrongLastSequence::class],
+                [new PublishOptions(expectedLastMsgId: 'id-1'), WrongLastMessageId::class],
+            ] as [$options, $exception]) {
+                try {
+                    $js->publish("{$subject}.a", new Message('rejected'), $options);
+                    self::fail("{$exception} expected.");
+                } catch (NatsException $e) {
+                    self::assertInstanceOf($exception, $e);
+                }
+            }
+
+            self::assertSame(2, $stream->actualInfo()->state->messages);
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPublishOptionsOverrideHeaders(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $name = generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        try {
+            $ack = $js->publish(
+                "{$subject}.a",
+                new Message(headers: (new Headers())->with(ExpectedStream::header(), 'xxx')),
+                new PublishOptions(expectedStream: $name),
+            );
+
+            self::assertSame(1, $ack->seq);
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPublishExpectedLastSubjectSequenceOfAnotherSubject(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        try {
+            $js->publish("{$subject}.a", new Message('a'));
+            $js->publish("{$subject}.b", new Message('b'));
+
+            $ack = $js->publish("{$subject}.c", new Message('c'), new PublishOptions(
+                expectedLastSubjectSequence: 2,
+                expectedLastSubjectSequenceSubject: "{$subject}.*",
+            ));
+
+            self::assertSame(3, $ack->seq);
+
+            // The last sequence of "c" is 3, but "a" is the one being checked.
+            self::expectException(WrongLastSequence::class);
+            $js->publish("{$subject}.c", new Message('c'), new PublishOptions(
+                expectedLastSubjectSequence: 3,
+                expectedLastSubjectSequenceSubject: "{$subject}.a",
+            ));
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPublishTtlOption(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+            allowMessageTtl: true,
+        ));
+
+        try {
+            $js->publish("{$subject}.xxx", new Message('x'), new PublishOptions(ttl: TimeSpan::fromSeconds(1)));
+
+            self::assertSame(1, $stream->actualInfo()->state->messages);
+            delay(1.5);
+            self::assertSame(0, $stream->actualInfo()->state->messages);
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPublishRetriesWhileStreamIsUnavailable(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $ack = async(static fn(): AckResponse => $js->publish($subject, new Message('x'), new PublishOptions(
+            retryAttempts: 20,
+            retryWait: TimeSpan::fromMilliseconds(100),
+        )));
+
+        delay(0.3);
+        self::assertFalse($ack->isComplete());
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: [$subject],
+        ));
+
+        try {
+            self::assertSame(1, $ack->await(new TimeoutCancellation(5))->seq);
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPublishFailsWithoutRespondersAfterRetries(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $start = now();
+
+        try {
+            $js->publish(generateUniqueId(10), new Message('x'), new PublishOptions(
+                retryAttempts: 2,
+                retryWait: TimeSpan::fromMilliseconds(200),
+            ));
+            self::fail('RequestHasNoResponders expected.');
+        } catch (RequestHasNoResponders) {
+        }
+
+        self::assertGreaterThanOrEqual(0.4, now() - $start);
+    }
+
+    public function testPublishWithoutRetriesFailsImmediately(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $start = now();
+
+        try {
+            $js->publish(generateUniqueId(10), new Message('x'), new PublishOptions(retryAttempts: 0));
+            self::fail('RequestHasNoResponders expected.');
+        } catch (RequestHasNoResponders) {
+        }
+
+        self::assertLessThan(0.2, now() - $start);
+    }
+
+    public function testPublishRetryIsCancelled(): void
+    {
+        $js = $this->client()->jetStream();
+
+        self::expectException(CancelledException::class);
+
+        $js->publish(
+            generateUniqueId(10),
+            new Message('x'),
+            new PublishOptions(retryWait: TimeSpan::fromSeconds(10)),
+            new TimeoutCancellation(0.3),
+        );
     }
 
     public function testPublishConsume(): void

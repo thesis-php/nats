@@ -8,6 +8,8 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
 - [NATS JetStream](https://docs.nats.io/nats-concepts/jetstream)
+  - [Publish](#publish)
+  - [Publish Options](#publish-options)
   - [Fetch Batch](#fetch-batch)
   - [Fetch Bytes](#fetch-bytes)
   - [Fetch Immediate](#fetch-immediate)
@@ -196,6 +198,114 @@ Subjects and names are checked before anything is sent, following the rules of n
 ## Nats JetStream
 
 JetStream is the built-in NATS persistence system. The library provides both JetStream entity management (streams, consumers) and message publishing/consumption capabilities.
+
+#### Publish
+
+`JetStream::publish` sends a message to a subject bound to a stream and waits for the server acknowledgement (`Api\AckResponse`), which holds
+the stream name and the sequence the message was stored with:
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$js->createOrUpdateStream(new Api\StreamConfig(
+    name: 'Orders',
+    subjects: ['orders.*'],
+));
+
+$ack = $js->publish('orders.created', new Nats\Message('{"id": 1}'));
+
+dump($ack->stream, $ack->seq); // "Orders", 1
+```
+
+#### Publish Options
+
+`Nats\PublishOptions` sets the JetStream publish headers for you, so you don't have to build them by hand:
+
+| Option                               | Header                                        | Meaning                                                                                                         |
+|--------------------------------------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `msgId`                              | `Nats-Msg-Id`                                 | Message id for deduplication within the stream `duplicateWindow`; a duplicate is acked with `duplicate: true`   |
+| `expectedStream`                     | `Nats-Expected-Stream`                        | The message is rejected unless it is stored by this stream                                                      |
+| `expectedLastSequence`               | `Nats-Expected-Last-Sequence`                 | The message is rejected unless the last sequence of the stream is this one                                      |
+| `expectedLastSubjectSequence`        | `Nats-Expected-Last-Subject-Sequence`         | The message is rejected unless the last sequence of the subject is this one                                     |
+| `expectedLastSubjectSequenceSubject` | `Nats-Expected-Last-Subject-Sequence-Subject` | Checks `expectedLastSubjectSequence` against this subject (wildcards allowed) instead of the published one      |
+| `expectedLastMsgId`                  | `Nats-Expected-Last-Msg-Id`                   | The message is rejected unless the id of the last message of the stream is this one                             |
+| `ttl`                                | `Nats-TTL`                                    | Per-message TTL, at least one second or `TimeSpan::fromSeconds(-1)` to never expire; requires `allowMessageTtl` |
+| `retryAttempts`, `retryWait`         |                                               | How many times and how often to retry if there are no responders (defaults: 2 attempts, 250ms)                  |
+
+The options replace the same headers set on the message by hand, other headers are kept. Invalid combinations are rejected when the options are created,
+e.g. `expectedLastSubjectSequenceSubject` without `expectedLastSubjectSequence` or a TTL below one second.
+
+Deduplication and optimistic concurrency control:
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api;
+use Thesis\Time\TimeSpan;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$js->createOrUpdateStream(new Api\StreamConfig(
+    name: 'Orders',
+    subjects: ['orders.*'],
+    duplicateWindow: TimeSpan::fromMinutes(2),
+));
+
+$ack = $js->publish('orders.created', new Nats\Message('{"id": 1}'), new Nats\PublishOptions(msgId: 'order-1'));
+dump($ack->seq); // 1
+
+// The same message id within the duplicate window is not stored again.
+$ack = $js->publish('orders.created', new Nats\Message('{"id": 1}'), new Nats\PublishOptions(msgId: 'order-1'));
+dump($ack->seq, $ack->duplicate); // 1, true
+
+// Stored only if nobody has written to the stream since the message 1.
+$js->publish('orders.paid', new Nats\Message('{"id": 1}'), new Nats\PublishOptions(
+    expectedStream: 'Orders',
+    expectedLastSequence: 1,
+));
+
+try {
+    $js->publish('orders.paid', new Nats\Message('{"id": 2}'), new Nats\PublishOptions(expectedLastSequence: 1));
+} catch (Nats\Exception\WrongLastSequence) {
+    // somebody published in between: re-read the state and try again
+}
+```
+
+Check the last sequence of another subject, e.g. of all the `orders.*` subjects, and expire the message after an hour (the stream must be created with `allowMessageTtl: true`):
+```php
+$js->publish('orders.cancelled', new Nats\Message('{"id": 1}'), new Nats\PublishOptions(
+    expectedLastSubjectSequence: 2,
+    expectedLastSubjectSequenceSubject: 'orders.*',
+    ttl: TimeSpan::fromHours(1),
+));
+```
+
+When the stream is unavailable for a moment, e.g. while its leader is being elected, the server reports that there are no responders.
+The publish is retried `retryAttempts` times every `retryWait`, after that `Nats\Exception\RequestHasNoResponders` is thrown.
+Pass a cancellation to limit the whole publish including the retries:
+```php
+use Amp\TimeoutCancellation;
+
+$ack = $js->publish(
+    'orders.created',
+    new Nats\Message('{"id": 1}'),
+    new Nats\PublishOptions(
+        retryAttempts: 10,
+        retryWait: TimeSpan::fromMilliseconds(500),
+    ),
+    new TimeoutCancellation(5),
+);
+```
 
 #### Fetch Batch
 
