@@ -45,7 +45,7 @@ final readonly class Parser
      */
     private static function parser(\Closure $push): \Generator
     {
-        while (true) { // @phpstan-ignore while.alwaysTrue
+        while (true) {
             $push(yield from self::parseFrame(yield 1, yield self::CRLF));
         }
     }

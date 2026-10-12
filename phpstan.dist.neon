@@ -14,6 +14,15 @@ parameters:
     editorUrlTitle: '%%relFile%%:%%line%%'
     stubFiles:
         - stubs/amphp.phpstub
+    ignoreErrors:
+        # The protocol parser is an infinite generator by design. PHPStan 2.1 reports the literal `while (true)`,
+        # PHPStan 2.2 does not, hence reportUnmatched.
+        -
+            message: '#^While loop condition is always true\.$#'
+            identifier: while.alwaysTrue
+            count: 1
+            path: src/Internal/Protocol/Parser.php
+            reportUnmatched: false
 
     # strict rules
     checkBenevolentUnionTypes: true
