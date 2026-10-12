@@ -11,12 +11,17 @@ use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\BadRequestSent;
 use Thesis\Nats\Exception\ConsumerDeleted;
+use Thesis\Nats\Exception\ConsumerIsPushBased;
+use Thesis\Nats\Exception\MaxRequestBatchExceeded;
+use Thesis\Nats\Exception\MaxRequestExpiresExceeded;
+use Thesis\Nats\Exception\MaxRequestMaxBytesExceeded;
 use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\PullConsumeConfig;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
+use Thesis\Nats\NatsException;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 
@@ -118,11 +123,13 @@ final class PullMessageHandler
             $subscription->error(new BadRequestSent($statusDescription->value ?? ''));
         } elseif ($statusCode === Status::PinIdMismatch) {
             $this->pinId = null;
-            $this->reset();
+            $this->forgetPending();
         } elseif ($statusDescription?->is(Description::ConsumerDeleted) ?? false) {
             $subscription->error(new ConsumerDeleted());
         } elseif ($statusDescription?->is(Description::LeadershipChange) ?? false) {
-            $this->reset();
+            $this->forgetPending();
+        } elseif (($exception = self::rejection($statusDescription)) !== null) {
+            $subscription->error($exception);
         } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout) ?? false) {
             $messagesLeft = $headers->get(Header\PendingMessages::header()) ?? 0;
             $bytesLeft = $headers->get(Header\PendingBytes::header()) ?? 0;
@@ -165,6 +172,33 @@ final class PullMessageHandler
             $this->pull($batch, $maxBytes !== null ? max($maxBytes, 0) : null);
             $this->reset();
         }
+    }
+
+    /**
+     * The server has dropped our pull requests, so nothing is pending anymore and the next replenish requests a full batch.
+     */
+    private function forgetPending(): void
+    {
+        $this->pendingMessages = 0;
+
+        if ($this->pendingBytes !== null) {
+            $this->pendingBytes = 0;
+        }
+    }
+
+    /**
+     * Pull requests violating the consumer limits are rejected every time, so retrying them makes no sense.
+     */
+    private static function rejection(?Description $description): ?NatsException
+    {
+        return match (true) {
+            $description === null => null,
+            $description->startsWith(Description::MaxRequestBatchExceeded) => new MaxRequestBatchExceeded($description->value),
+            $description->startsWith(Description::MaxRequestExpiresExceeded) => new MaxRequestExpiresExceeded($description->value),
+            $description->startsWith(Description::MaxRequestMaxBytesExceeded) => new MaxRequestMaxBytesExceeded($description->value),
+            $description->is(Description::ConsumerIsPushBased) => new ConsumerIsPushBased($description->value),
+            default => null,
+        };
     }
 
     private function reset(): void
