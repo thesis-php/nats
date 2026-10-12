@@ -10,6 +10,7 @@ use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Revolt\EventLoop;
+use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Id;
@@ -165,6 +166,67 @@ final class ClientTest extends NatsTestCase
         $subscription = $client->subscribe("{$id}.*", static function (): void {});
         $client->stop();
         $subscription->awaitCompletion();
+    }
+
+    public function testSubscriptionsAndRequestsFailWhenServerClosesConnection(): void
+    {
+        $name = Id\generateUniqueId();
+        $client = $this->clientNamed($name);
+
+        // The teardown runs in the event loop, where an escaped exception has no one to catch it.
+        $loopErrors = [];
+        $errorHandler = EventLoop::getErrorHandler();
+        EventLoop::setErrorHandler(static function (\Throwable $e) use (&$loopErrors): void {
+            $loopErrors[] = $e;
+        });
+
+        try {
+            $id = Id\generateUniqueId();
+
+            $subscription = $client->subscribe("{$id}.*", static fn() => null);
+            $iterator = $client->subscribeIterator("{$id}.*");
+            // Never answered: the subscription above receives the request and ignores it.
+            $request = async($client->request(...), "{$id}.request", new Message('Are you ok?'));
+
+            $this->kick($name);
+
+            try {
+                $subscription->awaitCompletion(new TimeoutCancellation(5));
+                self::fail('The connection was closed by the server, the subscription must fail.');
+            } catch (ConnectionWasClosed) {
+            }
+
+            try {
+                $request->await(new TimeoutCancellation(5));
+                self::fail('The connection was closed by the server, the request must fail.');
+            } catch (ConnectionWasClosed) {
+            }
+
+            try {
+                foreach ($iterator as $delivery) {
+                    // The request above is the only message the iterator receives before the connection is closed.
+                    self::assertSame("{$id}.request", $delivery->subject);
+                }
+
+                self::fail('The connection was closed by the server, the iterator must fail.');
+            } catch (ConnectionWasClosed) {
+            }
+
+            self::assertSame([], $loopErrors, implode("\n", array_map(static fn(\Throwable $e): string => (string) $e, $loopErrors)));
+
+            // The client is usable again: the next call establishes a new connection.
+            /** @var DeferredFuture<Delivery> $deferred */
+            $deferred = new DeferredFuture();
+
+            $client->subscribe("{$id}.*", $deferred->complete(...));
+            $client->publish("{$id}.happens", new Message('ok'));
+
+            self::assertSame('ok', $deferred->getFuture()->await(new TimeoutCancellation(5))->message->payload);
+
+            $client->stop();
+        } finally {
+            EventLoop::setErrorHandler($errorHandler);
+        }
     }
 
     public function testPublishReconnectsAfterFailedConnection(): void

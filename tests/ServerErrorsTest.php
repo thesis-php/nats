@@ -129,12 +129,13 @@ final class ServerErrorsTest extends NatsTestCase
      */
     public function testFatalErrorClosesTheConnectionAndIsReported(): void
     {
-        // No subscriptions here: their teardown over the closed socket is a separate bug (B3).
         $client = $this->client();
 
         /** @var DeferredFuture<\Throwable> $error */
         $error = new DeferredFuture();
         $client->onError($error->complete(...));
+
+        $subscription = $client->subscribe('events.*', static fn() => null);
 
         try {
             $client->publish('events.happens', new Message(str_repeat('x', 1024 * 1024 + 1)));
@@ -143,6 +144,15 @@ final class ServerErrorsTest extends NatsTestCase
         }
 
         self::assertInstanceOf(MaximumPayloadViolation::class, $error->getFuture()->await(new TimeoutCancellation(5)));
+
+        // The subscriptions are failed with the same error, before it is reported.
+        self::assertTrue($subscription->completed());
+
+        try {
+            $subscription->awaitCompletion(new TimeoutCancellation(5));
+            self::fail('The connection was closed by the server, the subscription must fail.');
+        } catch (MaximumPayloadViolation) {
+        }
 
         // The connection was closed, so the next call establishes a new one.
         $client->publish('events.happens', new Message('ok'));
