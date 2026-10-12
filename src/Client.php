@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\Cancellation;
+use Amp\CancelledException;
 use Amp\Future;
 use Amp\Pipeline;
 use Revolt\EventLoop;
@@ -121,7 +122,7 @@ final class Client
             throw Exception\FeatureIsNotSupported::forHeaders($connection->info()->serverVersion);
         }
 
-        $connection->execute(Internal\Command::pub($subject, $message, $replyTo));
+        $connection->execute(Internal\Command::pub($subject, $message, $replyTo), $cancellation);
     }
 
     /**
@@ -203,7 +204,7 @@ final class Client
         );
 
         try {
-            $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
+            $this->sub($subject, $subscriptionId, $queueGroup, $cancellation);
         } catch (\Throwable $e) {
             unset($this->subscribers[$subscriptionId]);
 
@@ -334,7 +335,7 @@ final class Client
         );
 
         try {
-            $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId));
+            $this->sub($subject, $subscriptionId, cancellation: $cancellation);
         } catch (\Throwable $e) {
             unset($this->subscribers[$subscriptionId]);
 
@@ -347,6 +348,27 @@ final class Client
     }
 
     /**
+     * @param non-empty-string $subject
+     * @param non-empty-string $sid
+     * @param ?non-empty-string $queueGroup
+     * @throws NatsException
+     */
+    private function sub(string $subject, string $sid, ?string $queueGroup = null, ?Cancellation $cancellation = null): void
+    {
+        $connection = $this->connection($cancellation);
+
+        try {
+            $connection->execute(Internal\Command::sub($subject, $sid, $queueGroup), $cancellation);
+        } catch (CancelledException $e) {
+            // In verbose mode the SUB has already been sent when the wait for +OK is cancelled:
+            // the server-side subscription must not outlive the failed call.
+            async($connection->execute(...), Internal\Command::unsub($sid))->ignore();
+
+            throw $e;
+        }
+    }
+
+    /**
      * @param non-empty-string $sid
      * @throws NatsException
      */
@@ -356,7 +378,7 @@ final class Client
             return;
         }
 
-        $this->connection($cancellation)->execute(Internal\Command::unsub($sid));
+        $this->connection($cancellation)->execute(Internal\Command::unsub($sid), $cancellation);
         unset($this->subscribers[$sid]);
     }
 

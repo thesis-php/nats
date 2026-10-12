@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
+use Amp\Cancellation;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\NatsException;
@@ -16,7 +17,7 @@ interface Connection
     /**
      * @throws NatsException
      */
-    public function execute(Protocol\Frame $frame): void;
+    public function execute(Protocol\Frame $frame, ?Cancellation $cancellation = null): void;
 
     public function hooks(): Hooks\Provider;
 
