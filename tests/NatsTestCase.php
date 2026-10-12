@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\Future;
 use Amp\TimeoutCancellation;
 use PHPUnit\Framework\TestCase;
+use Thesis\Nats\Internal\Rpc;
 
 abstract class NatsTestCase extends TestCase
 {
@@ -136,6 +138,23 @@ abstract class NatsTestCase extends TestCase
         }
 
         self::fail("The client '{$name}' is not connected.");
+    }
+
+    /**
+     * @return int the number of the requests of the client still waiting for a reply
+     */
+    final protected static function pendingRequests(Client $client): int
+    {
+        /** @var ?Future<Rpc\Handler> $rpc */
+        $rpc = (new \ReflectionProperty(Client::class, 'rpc'))->getValue($client);
+        if ($rpc === null) {
+            return 0;
+        }
+
+        /** @var array<array-key, mixed> $pendings */
+        $pendings = (new \ReflectionProperty(Rpc\Handler::class, 'pendings'))->getValue($rpc->await());
+
+        return \count($pendings);
     }
 
     /**

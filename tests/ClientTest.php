@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\CancelledException;
 use Amp\DeferredFuture;
 use Amp\Socket\Socket;
 use Amp\TimeoutCancellation;
@@ -67,6 +68,36 @@ final class ClientTest extends NatsTestCase
         });
 
         self::assertEquals('ok', $client->request("{$id}.happens", new Message('Are you ok?'))->message->payload);
+
+        $client->stop();
+    }
+
+    public function testFailedAndCancelledRequestsAreForgotten(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        // Never answered: the request can end only by the cancellation.
+        $client->subscribe("{$id}.ignored", static fn() => null);
+        $client->subscribe("{$id}.answered", static function (Delivery $delivery): void {
+            $delivery->reply(new Message('ok'));
+        });
+
+        try {
+            $client->request("{$id}.ignored", new Message('Are you ok?'), new TimeoutCancellation(0.1));
+            self::fail('Nobody answers the request, it must be cancelled.');
+        } catch (CancelledException) {
+        }
+
+        try {
+            $client->request("{$id}.nobody", new Message('Are you ok?'));
+            self::fail('Nobody listens to the subject, the request must fail.');
+        } catch (RequestHasNoResponders) {
+        }
+
+        self::assertSame('ok', $client->request("{$id}.answered", new Message('Are you ok?'))->message->payload);
+        self::assertSame(0, self::pendingRequests($client));
 
         $client->stop();
     }

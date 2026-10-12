@@ -241,8 +241,7 @@ final class Client
 
         return $this->rpc
             ->await($cancellation)
-            ->request($subject, $message, $this)
-            ->await($cancellation);
+            ->request($subject, $message, $this, $cancellation);
     }
 
     /**
