@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\Cancellation;
 use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\NoServerResponse;
+use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Validation\Validate;
@@ -19,6 +21,7 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
+use function Amp\delay;
 
 /**
  * @api
@@ -44,12 +47,34 @@ final readonly class JetStream
      * @param non-empty-string $subject
      * @throws NatsException
      */
-    public function publish(string $subject, Message $message): Api\AckResponse
-    {
-        return $this->mapResponse(
-            message: $this->nats->request($subject, $message)->message,
-            type: Api\AckResponse::class,
+    public function publish(
+        string $subject,
+        Message $message,
+        PublishOptions $options = new PublishOptions(),
+        ?Cancellation $cancellation = null,
+    ): Api\AckResponse {
+        $message = new Message(
+            payload: $message->payload,
+            headers: $options->apply($message->headers),
         );
+
+        $attempt = 0;
+
+        while (true) {
+            try {
+                return $this->mapResponse(
+                    message: $this->nats->request($subject, $message, $cancellation)->message,
+                    type: Api\AckResponse::class,
+                );
+            } catch (RequestHasNoResponders $e) {
+                // The stream may be unavailable for a moment, e.g. while its leader is being elected.
+                if ($attempt++ >= $options->retryAttempts) {
+                    throw $e;
+                }
+
+                delay($options->retryWait->toSeconds(3), cancellation: $cancellation);
+            }
+        }
     }
 
     /**

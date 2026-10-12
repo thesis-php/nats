@@ -85,7 +85,9 @@ final class PullMessageHandler
 
         $this->doHandle($delivery, $subscription);
 
-        if (!$subscription->completed()) {
+        // The handler may stop the subscription itself: stop() then runs before the subscription is marked completed,
+        // and rescheduling the watchdog would pull into the completed queue later.
+        if (!$subscription->completed() && !$this->pulls->isComplete()) {
             $this->watchdog->reset();
             $this->replenish();
         }

@@ -26,6 +26,7 @@ use Thesis\Nats\NatsTestCase;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
+use function Amp\delay;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
 #[CoversClass(PullConsumer::class)]
@@ -63,6 +64,46 @@ final class PullConsumerTest extends NatsTestCase
         self::assertSame(0, $consumer->actualInfo()->numRedelivered);
 
         $stream->delete();
+    }
+
+    public function testStopFromHandlerDoesNotPullAfterwards(): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $js->publish("{$subject}.x", new Message('x'));
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        $subscription = $consumer->pulling()->consume(
+            static function (JetStreamDelivery $delivery, Subscription $subscription): void {
+                $delivery->ack();
+                $subscription->stop();
+            },
+            new PullConsumeConfig(expires: TimeSpan::fromSeconds(1)),
+        );
+
+        $subscription->awaitCompletion();
+
+        try {
+            // The missed heartbeats watchdog (2 x 500ms) must not be rescheduled after the consumer stopped,
+            // otherwise it pulls into the completed queue and fails the event loop.
+            delay(1.5);
+
+            self::assertTrue($subscription->completed());
+            self::assertSame(0, $consumer->actualInfo()->numAckPending);
+        } finally {
+            $stream->delete();
+        }
     }
 
     public function testNackDelivery(): void
