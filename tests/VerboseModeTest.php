@@ -143,6 +143,41 @@ final class VerboseModeTest extends NatsTestCase
         $client->stop();
     }
 
+    public function testPingsAreNotAwaitedAsAcknowledgedCommands(): void
+    {
+        // The server answers PING with PONG and never acknowledges PING or PONG with +OK, even in verbose mode:
+        // the pings sent in between must not shift the queue of the commands awaiting their +OK/-ERR.
+        $client = $this->verboseClient(user: 'restricted', password: 'Pswd1', ping: 100);
+        $id = Id\generateUniqueId();
+
+        /** @var list<\Throwable> $errors */
+        $errors = [];
+        $client->onError(static function (\Throwable $e) use (&$errors): void {
+            $errors[] = $e;
+        });
+
+        $client->publish("allowed.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
+
+        // Let a few pings go out (and the pongs come back) between the commands.
+        delay(0.35);
+
+        try {
+            $client->publish("forbidden.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
+            self::fail('The -ERR must be attributed to the publish into the forbidden subject.');
+        } catch (PermissionViolated $e) {
+            self::assertStringContainsString("forbidden.{$id}", $e->getMessage());
+        }
+
+        delay(0.35);
+
+        // The next +OK goes to the next command, not to a ping sent before it.
+        $client->publish("allowed.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
+
+        self::assertSame([], $errors);
+
+        $client->stop();
+    }
+
     private function proxy(): PausableProxy
     {
         return $this->proxy ??= PausableProxy::start($this->natsAddress());
@@ -152,9 +187,14 @@ final class VerboseModeTest extends NatsTestCase
      * @param non-empty-string $clientName
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
+     * @param ?positive-int $ping the ping interval in milliseconds, the default one when null
      */
-    private function verboseClient(string $clientName = 'thesis/nats', ?string $user = null, ?string $password = null): Client
-    {
+    private function verboseClient(
+        string $clientName = 'thesis/nats',
+        ?string $user = null,
+        ?string $password = null,
+        ?int $ping = null,
+    ): Client {
         $config = $this->config();
 
         return $this->clientWithConfig(new Config(
@@ -163,6 +203,7 @@ final class VerboseModeTest extends NatsTestCase
             user: $user ?? $config->user,
             password: $password ?? $config->password,
             noResponders: true,
+            ping: $ping ?? $config->ping,
             clientName: $clientName,
         ));
     }

@@ -119,7 +119,7 @@ final class SocketConnection implements Connection
         /** @var ?DeferredFuture<Protocol\Frame> $deferred */
         $deferred = null;
 
-        if ($this->config->verbose) {
+        if ($this->config->verbose && self::isAcknowledged($frame)) {
             /** @var DeferredFuture<Protocol\Frame> $deferred */
             $deferred = new DeferredFuture();
             $this->queue->push($deferred);
@@ -282,6 +282,16 @@ final class SocketConnection implements Connection
             // The server closed the connection without acknowledging CONNECT, the same as without answering PING.
             throw new ConnectionIsNotAvailable(previous: $e);
         }
+    }
+
+    /**
+     * Whether the server answers the frame with +OK/-ERR in verbose mode. PING and PONG are the exception:
+     * PING is answered with PONG and PONG with nothing, so waiting for their acknowledgement would consume
+     * the one of the next command and leave that command waiting for the +OK of the one after it.
+     */
+    private static function isAcknowledged(Protocol\Frame $frame): bool
+    {
+        return !$frame instanceof Protocol\Ping && !$frame instanceof Protocol\Pong;
     }
 
     /**
