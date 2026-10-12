@@ -208,8 +208,7 @@ final class ClientTest extends NatsTestCase
         $id = Id\generateUniqueId();
 
         try {
-            // Amp retries a refused connection a few times with an exponential backoff, so the failure takes a while.
-            $client->request("{$id}.happens", new Message('Are you ok?'), new TimeoutCancellation(30));
+            $client->request("{$id}.happens", new Message('Are you ok?'), new TimeoutCancellation(5));
             self::fail('The server is not available yet, request must fail.');
         } catch (ServerIsNotAvailable) {
         }

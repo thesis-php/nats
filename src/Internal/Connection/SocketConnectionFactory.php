@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Connection;
 
 use Amp\Socket\ConnectContext;
+use Amp\Socket\DnsSocketConnector;
 use Amp\Socket\Socket;
+use Amp\Socket\SocketConnector;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
-use function Amp\Socket\connect;
 
 /**
  * @internal
@@ -18,6 +19,7 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
     private function __construct(
         private Config $config,
         private ConnectContext $context,
+        private SocketConnector $connector,
     ) {}
 
     public static function fromConfig(Config $config): self
@@ -29,7 +31,9 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
             $context = $context->withTcpNoDelay();
         }
 
-        return new self($config, $context);
+        // The default amp connector retries each url with an exponential backoff, which takes seconds
+        // before an unavailable host is reported. The hosts are iterated here instead, so connect only once.
+        return new self($config, $context, new DnsSocketConnector());
     }
 
     public function connect(): Connection
@@ -50,7 +54,7 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
 
         foreach ($this->config->urls as $url) {
             try {
-                return connect($url, $this->context);
+                return $this->connector->connect($url, $this->context);
             } catch (\Throwable $e) {
                 $exceptions[$url] = $e->getMessage();
             }
