@@ -29,7 +29,7 @@ final readonly class Config
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
      * @param ?non-empty-string $jwt JWT token for authentication
-     * @param ?non-empty-string $nkey NKey public key for signature authentication
+     * @param ?non-empty-string $nkey NKey user seed ("SU...") for signature authentication: the public key derived from it is sent to the server, the seed itself never leaves the client
      * @param ?positive-int $ping in milliseconds
      * @param positive-int $maxPings the maximum number of pings that we have not received a response to, after which the connection to the server will be closed
      * @param ?non-empty-string $jetStreamDomain

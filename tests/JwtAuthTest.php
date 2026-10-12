@@ -6,10 +6,8 @@ namespace Thesis\Nats;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Thesis\Nats\Internal\Nkey\Signer;
 
 #[CoversClass(Config::class)]
-#[CoversClass(Signer::class)]
 final class JwtAuthTest extends TestCase
 {
     public function testConfigurationWithJwtOnly(): void
@@ -28,7 +26,7 @@ final class JwtAuthTest extends TestCase
 
     public function testConfigurationWithNkeyOnly(): void
     {
-        $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
+        $nkey = 'SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY';
 
         $config = new Config(
             nkey: $nkey,
@@ -43,7 +41,7 @@ final class JwtAuthTest extends TestCase
     public function testConfigurationWithJwtAndNkey(): void
     {
         $jwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
-        $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
+        $nkey = 'SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY';
 
         $config = new Config(
             jwt: $jwt,
@@ -72,7 +70,7 @@ final class JwtAuthTest extends TestCase
     public function testMixedAuthenticationMethods(): void
     {
         $jwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.';
-        $nkey = 'SUAIBDPBAUTWCWBKIO6XNJWXXY2ELXAWYZSV3LBSRQTDHV5KIO4TWKX4CY';
+        $nkey = 'SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXIEDNPPQYYYCU3VY';
 
         $config = new Config(
             user: 'admin',
