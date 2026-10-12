@@ -65,11 +65,14 @@ final class Handler
         );
     }
 
-    public function shutdown(?Cancellation $cancellation = null): void
+    /**
+     * @param ?\Throwable $reason the error the pending requests are completed with, ConnectionWasClosed by default
+     */
+    public function shutdown(?Cancellation $cancellation = null, ?\Throwable $reason = null): void
     {
         [$pendings, $this->pendings] = [$this->pendings, []];
 
-        $e = new ConnectionWasClosed();
+        $e = $reason ?? new ConnectionWasClosed();
 
         foreach ($pendings as $pending) {
             $pending->deferred->error($e);

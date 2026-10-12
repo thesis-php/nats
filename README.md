@@ -154,6 +154,30 @@ dump("Received response {$response->message->payload}");
 $nc->drain();
 ```
 
+#### Server errors
+
+The errors the server answers a particular call with are thrown from that call: `Nats\Exception\AuthorizationViolation` from the first call over a new connection,
+`Nats\Exception\PermissionViolated` from `publish()` and `subscribe()` in verbose mode (`?verbose=true`). In non-verbose mode the server does not acknowledge
+commands, so a subscription permission violation fails that subscription (`Subscription::awaitCompletion()` throws), and the rest is passed to the error callback:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::default());
+
+$nc->onError(static function (\Throwable $e): void {
+    // e.g. Nats\Exception\PermissionViolated for a publish to a subject the user is not allowed to publish to,
+    // or Nats\Exception\SlowConsumer, after which the server closes the connection
+    dump($e->getMessage());
+});
+```
+
 ## Nats JetStream
 
 JetStream is the built-in NATS persistence system. The library provides both JetStream entity management (streams, consumers) and message publishing/consumption capabilities.

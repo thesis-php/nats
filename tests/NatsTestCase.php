@@ -52,6 +52,14 @@ abstract class NatsTestCase extends TestCase
     }
 
     /**
+     * Creates a client with the given config, stopped in tearDown like the default one.
+     */
+    final protected function clientWithConfig(Config $config): Client
+    {
+        return $this->client = new Client($config);
+    }
+
+    /**
      * Creates a client with the same credentials as the default one, but pointed at the given hosts.
      *
      * @param non-empty-list<non-empty-string> $urls
@@ -60,7 +68,7 @@ abstract class NatsTestCase extends TestCase
     {
         $config = Config::fromURI($this->dsn);
 
-        return $this->client = new Client(new Config(
+        return $this->clientWithConfig(new Config(
             urls: $urls,
             connectionTimeout: 1,
             user: $config->user,
@@ -70,10 +78,26 @@ abstract class NatsTestCase extends TestCase
     }
 
     /**
+     * @return Config the config of the default client
+     */
+    final protected function config(): Config
+    {
+        return Config::fromURI($this->dsn);
+    }
+
+    /**
+     * @return Config the config of the client authenticated with JWT
+     */
+    final protected function jwtConfig(): Config
+    {
+        return Config::fromURI($this->jwtDsn);
+    }
+
+    /**
      * @return non-empty-string the host:port of the real nats server
      */
     final protected function natsAddress(): string
     {
-        return Config::fromURI($this->dsn)->urls[0];
+        return $this->config()->urls[0];
     }
 }
