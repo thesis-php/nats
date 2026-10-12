@@ -11,6 +11,8 @@ use Thesis\Nats\Exception;
  */
 final readonly class Err implements Frame
 {
+    private const string SUBSCRIPTION_VIOLATION = '/^Permissions Violation for Subscription to "([^"]+)"(?: using queue "([^"]+)")?/';
+
     /** @var non-empty-string */
     public string $message;
 
@@ -28,6 +30,21 @@ final readonly class Err implements Frame
         return "-ERR '{$this->message}'\r\n";
     }
 
+    /**
+     * Parses the subject and the queue group of the subscription that was rejected by the server
+     * ("Permissions Violation for Subscription to "subject" using queue "group"").
+     *
+     * @return ?array{non-empty-string, ?non-empty-string}
+     */
+    public function violatedSubscription(): ?array
+    {
+        if (preg_match(self::SUBSCRIPTION_VIOLATION, $this->message, $matches, PREG_UNMATCHED_AS_NULL) !== 1) {
+            return null;
+        }
+
+        return [$matches[1], $matches[2] ?? null];
+    }
+
     public function toException(): \Exception
     {
         return match (true) {
@@ -39,6 +56,7 @@ final readonly class Err implements Frame
             str_starts_with($this->message, 'Secure Connection - TLS Required') => new Exception\TLSRequired(),
             str_starts_with($this->message, 'Stale Connection') => new Exception\StaleConnection(),
             str_starts_with($this->message, 'Maximum Connections Exceeded') => new Exception\MaximumConnectionsExceeded(),
+            str_starts_with($this->message, 'Maximum Payload Violation') => new Exception\MaximumPayloadViolation(),
             str_starts_with($this->message, 'Slow Consumer') => new Exception\SlowConsumer(),
             str_starts_with($this->message, 'Invalid Subject') => new Exception\InvalidSubject(),
             str_starts_with($this->message, 'Permissions Violation') => new Exception\PermissionViolated($this->message),

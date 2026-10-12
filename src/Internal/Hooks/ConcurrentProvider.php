@@ -11,6 +11,7 @@ use Revolt\EventLoop;
  * @phpstan-import-type OnMessageCallback from Provider
  * @phpstan-import-type OnPingCallback from Provider
  * @phpstan-import-type OnPongCallback from Provider
+ * @phpstan-import-type OnErrorCallback from Provider
  * @phpstan-import-type OnCloseCallback from Provider
  */
 final class ConcurrentProvider implements Provider
@@ -23,6 +24,9 @@ final class ConcurrentProvider implements Provider
 
     /** @var list<OnPongCallback> */
     private array $pongCallbacks = [];
+
+    /** @var list<OnErrorCallback> */
+    private array $errorCallbacks = [];
 
     /** @var list<OnCloseCallback> */
     private array $closeCallbacks = [];
@@ -47,12 +51,18 @@ final class ConcurrentProvider implements Provider
         $this->pongCallbacks[] = $callback;
     }
 
-    public function dispatch(MessageReceived|PingReceived|PongReceived|ConnectionClosed $event): void
+    public function onError(\Closure $callback): void
+    {
+        $this->errorCallbacks[] = $callback;
+    }
+
+    public function dispatch(MessageReceived|PingReceived|PongReceived|ErrorReceived|ConnectionClosed $event): void
     {
         $callbacks = match (true) {
             $event instanceof MessageReceived => $this->messageCallbacks,
             $event instanceof PingReceived => $this->pingCallbacks,
             $event instanceof PongReceived => $this->pongCallbacks,
+            $event instanceof ErrorReceived => $this->errorCallbacks,
             $event instanceof ConnectionClosed => $this->closeCallbacks, // @phpstan-ignore instanceof.alwaysTrue
         };
 

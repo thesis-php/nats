@@ -10,6 +10,7 @@ namespace Thesis\Nats\Internal\Hooks;
  * @phpstan-type OnCloseCallback = \Closure(): void
  * @phpstan-type OnPingCallback = \Closure(): void
  * @phpstan-type OnPongCallback = \Closure(): void
+ * @phpstan-type OnErrorCallback = \Closure(ErrorReceived): void
  */
 interface Provider
 {
@@ -27,6 +28,11 @@ interface Provider
      * @param OnPongCallback $callback
      */
     public function onPong(\Closure $callback): void;
+
+    /**
+     * @param OnErrorCallback $callback
+     */
+    public function onError(\Closure $callback): void;
 
     /**
      * @param OnCloseCallback $callback

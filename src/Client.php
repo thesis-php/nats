@@ -7,12 +7,15 @@ namespace Thesis\Nats;
 use Amp\Cancellation;
 use Amp\Future;
 use Amp\Pipeline;
+use Revolt\EventLoop;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Iter;
+use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\Internal\Rpc;
+use Thesis\Nats\Internal\Subscription\Subscriber;
 use Thesis\Nats\Internal\Subscription\SubscriptionHandler;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Internal\Acks;
@@ -47,8 +50,11 @@ final class Client
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpc = null;
 
-    /** @var array<non-empty-string, array{callable(Delivery): bool, ?Subscription}> */
+    /** @var array<non-empty-string, Subscriber> */
     private array $subscribers = [];
+
+    /** @var list<\Closure(\Throwable): void> */
+    private array $errorCallbacks = [];
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
 
@@ -171,7 +177,12 @@ final class Client
             bufferSize: $bufferSize,
         );
 
-        $this->subscribers[$subscriptionId] = [$handler->push(...), $subscription = $handler->subscription];
+        $this->subscribers[$subscriptionId] = new Subscriber(
+            subject: $subject,
+            queueGroup: $queueGroup,
+            push: $handler->push(...),
+            subscription: $subscription = $handler->subscription,
+        );
 
         try {
             $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId, $queueGroup));
@@ -213,6 +224,19 @@ final class Client
             ->await($cancellation)
             ->request($subject, $message, $this)
             ->await($cancellation);
+    }
+
+    /**
+     * Registers a callback for the server errors (-ERR) that cannot be attributed to a particular call,
+     * e.g. a permission violation of a publish in non-verbose mode, a slow consumer, or a stale connection.
+     * The errors that make the server close the connection are additionally passed to the active subscriptions
+     * and pending requests.
+     *
+     * @param callable(\Throwable): void $callback
+     */
+    public function onError(callable $callback): void
+    {
+        $this->errorCallbacks[] = $callback(...);
     }
 
     public function createService(Micro\ServiceConfig $config): Micro\Service
@@ -281,14 +305,15 @@ final class Client
     ): \Closure {
         $subscriptionId = $this->subscriptionIdGenerator->nextId();
 
-        $this->subscribers[$subscriptionId] = [
-            static function (Delivery $delivery) use ($handler): bool {
+        $this->subscribers[$subscriptionId] = new Subscriber(
+            subject: $subject,
+            queueGroup: null,
+            push: static function (Delivery $delivery) use ($handler): bool {
                 $handler($delivery);
 
                 return true;
             },
-            null,
-        ];
+        );
 
         try {
             $this->connection($cancellation)->execute(Internal\Command::sub($subject, $subscriptionId));
@@ -319,9 +344,12 @@ final class Client
 
     private function invokeSubscriber(Hooks\MessageReceived $event): void
     {
-        [$subscriber, $subscription] = $this->subscribers[$event->sid] ?? [static fn(): bool => true, null];
+        $subscriber = $this->subscribers[$event->sid] ?? null;
+        if ($subscriber === null) {
+            return;
+        }
 
-        $pushed = $subscriber(
+        $pushed = ($subscriber->push)(
             new Delivery(
                 reply: $this->publish(...),
                 subject: $event->subject,
@@ -333,16 +361,73 @@ final class Client
             ),
         );
         if (!$pushed) {
-            $subscription?->stop();
+            $subscriber->subscription?->stop();
+        }
+    }
+
+    /**
+     * Routes a server error that was not an acknowledgement of a command, the same way nats.go does:
+     * a subscription permission violation fails that subscription only, a publish permission violation
+     * is reported to the error callbacks, anything else is fatal and the connection is closed.
+     * A fatal error is reported once the connection is torn down, see onClose in connection().
+     *
+     * @return ?\Throwable the error the connection is closed with
+     */
+    private function handleError(Hooks\ErrorReceived $event, Connection\Connection $connection): ?\Throwable
+    {
+        $e = $event->error->toException();
+
+        if ($e instanceof Exception\PermissionViolated) {
+            if (!$this->failSubscriptions($event->error, $e)) {
+                $this->reportError($e);
+            }
+
+            return null;
+        }
+
+        $connection->close();
+
+        return $e;
+    }
+
+    /**
+     * @return bool whether the error was attributed to at least one subscription
+     */
+    private function failSubscriptions(Protocol\Err $error, \Throwable $e): bool
+    {
+        $violated = $error->violatedSubscription();
+        if ($violated === null) {
+            return false;
+        }
+
+        [$subject, $queueGroup] = $violated;
+        $failed = false;
+
+        foreach ($this->subscribers as $subscriber) {
+            if ($subscriber->subscription !== null && $subscriber->subject === $subject && $subscriber->queueGroup === $queueGroup) {
+                async($subscriber->subscription->error(...), $e)->ignore();
+                $failed = true;
+            }
+        }
+
+        return $failed;
+    }
+
+    private function reportError(\Throwable $e): void
+    {
+        foreach ($this->errorCallbacks as $callback) {
+            EventLoop::queue($callback, $e);
         }
     }
 
     /**
      * @param \Closure(Subscription): void $do
+     * @param ?\Throwable $reason the error the pending requests are completed with, ConnectionWasClosed by default
      */
     private function disconnect(
         \Closure $do,
         ?Cancellation $cancellation = null,
+        ?\Throwable $reason = null,
     ): void {
         $connection = $this->connection !== null ? self::awaitOrNull($this->connection, $cancellation) : null;
         if ($connection === null) {
@@ -351,16 +436,16 @@ final class Client
 
         $completes = [];
 
-        foreach ($this->subscribers as [$_, $subscription]) {
-            if ($subscription !== null) {
-                $completes[] = async($do, $subscription);
+        foreach ($this->subscribers as $subscriber) {
+            if ($subscriber->subscription !== null) {
+                $completes[] = async($do, $subscriber->subscription);
             }
         }
 
         $rpc = $this->rpc !== null ? self::awaitOrNull($this->rpc, $cancellation) : null;
 
         if ($rpc !== null) {
-            $completes[] = async($rpc->shutdown(...), $cancellation);
+            $completes[] = async($rpc->shutdown(...), $cancellation, $reason);
         }
 
         try {
@@ -409,11 +494,26 @@ final class Client
             }
 
             $this->activeConnection = $connection;
-            $connection->hooks()->onMessage($this->invokeSubscriber(...));
-            $connection->hooks()->onClose(function () use ($cancellation): void {
-                $e = new ConnectionWasClosed();
 
-                $this->disconnect(static fn(Subscription $subscription) => $subscription->error($e, $cancellation));
+            /** @var ?\Throwable $reason the fatal server error that closed the connection */
+            $reason = null;
+
+            $connection->hooks()->onMessage($this->invokeSubscriber(...));
+            $connection->hooks()->onError(function (Hooks\ErrorReceived $event) use ($connection, &$reason): void {
+                $reason ??= $this->handleError($event, $connection);
+            });
+            $connection->hooks()->onClose(function () use ($cancellation, &$reason): void {
+                $e = $reason ?? new ConnectionWasClosed();
+
+                try {
+                    $this->disconnect(static fn(Subscription $subscription) => $subscription->error($e, $cancellation), reason: $e);
+                } finally {
+                    if ($reason !== null) {
+                        // Reported after the teardown, so that the callback observes the subscriptions already failed
+                        // and the next call establishing a new connection.
+                        $this->reportError($reason);
+                    }
+                }
             });
 
             return $connection;
