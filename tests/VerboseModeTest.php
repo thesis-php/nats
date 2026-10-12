@@ -143,6 +143,23 @@ final class VerboseModeTest extends NatsTestCase
         $client->stop();
     }
 
+    public function testRequestIsForgottenWhenPublishFails(): void
+    {
+        $client = $this->verboseClient(user: 'restricted', password: 'Pswd1');
+        $id = Id\generateUniqueId();
+
+        try {
+            $client->request("forbidden.{$id}", new Message('Are you ok?'), new TimeoutCancellation(5));
+            self::fail('The publish of the request is not permitted, the request must fail.');
+        } catch (PermissionViolated $e) {
+            self::assertStringContainsString("forbidden.{$id}", $e->getMessage());
+        }
+
+        self::assertSame(0, self::pendingRequests($client));
+
+        $client->stop();
+    }
+
     public function testPingsAreNotAwaitedAsAcknowledgedCommands(): void
     {
         // The server answers PING with PONG and never acknowledges PING or PONG with +OK, even in verbose mode:

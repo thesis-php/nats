@@ -6,7 +6,6 @@ namespace Thesis\Nats\Internal\Rpc;
 
 use Amp\Cancellation;
 use Amp\DeferredFuture;
-use Amp\Future;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\ConnectionWasClosed;
@@ -86,13 +85,13 @@ final class Handler
 
     /**
      * @param non-empty-string $subject
-     * @return Future<Delivery>
      */
     public function request(
         string $subject,
         Message $message,
         Client $client,
-    ): Future {
+        ?Cancellation $cancellation = null,
+    ): Delivery {
         $replyTo = ReplyTo::new($this->inboxId);
 
         /** @var DeferredFuture<Delivery> $deferred */
@@ -111,8 +110,13 @@ final class Handler
             deferred: $deferred,
         );
 
-        $client->publish($subject, $message, $replyTo->subject);
+        try {
+            $client->publish($subject, $message, $replyTo->subject, $cancellation);
 
-        return $deferred->getFuture();
+            return $deferred->getFuture()->await($cancellation);
+        } finally {
+            // The reply handler forgets the answered requests, but nobody else forgets the failed or cancelled ones.
+            unset($this->pendings[$replyTo->token]);
+        }
     }
 }
