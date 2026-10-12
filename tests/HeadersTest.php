@@ -65,4 +65,21 @@ final class HeadersTest extends TestCase
 
         self::assertNull($headers->get(ScalarKey::string('x')));
     }
+
+    public function testSequenceHeaders(): void
+    {
+        $headers = (new Headers())
+            ->with(Header\LastSequence::Header, 10)
+            ->with(Header\UpToSequence::Header, 20);
+
+        self::assertSame(
+            [
+                'Nats-Last-Sequence' => ['10'],
+                'Nats-UpTo-Sequence' => ['20'],
+            ],
+            [...$headers],
+        );
+        self::assertSame(10, $headers->get(Header\LastSequence::Header));
+        self::assertSame(20, $headers->get(Header\UpToSequence::Header));
+    }
 }
