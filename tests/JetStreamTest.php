@@ -831,6 +831,42 @@ final class JetStreamTest extends NatsTestCase
         $stream->delete();
     }
 
+    public function testScheduleHeaderDecodedFromStoredMessage(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: [
+                $subject,
+                "{$subject}.schedules.*",
+            ],
+            allowMsgSchedules: true,
+        ));
+
+        $at = new \DateTimeImmutable('+1 hour');
+
+        $js->publish("{$subject}.schedules.1", new Message(
+            payload: '{"id":1}',
+            headers: (new Headers())
+                ->with(Header\Schedule::Header, $at)
+                ->with(Header\ScheduleTarget::header(), $subject),
+        ));
+
+        $message = $stream->getMessage(1);
+        self::assertNotNull($message);
+        self::assertNotNull($message->headers);
+
+        $schedule = $message->headers->get(Header\Schedule::Header);
+        self::assertInstanceOf(\DateTimeImmutable::class, $schedule);
+        self::assertSame($at->getTimestamp(), $schedule->getTimestamp());
+
+        $stream->delete();
+    }
+
     public function testConsumerUnsubscribeAll(): void
     {
         $client = $this->client();

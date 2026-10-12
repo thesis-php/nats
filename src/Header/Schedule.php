@@ -25,14 +25,18 @@ enum Schedule: string implements HeaderKey
 
     public function decode(string $value): \DateTimeImmutable|string
     {
-        if (str_starts_with($value, '@at')) {
-            $date = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, substr($value, 3));
+        if (str_starts_with($value, '@at ')) {
+            $time = trim(substr($value, 4));
 
-            if ($date === false) {
+            if ($time === '') {
                 throw new \UnexpectedValueException("Unexpected time format: {$value}");
             }
 
-            return $date;
+            try {
+                return new \DateTimeImmutable($time);
+            } catch (\Exception $e) {
+                throw new \UnexpectedValueException("Unexpected time format: {$value}", previous: $e);
+            }
         }
 
         if ($value === '') {
