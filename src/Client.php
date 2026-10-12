@@ -18,6 +18,7 @@ use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\Internal\Rpc;
 use Thesis\Nats\Internal\Subscription\Subscriber;
 use Thesis\Nats\Internal\Subscription\SubscriptionHandler;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\Internal\Acks;
 use Thesis\Nats\JetStream\Metadata;
@@ -116,6 +117,30 @@ final class Client
         ?string $replyTo = null,
         ?Cancellation $cancellation = null,
     ): void {
+        Validate::publishSubject($subject);
+
+        if ($replyTo !== null) {
+            Validate::publishSubject($replyTo);
+        }
+
+        $this->rawPublish($subject, $message, $replyTo, $cancellation);
+    }
+
+    /**
+     * Publishes without validating the subjects: the JetStream API embeds subject filters, wildcards included,
+     * into its request subjects, e.g. $JS.API.CONSUMER.CREATE.<stream>.<consumer>.<filter>.
+     *
+     * @internal
+     * @param non-empty-string $subject
+     * @param ?non-empty-string $replyTo
+     * @throws NatsException
+     */
+    public function rawPublish(
+        string $subject,
+        Message $message = new Message(),
+        ?string $replyTo = null,
+        ?Cancellation $cancellation = null,
+    ): void {
         $connection = $this->connection($cancellation);
 
         if ($message->headers !== null && \count($message->headers) > 0 && !$connection->info()->allowHeaders) {
@@ -185,6 +210,12 @@ final class Client
         int $bufferSize = 1_000,
         ?Cancellation $cancellation = null,
     ): Subscription {
+        Validate::subscribeSubject($subject);
+
+        if ($queueGroup !== null) {
+            Validate::queueGroup($queueGroup);
+        }
+
         $subscriptionId = $this->subscriptionIdGenerator->nextId();
         $unsubscribe = $this->unsubscribe(...);
 
@@ -216,8 +247,26 @@ final class Client
 
     /**
      * @param non-empty-string $subject
+     * @throws NatsException
      */
     public function request(
+        string $subject,
+        Message $message = new Message(),
+        ?Cancellation $cancellation = null,
+    ): Delivery {
+        Validate::publishSubject($subject);
+
+        return $this->rawRequest($subject, $message, $cancellation);
+    }
+
+    /**
+     * Requests without validating the subject, see {@see rawPublish()}.
+     *
+     * @internal
+     * @param non-empty-string $subject
+     * @throws NatsException
+     */
+    public function rawRequest(
         string $subject,
         Message $message = new Message(),
         ?Cancellation $cancellation = null,

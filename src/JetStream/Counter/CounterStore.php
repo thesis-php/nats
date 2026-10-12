@@ -6,6 +6,7 @@ namespace Thesis\Nats\JetStream\Counter;
 
 use Thesis\Nats\Header\Incr;
 use Thesis\Nats\Header\Subject;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\Message;
 
@@ -32,6 +33,8 @@ final readonly class CounterStore
      */
     public function add(string $subject, int $value): int
     {
+        Validate::publishSubject($subject);
+
         $ack = $this->js->publish(
             ($this->publishPrefix)($subject),
             Message::incr($value),
@@ -45,6 +48,8 @@ final readonly class CounterStore
      */
     public function get(string $subject): ?Entry
     {
+        Validate::publishSubject($subject);
+
         $message = $this->stream->getLastMessageForSubject("{$this->prefix}{$subject}");
 
         if ($message !== null) {
@@ -70,6 +75,10 @@ final readonly class CounterStore
     {
         if ($subjects === null || $subjects === []) {
             $subjects = ['>'];
+        }
+
+        foreach ($subjects as $subject) {
+            Validate::subscribeSubject($subject);
         }
 
         $subjects = array_map(

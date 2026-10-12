@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Micro;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  */
@@ -31,6 +33,10 @@ final readonly class ServiceConfig
 
         if (preg_match(self::SEMVER_REGEX, $this->version) !== 1) {
             throw new \InvalidArgumentException('Service version is not a valid semver string.');
+        }
+
+        if ($this->queueGroup !== null) {
+            Validate::queueGroup($this->queueGroup);
         }
     }
 }

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Exception\InvalidName;
+use Thesis\Nats\Exception\InvalidSubject;
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  */
@@ -12,6 +16,8 @@ final readonly class StreamSource implements \JsonSerializable
     /**
      * @param non-empty-string $name
      * @param ?list<SubjectTransformConfig> $subjectTransforms
+     * @throws InvalidName
+     * @throws InvalidSubject
      */
     public function __construct(
         public string $name,
@@ -20,7 +26,13 @@ final readonly class StreamSource implements \JsonSerializable
         public ?string $filterSubject = null,
         public ?array $subjectTransforms = null,
         public ?ExternalStream $external = null,
-    ) {}
+    ) {
+        Validate::name($this->name);
+
+        if ($this->filterSubject !== null && $this->filterSubject !== '') {
+            Validate::subscribeSubject($this->filterSubject);
+        }
+    }
 
     /**
      * @return array<non-empty-string, mixed>

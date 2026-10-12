@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\KeyValue;
 
+use Thesis\Nats\Exception\InvalidBucketName;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream\Api\Placement;
 use Thesis\Nats\JetStream\Api\RePublish;
 use Thesis\Nats\JetStream\Api\StorageType;
@@ -20,6 +22,7 @@ final readonly class BucketConfig
      * @param int<1, 64> $history
      * @param int<1, 5> $replicas
      * @param ?list<StreamSource> $sources
+     * @throws InvalidBucketName
      */
     public function __construct(
         public string $bucket,
@@ -36,5 +39,7 @@ final readonly class BucketConfig
         public ?array $sources = null,
         public bool $compression = false,
         public ?TimeSpan $limitMarkerTtl = null,
-    ) {}
+    ) {
+        Validate::bucket($this->bucket);
+    }
 }

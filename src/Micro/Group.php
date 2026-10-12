@@ -34,8 +34,8 @@ final readonly class Group
     ): self {
         $this->svc->addEndpoint(
             config: new EndpointConfig(
-                name: "{$this->name}.{$config->name}",
-                subject: $config->subject,
+                name: $config->name,
+                subject: "{$this->name}." . ($config->subject ?? $config->name),
                 queueGroup: $config->queueGroup ?? $this->queueGroup,
                 metadata: $config->metadata,
             ),

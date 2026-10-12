@@ -8,6 +8,7 @@ use Amp\Cancellation;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Api\ReplayPolicy;
@@ -43,6 +44,8 @@ final readonly class Bucket
      */
     public function get(string $key, int $revision = 0): ?Entry
     {
+        Validate::key($key);
+
         $subject = "{$this->prefix}{$key}";
 
         $message = match ($revision) {
@@ -163,6 +166,10 @@ final readonly class Bucket
             $keys = [$keys];
         }
 
+        foreach ($keys as $key) {
+            Validate::keyFilter($key);
+        }
+
         $keys = array_map(
             fn(string $key): string => "{$this->prefix}{$key}",
             $keys !== [] ? $keys : [self::ALL_KEYS],
@@ -230,6 +237,8 @@ final readonly class Bucket
      */
     private function prefixedSubject(string $cmd): string
     {
+        Validate::key($cmd);
+
         $subject = '';
 
         if ($this->jsPrefix !== null) {

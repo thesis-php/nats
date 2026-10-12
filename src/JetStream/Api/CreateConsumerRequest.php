@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<ConsumerInfo>
@@ -23,7 +25,10 @@ final readonly class CreateConsumerRequest implements Request
         private string $consumer,
         private ConsumerConfig $config,
         private ?string $action = null,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+        Validate::name($this->consumer);
+    }
 
     public function endpoint(): string
     {

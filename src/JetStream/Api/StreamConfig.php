@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Exception\InvalidName;
+use Thesis\Nats\Exception\InvalidSubject;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -18,6 +21,8 @@ final readonly class StreamConfig implements \JsonSerializable
      * @param int<1, 5> $replicas
      * @param ?list<StreamSource> $sources
      * @param ?array<string, string> $metadata
+     * @throws InvalidName
+     * @throws InvalidSubject
      */
     public function __construct(
         public string $name,
@@ -57,7 +62,13 @@ final readonly class StreamConfig implements \JsonSerializable
         public ?bool $allowMsgSchedules = null,
         public ?bool $allowAtomicPublish = null,
         public ?PersistMode $persistMode = null,
-    ) {}
+    ) {
+        Validate::name($this->name);
+
+        foreach ($this->subjects ?? [] as $subject) {
+            Validate::subscribeSubject($subject);
+        }
+    }
 
     public function seal(): self
     {

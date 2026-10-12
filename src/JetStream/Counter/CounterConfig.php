@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Counter;
 
+use Thesis\Nats\Exception\InvalidName;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream\Api\StorageType;
 
 /**
@@ -14,11 +16,14 @@ final readonly class CounterConfig
     /**
      * @param non-empty-string $name
      * @param int<1, 5> $replicas
+     * @throws InvalidName
      */
     public function __construct(
         public string $name,
         public ?string $description = null,
         public StorageType $storageType = StorageType::File,
         public int $replicas = 1,
-    ) {}
+    ) {
+        Validate::name($this->name);
+    }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements PaginatedRequest<ConsumerInfoCollection>
@@ -17,7 +19,9 @@ final readonly class ConsumerListRequest implements PaginatedRequest
     public function __construct(
         private string $stream,
         private ?int $offset = null,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+    }
 
     public function withOffset(int $offset): self
     {

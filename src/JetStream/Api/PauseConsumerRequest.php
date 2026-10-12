@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<ConsumerPaused>
@@ -18,7 +20,10 @@ final readonly class PauseConsumerRequest implements Request
         private string $stream,
         private string $consumer,
         private ?\DateTimeImmutable $pauseUntil = null,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+        Validate::name($this->consumer);
+    }
 
     public function endpoint(): string
     {

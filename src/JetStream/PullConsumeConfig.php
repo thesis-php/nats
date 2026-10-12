@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -50,6 +51,10 @@ final readonly class PullConsumeConfig
         public ?string $group = null,
         public ?int $priority = null,
     ) {
+        if ($this->group !== null) {
+            Validate::priorityGroup($this->group);
+        }
+
         $expires ??= TimeSpan::fromSeconds(self::DEFAULT_PULL_EXPIRES_SECS);
 
         if ($maxMessages !== null && $maxBytes !== null) {

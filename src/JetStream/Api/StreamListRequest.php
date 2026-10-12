@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements PaginatedRequest<StreamInfoCollection>
@@ -17,7 +19,11 @@ final readonly class StreamListRequest implements PaginatedRequest
     public function __construct(
         private ?string $subject = null,
         private ?int $offset = null,
-    ) {}
+    ) {
+        if ($this->subject !== null) {
+            Validate::subscribeSubject($this->subject);
+        }
+    }
 
     public function withOffset(int $offset): self
     {
