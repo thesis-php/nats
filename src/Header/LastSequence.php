@@ -12,7 +12,7 @@ use Thesis\Nats\HeaderKey;
  */
 enum LastSequence: string implements HeaderKey
 {
-    case Header = 'Nast-Last-Sequence';
+    case Header = 'Nats-Last-Sequence';
 
     public function encode(mixed $value): string
     {

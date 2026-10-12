@@ -17,6 +17,7 @@ use Thesis\Nats\Header\ExpectedLastMsgID;
 use Thesis\Nats\Header\ExpectedLastSeq;
 use Thesis\Nats\Header\ExpectedLastSubjSeq;
 use Thesis\Nats\Header\ExpectedStream;
+use Thesis\Nats\Header\LastSequence;
 use Thesis\Nats\Header\MsgId;
 use Thesis\Nats\Header\MsgTtl;
 use Thesis\Nats\Header\ScheduleNext;
@@ -25,6 +26,7 @@ use Thesis\Nats\Header\Sequence;
 use Thesis\Nats\Header\Stream;
 use Thesis\Nats\Header\Subject;
 use Thesis\Nats\Header\Timestamp;
+use Thesis\Nats\Header\UpToSequence;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\ConsumerInfo;
@@ -108,6 +110,54 @@ final class JetStreamTest extends NatsTestCase
         $stream = $js->createOrUpdateStream(new StreamConfig($streamName, subjects: [$subject]));
 
         self::assertSame([$subject], $stream->info->config->subjects);
+
+        $stream->delete();
+    }
+
+    public function testDirectGetMultiLastSequenceHeaders(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $streamName = generateUniqueId(10);
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createOrUpdateStream(new StreamConfig($streamName, subjects: ["{$subject}.*"], allowDirect: true));
+
+        $js->publish("{$subject}.x", new Message('1'));
+        $js->publish("{$subject}.y", new Message('2'));
+        $js->publish("{$subject}.x", new Message('3'));
+
+        $reply = generateUniqueId(10);
+        $deliveries = $client->subscribeIterator($reply);
+
+        $client->publish(
+            subject: "\$JS.API.DIRECT.GET.{$streamName}",
+            message: new Message(json_encode(['multi_last' => ["{$subject}.*"], 'up_to_seq' => 2], JSON_THROW_ON_ERROR)),
+            replyTo: $reply,
+        );
+
+        $payloads = [];
+        $eob = null;
+
+        foreach ($deliveries as $delivery) {
+            $headers = $delivery->message->headers;
+            self::assertNotNull($headers);
+
+            if ($headers->statusCode() === Status::NoContent) {
+                $eob = $headers;
+                $deliveries->stop();
+
+                break;
+            }
+
+            $payloads[] = $delivery->message->payload;
+        }
+
+        self::assertSame(['1', '2'], $payloads);
+        self::assertNotNull($eob);
+        self::assertSame(2, $eob->get(LastSequence::Header));
+        self::assertSame(2, $eob->get(UpToSequence::Header));
 
         $stream->delete();
     }

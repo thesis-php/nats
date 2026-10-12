@@ -12,7 +12,7 @@ use Thesis\Nats\HeaderKey;
  */
 enum UpToSequence: string implements HeaderKey
 {
-    case Header = 'Nast-UpTo-Sequence';
+    case Header = 'Nats-UpTo-Sequence';
 
     public function encode(mixed $value): string
     {
