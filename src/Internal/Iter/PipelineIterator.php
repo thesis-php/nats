@@ -67,6 +67,11 @@ final class PipelineIterator implements Iterator, \IteratorAggregate
         );
     }
 
+    /**
+     * @template R
+     * @param \Closure(T): R $map
+     * @return static<R>
+     */
     public function map(\Closure $map): static
     {
         return new self(

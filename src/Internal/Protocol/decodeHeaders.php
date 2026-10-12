@@ -60,7 +60,7 @@ function decodeHeaders(string $encoded): Headers
 function parseStatus(string $line): ?array
 {
     $chunks = explode(' ', $line);
-    if (\count($chunks) > 1) {
+    if (isset($chunks[1])) {
         /**
          * @var numeric-string $code
          */
