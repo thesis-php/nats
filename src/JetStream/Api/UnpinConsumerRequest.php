@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<EmptyResponse>
@@ -19,7 +21,11 @@ final readonly class UnpinConsumerRequest implements Request
         private string $stream,
         private string $consumer,
         private string $group,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+        Validate::name($this->consumer);
+        Validate::priorityGroup($this->group);
+    }
 
     public function endpoint(): string
     {

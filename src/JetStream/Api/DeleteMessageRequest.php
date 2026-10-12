@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<MessageDeleted>
@@ -18,7 +20,9 @@ final readonly class DeleteMessageRequest implements Request
         private string $stream,
         private int $seq,
         private ?bool $noErase = null,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+    }
 
     public function endpoint(): string
     {

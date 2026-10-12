@@ -178,6 +178,21 @@ $nc->onError(static function (\Throwable $e): void {
 });
 ```
 
+#### Validation
+
+Subjects and names are checked before anything is sent, following the rules of nats-server and nats.go:
+
+- A subject is non-empty, without whitespace and empty tokens (a leading or trailing `.`, `..`): `Nats\Exception\InvalidSubject`.
+  `publish()`, `request()` and reply-to subjects must not contain the wildcards `*` and `>`, `subscribe()` and stream, filter and micro endpoint subjects
+  may contain `*` as a whole token and `>` as the last token. A wildcard inside a token, as in `foo*`, is a literal character.
+- A queue group is non-empty and without whitespace: `Nats\Exception\InvalidSubject`.
+- A stream, consumer or counter name is non-empty, at most 255 bytes, without `.`, `*`, `>`, `/`, `\`, whitespace and control characters: `Nats\Exception\InvalidName`.
+- A priority group of a pull consumer matches `^[a-zA-Z0-9/_=-]{1,16}$`, as nats-server requires: `Nats\Exception\InvalidName`.
+- A key-value or object store bucket name matches `^[a-zA-Z0-9_-]+$`: `Nats\Exception\InvalidBucketName`.
+- A key-value key matches `^[-/_=.a-zA-Z0-9]+$` and is a valid subject; the keys to watch may contain wildcards: `Nats\Exception\InvalidKey`.
+- An object name is non-empty: `Nats\Exception\ObjectIsInvalid`.
+- A micro endpoint name matches `^[A-Za-z0-9_-]+$` (`Nats\Exception\InvalidName`), a group name is a subject without `>` (`Nats\Exception\InvalidSubject`).
+
 ## Nats JetStream
 
 JetStream is the built-in NATS persistence system. The library provides both JetStream entity management (streams, consumers) and message publishing/consumption capabilities.
@@ -835,7 +850,8 @@ $srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
 
 #### Service endpoints
 
-After a service is created, endpoints can be added. By default, an endpoint is available via its name.
+After a service is created, endpoints can be added. An endpoint name is an identifier matching `^[A-Za-z0-9_-]+$`, it is reported in the service info and stats.
+The subject the endpoint listens on is set separately and defaults to the name.
 
 ```php
 <?php
@@ -854,14 +870,14 @@ $nc = new Nats\Client(
 $srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
 
 $srv
-    ->addEndpoint(new Micro\EndpointConfig('srv.echo'), static function (Micro\Request $request): void {
+    ->addEndpoint(new Micro\EndpointConfig('echo', subject: 'srv.echo'), static function (Micro\Request $request): void {
         $request->respond(new Micro\Response($request->data));
     });
 
 dump($nc->request('srv.echo', new Nats\Message('ping'))->message->payload);
 ```
 
-If the subject for the endpoint is more complex (e.g., contains a `*` or `>`), the subject can be specified separately from the name.
+The subject may contain wildcards: `*` as a whole token and `>` as the last token.
 
 ```php
 <?php
@@ -880,7 +896,7 @@ $nc = new Nats\Client(
 $srv = $nc->createService(new Micro\ServiceConfig('EchoService', '1.0.0'));
 
 $srv
-    ->addEndpoint(new Micro\EndpointConfig('srv.echo', subject: 'srv.echo.*'), static function (Micro\Request $request): void {
+    ->addEndpoint(new Micro\EndpointConfig('echo', subject: 'srv.echo.*'), static function (Micro\Request $request): void {
         $request->respond(new Micro\Response($request->subject));
     });
 
@@ -890,6 +906,7 @@ dump($nc->request('srv.echo.x', new Nats\Message('ping'))->message->payload);
 #### Groups
 
 Endpoints can also be aggregated using groups. A group represents a common subject prefix used by all endpoints associated with it.
+The prefix is prepended to the endpoint's subject (to its name, if no subject is set), the endpoint name stays the same.
 
 ```php
 <?php

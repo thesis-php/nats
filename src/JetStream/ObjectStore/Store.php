@@ -14,6 +14,7 @@ use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
 use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
@@ -218,6 +219,8 @@ final readonly class Store
      */
     public function info(string $name): ?ObjectInfo
     {
+        Validate::objectName($name);
+
         $msg = $this->stream->getLastMessageForSubject("\$O.{$this->name}.M." . self::base64encode($name));
 
         if ($msg !== null && $msg->payload !== null && $msg->payload !== '') {

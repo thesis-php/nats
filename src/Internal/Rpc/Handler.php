@@ -111,7 +111,7 @@ final class Handler
         );
 
         try {
-            $client->publish($subject, $message, $replyTo->subject, $cancellation);
+            $client->rawPublish($subject, $message, $replyTo->subject, $cancellation);
 
             return $deferred->getFuture()->await($cancellation);
         } finally {

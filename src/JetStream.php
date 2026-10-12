@@ -8,6 +8,7 @@ use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream\Api;
 use Thesis\Nats\JetStream\Api\Mapping;
 use Thesis\Nats\JetStream\Api\Result\Result;
@@ -429,6 +430,8 @@ final readonly class JetStream
      */
     public function deleteKeyValue(string $bucket): void
     {
+        Validate::bucket($bucket);
+
         try {
             $this->deleteStream("KV_{$bucket}");
         } catch (StreamNotFound) {
@@ -440,6 +443,8 @@ final readonly class JetStream
      */
     public function keyValue(string $bucket): ?KeyValue\Bucket
     {
+        Validate::bucket($bucket);
+
         $stream = $this->stream("KV_{$bucket}");
 
         if ($stream !== null) {
@@ -529,6 +534,8 @@ final readonly class JetStream
      */
     public function deleteObjectStore(string $bucket): void
     {
+        Validate::bucket($bucket);
+
         try {
             $this->deleteStream("OBJ_{$bucket}");
         } catch (StreamNotFound) {
@@ -540,6 +547,8 @@ final readonly class JetStream
      */
     public function objectStore(string $store): ?ObjectStore\Store
     {
+        Validate::bucket($store);
+
         $stream = $this->stream("OBJ_{$store}");
 
         if ($stream !== null) {
@@ -622,6 +631,8 @@ final readonly class JetStream
      */
     public function deleteCounter(string $name): void
     {
+        Validate::name($name);
+
         try {
             $this->deleteStream("CNT_{$name}");
         } catch (StreamNotFound) {
@@ -635,7 +646,7 @@ final readonly class JetStream
      */
     public function rawPublish(string $subject, mixed $payload = null, ?string $replyTo = null): void
     {
-        $this->nats->publish(
+        $this->nats->rawPublish(
             subject: $this->router->route($subject),
             message: new Message(
                 payload: $payload !== null ? $this->encoder->encode($payload) : null,
@@ -651,7 +662,7 @@ final readonly class JetStream
     public function rawRequest(string $endpoint, mixed $payload = null): Message
     {
         return $this->nats
-            ->request(
+            ->rawRequest(
                 subject: $this->router->route($endpoint),
                 message: new Message(
                     payload: $payload !== null ? $this->encoder->encode($payload) : null,

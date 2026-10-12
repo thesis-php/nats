@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<StreamPurged>
@@ -20,7 +22,13 @@ final readonly class PurgeStreamRequest implements Request
         private ?int $sequence = null,
         private ?int $keep = null,
         private ?string $subject = null,
-    ) {}
+    ) {
+        Validate::name($this->name);
+
+        if ($this->subject !== null && $this->subject !== '') {
+            Validate::subscribeSubject($this->subject);
+        }
+    }
 
     public function endpoint(): string
     {

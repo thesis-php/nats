@@ -125,7 +125,7 @@ final class ServiceTest extends NatsTestCase
             description: 'Service for schema testing',
         ));
 
-        $srv->addEndpoint(new EndpointConfig('schema.echo'), static function (Request $request): void {
+        $srv->addEndpoint(new EndpointConfig('echo', subject: 'schema.echo'), static function (Request $request): void {
             $request->respond(new Response($request->data));
         });
 
@@ -227,7 +227,7 @@ final class ServiceTest extends NatsTestCase
                 queueGroup: "q-{$i}",
             ));
 
-            $srv->addEndpoint(new EndpointConfig('svc.echo'), static function (Request $request) use ($i): void {
+            $srv->addEndpoint(new EndpointConfig('echo', subject: 'svc.echo'), static function (Request $request) use ($i): void {
                 $request->respond(new Response("echo#{$i}"));
             });
         }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  * @template-implements Request<GetMessageResponse>
@@ -21,7 +23,15 @@ final readonly class GetMessageRequest implements Request, \JsonSerializable
         private ?string $lastBySubject = null,
         private ?string $nextBySubject = null,
         private ?array $multiLast = null,
-    ) {}
+    ) {
+        Validate::name($this->stream);
+
+        foreach ([$this->lastBySubject, $this->nextBySubject, ...$this->multiLast ?? []] as $subject) {
+            if ($subject !== null) {
+                Validate::subscribeSubject($subject);
+            }
+        }
+    }
 
     public function endpoint(): string
     {

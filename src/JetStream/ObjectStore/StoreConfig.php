@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
+use Thesis\Nats\Exception\InvalidBucketName;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream\Api\Placement;
 use Thesis\Nats\JetStream\Api\StorageType;
 use Thesis\Time\TimeSpan;
@@ -17,6 +19,7 @@ final readonly class StoreConfig
      * @param non-empty-string $store
      * @param int<1, 5> $replicas
      * @param array<string, string> $metadata
+     * @throws InvalidBucketName
      */
     public function __construct(
         public string $store,
@@ -28,5 +31,7 @@ final readonly class StoreConfig
         public ?Placement $placement = null,
         public bool $compression = false,
         public array $metadata = [],
-    ) {}
+    ) {
+        Validate::bucket($this->store);
+    }
 }

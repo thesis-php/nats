@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Api;
 
+use Thesis\Nats\Exception\InvalidName;
+use Thesis\Nats\Exception\InvalidSubject;
+use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -20,6 +23,8 @@ final readonly class ConsumerConfig implements \JsonSerializable
      * @param ?list<non-empty-string> $filterSubjects
      * @param ?array<string, string> $metadata
      * @param ?list<non-empty-string> $priorityGroups
+     * @throws InvalidName
+     * @throws InvalidSubject
      */
     public function __construct(
         public ?string $name = null,
@@ -55,7 +60,34 @@ final readonly class ConsumerConfig implements \JsonSerializable
         public ?PriorityPolicy $priorityPolicy = null,
         public ?TimeSpan $priorityTimeout = null,
         public ?array $priorityGroups = null,
-    ) {}
+    ) {
+        foreach ([$this->name, $this->durableName] as $consumerName) {
+            // Empty means no name: the consumer gets a generated one.
+            if ($consumerName !== null && $consumerName !== '') {
+                Validate::name($consumerName);
+            }
+        }
+
+        if ($this->deliverSubject !== null) {
+            Validate::publishSubject($this->deliverSubject);
+        }
+
+        if ($this->deliverGroup !== null) {
+            Validate::queueGroup($this->deliverGroup);
+        }
+
+        if ($this->filterSubject !== null && $this->filterSubject !== '') {
+            Validate::subscribeSubject($this->filterSubject);
+        }
+
+        foreach ($this->filterSubjects ?? [] as $subject) {
+            Validate::subscribeSubject($subject);
+        }
+
+        foreach ($this->priorityGroups ?? [] as $group) {
+            Validate::priorityGroup($group);
+        }
+    }
 
     /**
      * @return array<non-empty-string, mixed>
