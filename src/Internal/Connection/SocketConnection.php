@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
+use Amp\Cancellation;
+use Amp\CancelledException;
 use Amp\DeferredFuture;
 use Amp\Socket\Socket;
 use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
+use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Nkey\Signer;
 use Thesis\Nats\Internal\Protocol;
@@ -81,7 +84,7 @@ final class SocketConnection implements Connection
         $this->handshake = $handshake;
 
         try {
-            $this->execute(new Protocol\Connect(
+            $this->connect(new Protocol\Connect(
                 verbose: $this->config->verbose,
                 pedantic: $this->config->pedantic,
                 tlsRequired: false,
@@ -111,7 +114,7 @@ final class SocketConnection implements Connection
         }
     }
 
-    public function execute(Protocol\Frame $frame): void
+    public function execute(Protocol\Frame $frame, ?Cancellation $cancellation = null): void
     {
         /** @var ?DeferredFuture<Protocol\Frame> $deferred */
         $deferred = null;
@@ -122,14 +125,40 @@ final class SocketConnection implements Connection
             $this->queue->push($deferred);
         }
 
-        $this->framer->writeFrame($frame);
+        try {
+            $this->framer->writeFrame($frame);
+        } catch (\Throwable $e) {
+            // The deferred is failed or dropped together with the rest of the queue once the connection is closed.
+            $deferred?->getFuture()->ignore();
 
-        if ($deferred !== null) {
-            $frame = $deferred->getFuture()->await();
+            throw $e;
+        }
 
-            if ($frame instanceof Protocol\Err) {
-                throw $frame->toException();
-            }
+        if ($deferred === null) {
+            return;
+        }
+
+        $future = $deferred->getFuture();
+
+        try {
+            $frame = $future->await($cancellation);
+        } catch (CancelledException $e) {
+            // The deferred stays in the queue, so that the acknowledgement of this command is not attributed
+            // to the next one. An -ERR that arrives for it later is routed the same way as in non-verbose mode.
+            $hooks = $this->hooks;
+            $future
+                ->map(static function (Protocol\Frame $frame) use ($hooks): void {
+                    if ($frame instanceof Protocol\Err) {
+                        $hooks->dispatch(new Hooks\ErrorReceived($frame));
+                    }
+                })
+                ->ignore();
+
+            throw $e;
+        }
+
+        if ($frame instanceof Protocol\Err) {
+            throw $frame->toException();
         }
     }
 
@@ -151,6 +180,7 @@ final class SocketConnection implements Connection
 
         $this->state = ConnectionState::GracefulClosed;
         $this->socket->close();
+        self::failPending($this->queue, new ConnectionWasClosed());
         $this->hooks->dispatch(Hooks\ConnectionClosed::Event);
     }
 
@@ -172,6 +202,8 @@ final class SocketConnection implements Connection
             &$handshake,
         ): void {
             while ($state === ConnectionState::Alive) {
+                $error = null;
+
                 try {
                     while (($frame = $framer->readFrame()) !== null) {
                         if ($frame instanceof Protocol\Ok || $frame instanceof Protocol\Err) {
@@ -213,13 +245,14 @@ final class SocketConnection implements Connection
                         }
                     }
                 } catch (\Throwable $e) {
-                    foreach ($queue as $deferred) {
-                        $deferred->error($e);
-                    }
+                    $error = $e;
 
                     $handshake?->error($e);
                     $handshake = null;
                 } finally {
+                    // Nothing acknowledges the commands still awaiting +OK any more.
+                    self::failPending($queue, $error ?? new ConnectionWasClosed());
+
                     if ($state !== ConnectionState::GracefulClosed) { // @phpstan-ignore notIdentical.alwaysTrue
                         $state = ConnectionState::Closed;
                         $socket->close();
@@ -234,6 +267,31 @@ final class SocketConnection implements Connection
         });
 
         $this->state = ConnectionState::Alive;
+    }
+
+    /**
+     * Sends CONNECT, which the server acknowledges in verbose mode.
+     *
+     * @throws \Throwable
+     */
+    private function connect(Protocol\Connect $connect): void
+    {
+        try {
+            $this->execute($connect);
+        } catch (ConnectionWasClosed $e) {
+            // The server closed the connection without acknowledging CONNECT, the same as without answering PING.
+            throw new ConnectionIsNotAvailable(previous: $e);
+        }
+    }
+
+    /**
+     * @param \SplQueue<DeferredFuture<Protocol\Frame>> $queue
+     */
+    private static function failPending(\SplQueue $queue, \Throwable $e): void
+    {
+        while (!$queue->isEmpty()) {
+            $queue->shift()->error($e);
+        }
     }
 
     /**
