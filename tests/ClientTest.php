@@ -5,11 +5,19 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\DeferredFuture;
+use Amp\Socket\Socket;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
+use Revolt\EventLoop;
 use Thesis\Nats\Exception\RequestHasNoResponders;
+use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Id;
+use function Amp\async;
+use function Amp\ByteStream\pipe;
 use function Amp\delay;
+use function Amp\Socket\connect;
+use function Amp\Socket\listen;
 
 #[CoversClass(Client::class)]
 final class ClientTest extends NatsTestCase
@@ -157,5 +165,131 @@ final class ClientTest extends NatsTestCase
         $subscription = $client->subscribe("{$id}.*", static function (): void {});
         $client->stop();
         $subscription->awaitCompletion();
+    }
+
+    public function testPublishReconnectsAfterFailedConnection(): void
+    {
+        $address = self::reserveFreePort();
+        $client = $this->clientWithUrls([$address]);
+
+        try {
+            $client->publish('events.happens', new Message('ok'));
+            self::fail('The server is not available yet, publish must fail.');
+        } catch (ServerIsNotAvailable) {
+        }
+
+        // The server becomes available on the same address: the client must establish a new connection.
+        $stopProxy = self::proxyToNats($address, $this->natsAddress());
+
+        try {
+            $id = Id\generateUniqueId();
+
+            /** @var DeferredFuture<Delivery> $deferred */
+            $deferred = new DeferredFuture();
+
+            $client->subscribe("{$id}.*", $deferred->complete(...));
+            $client->publish("{$id}.happens", new Message('ok'));
+
+            $delivery = $deferred->getFuture()->await(new TimeoutCancellation(5));
+            self::assertEquals("{$id}.happens", $delivery->subject);
+            self::assertEquals('ok', $delivery->message->payload);
+
+            $client->stop();
+        } finally {
+            $stopProxy();
+        }
+    }
+
+    public function testRequestReconnectsAfterFailedConnection(): void
+    {
+        $address = self::reserveFreePort();
+        $client = $this->clientWithUrls([$address]);
+
+        $id = Id\generateUniqueId();
+
+        try {
+            // Amp retries a refused connection a few times with an exponential backoff, so the failure takes a while.
+            $client->request("{$id}.happens", new Message('Are you ok?'), new TimeoutCancellation(30));
+            self::fail('The server is not available yet, request must fail.');
+        } catch (ServerIsNotAvailable) {
+        }
+
+        $stopProxy = self::proxyToNats($address, $this->natsAddress());
+
+        try {
+            $client->subscribe("{$id}.*", static function (Delivery $delivery): void {
+                $delivery->reply(new Message('ok'));
+            });
+
+            $delivery = $client->request("{$id}.happens", new Message('Are you ok?'), new TimeoutCancellation(5));
+            self::assertEquals('ok', $delivery->message->payload);
+
+            $client->stop();
+        } finally {
+            $stopProxy();
+        }
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testClientWithFailedConnectionIsDestroyedQuietly(): void
+    {
+        $client = new Client(new Config(urls: [self::reserveFreePort()], connectionTimeout: 1));
+
+        try {
+            $client->publish('events.happens', new Message('ok'));
+            self::fail('The server is not available, publish must fail.');
+        } catch (ServerIsNotAvailable) {
+        }
+
+        unset($client);
+        // The client participates in reference cycles, so its destructor runs only on cycle collection.
+        gc_collect_cycles();
+    }
+
+    /**
+     * @return non-empty-string an address on which nothing is listening at the moment
+     */
+    private static function reserveFreePort(): string
+    {
+        $server = listen('127.0.0.1:0');
+        $address = $server->getAddress()->toString();
+        $server->close();
+
+        \assert($address !== '');
+
+        return $address;
+    }
+
+    /**
+     * Starts a tcp proxy forwarding every connection accepted on $listen to the real nats server at $upstream.
+     *
+     * @param non-empty-string $listen
+     * @param non-empty-string $upstream
+     * @return \Closure(): void stops the proxy
+     */
+    private static function proxyToNats(string $listen, string $upstream): \Closure
+    {
+        $server = listen($listen);
+
+        $forward = static function (Socket $from, Socket $to): void {
+            try {
+                pipe($from, $to);
+            } catch (\Throwable) {
+            } finally {
+                $from->close();
+                $to->close();
+            }
+        };
+
+        EventLoop::queue(static function () use ($server, $upstream, $forward): void {
+            while (($client = $server->accept()) !== null) {
+                $nats = connect($upstream);
+
+                async($forward, $client, $nats)->ignore();
+                async($forward, $nats, $client)->ignore();
+            }
+        });
+
+        return $server->close(...);
     }
 }
