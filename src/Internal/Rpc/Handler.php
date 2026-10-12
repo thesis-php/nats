@@ -102,7 +102,8 @@ final class Handler
                 if ($status === Status::NoResponders) {
                     $deferred->error(new RequestHasNoResponders());
                 } elseif ($status === Status::NoMessages) {
-                    $deferred->error(new MessageNotFound());
+                    // Direct get answers with a bare 404 status instead of an API error, so mimic the API one.
+                    $deferred->error(new MessageNotFound(Status::NoMessages->value, 10037, 'no message found'));
                 } else {
                     $deferred->complete($delivery);
                 }
