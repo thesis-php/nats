@@ -20,6 +20,11 @@ final readonly class Description implements \Stringable
     public const string NoResults = 'no results';
     public const string RequestTimeout = 'request timeout';
     public const string Eob = 'eob';
+    public const string ConsumerIsPushBased = 'consumer is push based';
+    public const string MaxWaitingExceeded = 'exceeded maxwaiting';
+    public const string MaxRequestBatchExceeded = 'exceeded maxrequestbatch';
+    public const string MaxRequestExpiresExceeded = 'exceeded maxrequestexpires';
+    public const string MaxRequestMaxBytesExceeded = 'exceeded maxrequestmaxbytes';
     public const string OK = 'OK';
 
     /**
@@ -35,6 +40,22 @@ final readonly class Description implements \Stringable
     public function is(string ...$values): bool
     {
         return \in_array($this->value, $values, true);
+    }
+
+    /**
+     * Some descriptions carry a variable suffix, e.g. "exceeded maxrequestbatch of 10".
+     *
+     * @param self::* ...$prefixes
+     */
+    public function startsWith(string ...$prefixes): bool
+    {
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($this->value, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -4,13 +4,26 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Amp\DeferredFuture;
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Thesis\Nats\Delivery;
+use Thesis\Nats\Description;
+use Thesis\Nats\Exception\MaxRequestBatchExceeded;
+use Thesis\Nats\Exception\MaxRequestExpiresExceeded;
+use Thesis\Nats\Exception\MaxRequestMaxBytesExceeded;
+use Thesis\Nats\Header\StatusCode;
+use Thesis\Nats\Header\StatusDescription;
+use Thesis\Nats\Headers;
 use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\ConsumerConfig;
 use Thesis\Nats\JetStream\Api\StreamConfig;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\Message;
+use Thesis\Nats\NatsException;
 use Thesis\Nats\NatsTestCase;
+use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
@@ -265,5 +278,130 @@ final class PullConsumerTest extends NatsTestCase
         self::assertSame(0, $consumer->actualInfo()->numPending);
 
         $stream->delete();
+    }
+
+    /**
+     * @param non-empty-string $description
+     */
+    #[DataProvider('provideConsumePullsAgainAfterServerDroppedPullRequestsCases')]
+    public function testConsumePullsAgainAfterServerDroppedPullRequests(Status $status, string $description): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+        $consumerName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: $consumerName, ackPolicy: AckPolicy::Explicit),
+        );
+
+        $pulls = 0;
+        /** @var DeferredFuture<int> $repulled */
+        $repulled = new DeferredFuture();
+
+        // Observe the pull requests alongside the server and answer the first one as the server
+        // does when it drops waiting requests, e.g. on a consumer leader change.
+        $observer = $nc->subscribe(
+            subject: "\$JS.API.CONSUMER.MSG.NEXT.{$streamName}.{$consumerName}",
+            handler: static function (Delivery $delivery) use ($nc, $status, $description, &$pulls, $repulled): void {
+                /** @var array{batch: int, ...} $pull */
+                $pull = json_decode($delivery->message->payload ?? '', true, flags: JSON_THROW_ON_ERROR);
+
+                if (++$pulls === 1) {
+                    \assert($delivery->replyTo !== null);
+
+                    $nc->publish($delivery->replyTo, new Message(headers: (new Headers())
+                        ->with(StatusCode::Header, $status)
+                        ->with(StatusDescription::Header, new Description($description))));
+                } elseif (!$repulled->isComplete()) {
+                    $repulled->complete($pull['batch']);
+                }
+            },
+        );
+
+        $subscription = $consumer->pull(static function (): void {});
+
+        // Without a new pull the consumer would wait for the missed heartbeats, i.e. 30 seconds by default.
+        $batch = $repulled->getFuture()->await(new TimeoutCancellation(5));
+
+        self::assertSame(500, $batch);
+
+        $subscription->stop();
+        $observer->stop();
+        $stream->delete();
+    }
+
+    /**
+     * @return iterable<string, array{Status, non-empty-string}>
+     */
+    public static function provideConsumePullsAgainAfterServerDroppedPullRequestsCases(): iterable
+    {
+        yield 'pin id mismatch' => [Status::PinIdMismatch, 'Nats-Pin-Id mismatch'];
+        yield 'leadership change' => [Status::Conflict, 'Leadership Change'];
+    }
+
+    /**
+     * @param class-string<NatsException> $exception
+     */
+    #[DataProvider('provideConsumeFailsWhenServerRejectsPullRequestsCases')]
+    public function testConsumeFailsWhenServerRejectsPullRequests(
+        ConsumerConfig $consumerConfig,
+        PullConsumeConfig $consumeConfig,
+        string $exception,
+    ): void {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: $streamName,
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer($consumerConfig);
+
+        $subscription = $consumer->pull(static function (): void {}, $consumeConfig);
+
+        try {
+            $subscription->awaitCompletion(new TimeoutCancellation(5));
+            self::fail('The subscription must fail.');
+        } catch (NatsException $e) {
+            self::assertInstanceOf($exception, $e);
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    /**
+     * @return iterable<string, array{ConsumerConfig, PullConsumeConfig, class-string<NatsException>}>
+     */
+    public static function provideConsumeFailsWhenServerRejectsPullRequestsCases(): iterable
+    {
+        yield 'max request batch' => [
+            new ConsumerConfig(durableName: generateUniqueId(10), maxRequestBatch: 10),
+            new PullConsumeConfig(maxMessages: 100),
+            MaxRequestBatchExceeded::class,
+        ];
+
+        yield 'max request expires' => [
+            new ConsumerConfig(durableName: generateUniqueId(10), maxRequestExpires: TimeSpan::fromSeconds(5)),
+            new PullConsumeConfig(expires: TimeSpan::fromSeconds(10)),
+            MaxRequestExpiresExceeded::class,
+        ];
+
+        yield 'max request max bytes' => [
+            new ConsumerConfig(durableName: generateUniqueId(10), maxRequestMaxBytes: 100),
+            new PullConsumeConfig(maxBytes: 1_000),
+            MaxRequestMaxBytesExceeded::class,
+        ];
     }
 }
