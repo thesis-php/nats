@@ -50,4 +50,30 @@ abstract class NatsTestCase extends TestCase
     {
         return $this->jwtClient = new Client(Config::fromURI($this->jwtDsn));
     }
+
+    /**
+     * Creates a client with the same credentials as the default one, but pointed at the given hosts.
+     *
+     * @param non-empty-list<non-empty-string> $urls
+     */
+    final protected function clientWithUrls(array $urls): Client
+    {
+        $config = Config::fromURI($this->dsn);
+
+        return $this->client = new Client(new Config(
+            urls: $urls,
+            connectionTimeout: 1,
+            user: $config->user,
+            password: $config->password,
+            noResponders: $config->noResponders,
+        ));
+    }
+
+    /**
+     * @return non-empty-string the host:port of the real nats server
+     */
+    final protected function natsAddress(): string
+    {
+        return Config::fromURI($this->dsn)->urls[0];
+    }
 }

@@ -140,7 +140,14 @@ final class PushConsumerTest extends NatsTestCase
         self::assertSame(1, $consumer->actualInfo()->numPending);
 
         $subscription = $consumer->push(static function (JetStreamDelivery $delivery, Subscription $subscription): void {
-            $delivery->nack();
+            // Nack the first delivery and stop only once it is redelivered: stopping right after the nack
+            // races with the server, which does not redeliver if the unsubscribe wins.
+            if ($delivery->metadata?->delivered === 1) {
+                $delivery->nack();
+
+                return;
+            }
+
             $subscription->stop();
         });
 

@@ -38,6 +38,12 @@ final class Client
     /** @var ?Future<Connection\Connection> */
     private ?Future $connection = null;
 
+    /**
+     * The established connection, kept separately from the future so that it can be closed
+     * synchronously in the destructor, where awaiting is not allowed.
+     */
+    private ?Connection\Connection $activeConnection = null;
+
     /** @var ?Future<Rpc\Handler> */
     private ?Future $rpc = null;
 
@@ -187,12 +193,18 @@ final class Client
         ?Cancellation $cancellation = null,
     ): Delivery {
         $subscribe = $this->subscribeCallback(...);
-        $this->rpc ??= async(static function () use (
-            $subscribe,
-            $cancellation,
-        ): Rpc\Handler {
+        $this->rpc ??= async(function () use ($subscribe): Rpc\Handler {
             $handler = new Rpc\Handler();
-            $handler->setup($subscribe, $cancellation);
+
+            try {
+                // The inbox subscription is shared by all requests, so the caller's cancellation must not interrupt it.
+                $handler->setup($subscribe);
+            } catch (\Throwable $e) {
+                // Forget the failed setup so that the next request tries again.
+                $this->rpc = null;
+
+                throw $e;
+            }
 
             return $handler;
         });
@@ -246,9 +258,13 @@ final class Client
 
     public function __destruct()
     {
-        if (\PHP_VERSION_ID >= 80400) {
-            $this->stop();
-        }
+        // Awaiting is not allowed here: the destructor may run outside of the event loop (e.g. on shutdown).
+        [$connection, $this->activeConnection] = [$this->activeConnection, null];
+        $this->connection = null;
+        $this->rpc = null;
+        $this->subscribers = [];
+
+        $connection?->close();
     }
 
     /**
@@ -328,7 +344,7 @@ final class Client
         \Closure $do,
         ?Cancellation $cancellation = null,
     ): void {
-        $connection = $this->connection?->await($cancellation);
+        $connection = $this->connection !== null ? self::awaitOrNull($this->connection, $cancellation) : null;
         if ($connection === null) {
             return;
         }
@@ -341,7 +357,7 @@ final class Client
             }
         }
 
-        $rpc = $this->rpc?->await($cancellation);
+        $rpc = $this->rpc !== null ? self::awaitOrNull($this->rpc, $cancellation) : null;
 
         if ($rpc !== null) {
             $completes[] = async($rpc->shutdown(...), $cancellation);
@@ -353,14 +369,46 @@ final class Client
             $this->subscribers = [];
             $this->rpc = null;
             $this->connection = null;
+            $this->activeConnection = null;
             $connection->close();
+        }
+    }
+
+    /**
+     * Awaits the future, returning null if it has failed: the failure has already been reported
+     * to the caller who initiated the operation, and there is nothing to clean up.
+     *
+     * @template T
+     * @param Future<T> $future
+     * @return ?T
+     * @throws \Throwable if the await was interrupted by $cancellation while the future is still pending
+     */
+    private static function awaitOrNull(Future $future, ?Cancellation $cancellation = null): mixed
+    {
+        try {
+            return $future->await($cancellation);
+        } catch (\Throwable $e) {
+            if (!$future->isComplete()) {
+                throw $e;
+            }
+
+            return null;
         }
     }
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
         $this->connection ??= async(weakClosure(function () use ($cancellation): Connection\Connection {
-            $connection = $this->connectionFactory->connect();
+            try {
+                $connection = $this->connectionFactory->connect();
+            } catch (\Throwable $e) {
+                // Forget the failed attempt so that the next call tries to connect again.
+                $this->connection = null;
+
+                throw $e;
+            }
+
+            $this->activeConnection = $connection;
             $connection->hooks()->onMessage($this->invokeSubscriber(...));
             $connection->hooks()->onClose(function () use ($cancellation): void {
                 $e = new ConnectionWasClosed();

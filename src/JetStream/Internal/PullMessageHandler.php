@@ -110,8 +110,9 @@ final class PullMessageHandler
 
     private function digest(NatsDelivery $delivery, Subscription $subscription): void
     {
-        $statusCode = $delivery->message->headers?->statusCode();
-        $statusDescription = $delivery->message->headers?->statusDescription();
+        $headers = $delivery->message->headers;
+        $statusCode = $headers?->statusCode();
+        $statusDescription = $headers?->statusDescription();
 
         if ($statusCode === Status::BadRequest) {
             $subscription->error(new BadRequestSent($statusDescription->value ?? ''));
@@ -123,8 +124,8 @@ final class PullMessageHandler
         } elseif ($statusDescription?->is(Description::LeadershipChange) ?? false) {
             $this->reset();
         } elseif ($statusDescription?->is(Description::MaxBytesExceeded, Description::BatchCompleted, Description::RequestTimeout) ?? false) {
-            $messagesLeft = $delivery->message->headers->get(Header\PendingMessages::header()) ?? 0;
-            $bytesLeft = $delivery->message->headers->get(Header\PendingBytes::header()) ?? 0;
+            $messagesLeft = $headers->get(Header\PendingMessages::header()) ?? 0;
+            $bytesLeft = $headers->get(Header\PendingBytes::header()) ?? 0;
 
             $this->pendingMessages -= $messagesLeft;
 
