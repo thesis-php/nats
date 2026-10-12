@@ -83,7 +83,13 @@ final class SubscriptionHandler
                         /** @phpstan-ignore argument.type */
                         $handler($op->value, $subscription);
                     } catch (\Throwable $e) {
-                        $unsubscribe();
+                        try {
+                            $unsubscribe();
+                        } catch (\Throwable) {
+                            // The connection is gone and so is the server-side subscription: the handler's error
+                            // is the one to report, and it must not be lost in the event loop.
+                        }
+
                         $completeSubscriptionMarker->error($e);
                         $queue->complete();
 

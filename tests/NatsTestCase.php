@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Amp\TimeoutCancellation;
 use PHPUnit\Framework\TestCase;
 
 abstract class NatsTestCase extends TestCase
@@ -17,6 +18,9 @@ abstract class NatsTestCase extends TestCase
     private ?Client $client = null;
 
     private ?Client $jwtClient = null;
+
+    /** The client of the system account, used to manage the server from the tests. */
+    private ?Client $sysClient = null;
 
     protected function setUp(): void
     {
@@ -39,6 +43,7 @@ abstract class NatsTestCase extends TestCase
     {
         $this->client?->stop();
         $this->jwtClient?->stop();
+        $this->sysClient?->stop();
     }
 
     final protected function client(): Client
@@ -75,6 +80,75 @@ abstract class NatsTestCase extends TestCase
             password: $config->password,
             noResponders: $config->noResponders,
         ));
+    }
+
+    /**
+     * Creates a client with the same credentials as the default one, but connecting under the given name,
+     * so that the server-side connection can be found, see kick().
+     *
+     * @param non-empty-string $name
+     */
+    final protected function clientNamed(string $name): Client
+    {
+        $config = $this->config();
+
+        return $this->clientWithConfig(new Config(
+            urls: $config->urls,
+            user: $config->user,
+            password: $config->password,
+            noResponders: $config->noResponders,
+            clientName: $name,
+        ));
+    }
+
+    /**
+     * Closes the connection of the client connected under the given name from the server side,
+     * the same way `nats server kick` does it.
+     *
+     * @param non-empty-string $name
+     */
+    final protected function kick(string $name): void
+    {
+        $sys = $this->sysClient ??= new Client(new Config(
+            urls: $this->config()->urls,
+            user: 'admin',
+            password: 'Pswd1',
+            noResponders: true,
+        ));
+
+        /** @var array{server: array{id: non-empty-string}, data: array{connections: list<array{cid: int, name?: string}>}} $connz */
+        $connz = self::decodeServerResponse(
+            $sys->request('$SYS.REQ.SERVER.PING.CONNZ', new Message('{"acc": "CLIENT"}'), new TimeoutCancellation(5)),
+        );
+
+        foreach ($connz['data']['connections'] as $connection) {
+            if (($connection['name'] ?? null) === $name) {
+                self::decodeServerResponse(
+                    $sys->request(
+                        "\$SYS.REQ.SERVER.{$connz['server']['id']}.KICK",
+                        new Message(json_encode(['cid' => $connection['cid']], JSON_THROW_ON_ERROR)),
+                        new TimeoutCancellation(5),
+                    ),
+                );
+
+                return;
+            }
+        }
+
+        self::fail("The client '{$name}' is not connected.");
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function decodeServerResponse(Delivery $delivery): array
+    {
+        /** @var array<string, mixed> $response */
+        $response = json_decode($delivery->message->payload ?? '', associative: true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertArrayNotHasKey('error', $response, $delivery->message->payload ?? '');
+
+        return $response;
     }
 
     /**

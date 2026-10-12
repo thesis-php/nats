@@ -148,6 +148,24 @@ final class Client
             cancellation: $cancellation,
         );
 
+        // The iterator ends the way the subscription does: cleanly after stop() or drain(), with the error
+        // after a failure, e.g. the connection closed by the server. Otherwise the consumer would wait forever.
+        async(static function () use ($queue, $subscription): void {
+            try {
+                $subscription->awaitCompletion();
+            } catch (\Throwable $e) {
+                if (!$queue->isComplete()) {
+                    $queue->error($e);
+                }
+
+                return;
+            }
+
+            if (!$queue->isComplete()) {
+                $queue->complete();
+            }
+        })->ignore();
+
         return Iter\PipelineIterator::fromQueue($queue, $subscription);
     }
 
@@ -421,14 +439,13 @@ final class Client
     }
 
     /**
+     * Shuts the client down from the user side: the subscriptions are completed over the still open connection
+     * (drain needs it to receive the remaining messages), then the connection is closed.
+     *
      * @param \Closure(Subscription): void $do
-     * @param ?\Throwable $reason the error the pending requests are completed with, ConnectionWasClosed by default
      */
-    private function disconnect(
-        \Closure $do,
-        ?Cancellation $cancellation = null,
-        ?\Throwable $reason = null,
-    ): void {
+    private function disconnect(\Closure $do, ?Cancellation $cancellation = null): void
+    {
         $connection = $this->connection !== null ? self::awaitOrNull($this->connection, $cancellation) : null;
         if ($connection === null) {
             return;
@@ -445,7 +462,7 @@ final class Client
         $rpc = $this->rpc !== null ? self::awaitOrNull($this->rpc, $cancellation) : null;
 
         if ($rpc !== null) {
-            $completes[] = async($rpc->shutdown(...), $cancellation, $reason);
+            $completes[] = async($rpc->shutdown(...), $cancellation);
         }
 
         try {
@@ -456,6 +473,56 @@ final class Client
             $this->connection = null;
             $this->activeConnection = null;
             $connection->close();
+        }
+    }
+
+    /**
+     * Tears the client down once the connection has been closed from the outside: by the server (e.g. a kick
+     * or a restart) or because of a fatal server error. Nothing is sent over the connection, it is gone and so
+     * are the server-side subscriptions: the subscriptions and the pending requests are only failed locally.
+     *
+     * @param ?\Throwable $error the fatal server error that closed the connection, if any
+     */
+    private function closed(Connection\Connection $connection, ?\Throwable $error): void
+    {
+        if ($this->activeConnection !== $connection) {
+            // Closed by stop() or drain(), which have already torn everything down, or superseded by a new connection.
+            return;
+        }
+
+        // Detached before anything is failed, so that the subscriptions find nothing to unsubscribe from
+        // and the next call establishes a new connection instead of reusing the closed one.
+        [$subscribers, $this->subscribers] = [$this->subscribers, []];
+        [$rpc, $this->rpc] = [$this->rpc, null];
+        $this->connection = null;
+        $this->activeConnection = null;
+
+        $e = $error ?? new ConnectionWasClosed();
+        $completes = [];
+
+        foreach ($subscribers as $subscriber) {
+            if ($subscriber->subscription !== null) {
+                $completes[] = async($subscriber->subscription->error(...), $e);
+            }
+        }
+
+        // A pending setup has no requests to fail yet: its failure is thrown to the request that started it.
+        if ($rpc !== null && $rpc->isComplete()) {
+            $completes[] = async(static function () use ($rpc, $e): void {
+                self::awaitOrNull($rpc)?->shutdown(reason: $e);
+            });
+        }
+
+        try {
+            // A subscription may refuse to fail (e.g. an onComplete callback throws): the others must still be failed,
+            // and nothing may escape to the event loop, which has no one to catch it.
+            Future\awaitAll($completes);
+        } finally {
+            if ($error !== null) {
+                // Reported after the teardown, so that the callback observes the subscriptions already failed
+                // and the next call establishing a new connection.
+                $this->reportError($error);
+            }
         }
     }
 
@@ -483,7 +550,7 @@ final class Client
 
     private function connection(?Cancellation $cancellation = null): Connection\Connection
     {
-        $this->connection ??= async(weakClosure(function () use ($cancellation): Connection\Connection {
+        $this->connection ??= async(weakClosure(function (): Connection\Connection {
             try {
                 $connection = $this->connectionFactory->connect();
             } catch (\Throwable $e) {
@@ -502,18 +569,8 @@ final class Client
             $connection->hooks()->onError(function (Hooks\ErrorReceived $event) use ($connection, &$reason): void {
                 $reason ??= $this->handleError($event, $connection);
             });
-            $connection->hooks()->onClose(function () use ($cancellation, &$reason): void {
-                $e = $reason ?? new ConnectionWasClosed();
-
-                try {
-                    $this->disconnect(static fn(Subscription $subscription) => $subscription->error($e, $cancellation), reason: $e);
-                } finally {
-                    if ($reason !== null) {
-                        // Reported after the teardown, so that the callback observes the subscriptions already failed
-                        // and the next call establishing a new connection.
-                        $this->reportError($reason);
-                    }
-                }
+            $connection->hooks()->onClose(function () use ($connection, &$reason): void {
+                $this->closed($connection, $reason);
             });
 
             return $connection;
