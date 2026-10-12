@@ -9,7 +9,6 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Micro\EndpointInfo;
 use Thesis\Nats\Micro\EndpointStats;
 use Thesis\Nats\Micro\Request;
-use Thesis\Time\TimeSpan;
 
 /**
  * @internal
@@ -22,7 +21,8 @@ final class EndpointHandler
     /** @var non-negative-int */
     private int $errors = 0;
 
-    private float $processingTime = 0;
+    /** @var non-negative-int nanoseconds */
+    private int $processingTime = 0;
 
     private ?\Throwable $lastError = null;
 
@@ -33,12 +33,11 @@ final class EndpointHandler
         public readonly EndpointInfo $info,
         private readonly mixed $handler,
         private readonly Encoder $encoder,
-        private readonly \DateTimeZone $tz = new \DateTimeZone('UTC'),
     ) {}
 
     public function handle(Delivery $delivery): void
     {
-        $start = new \DateTimeImmutable(timezone: $this->tz);
+        $start = (int) hrtime(true);
 
         try {
             ($this->handler)(new Request($delivery, $this->encoder));
@@ -47,7 +46,7 @@ final class EndpointHandler
             $this->lastError = $e;
         } finally {
             ++$this->requests;
-            $this->processingTime += TimeSpan::diff(new \DateTimeImmutable(timezone: $this->tz), $start)->toNanoseconds();
+            $this->processingTime += max(0, (int) hrtime(true) - $start);
         }
     }
 
@@ -69,7 +68,7 @@ final class EndpointHandler
             numErrors: $this->errors,
             lastError: $this->lastError,
             processingTime: $this->processingTime,
-            averageProcessingTime: $this->requests > 0 ? $this->processingTime / $this->requests : 0,
+            averageProcessingTime: $this->requests > 0 ? max(0, intdiv($this->processingTime, $this->requests)) : 0,
         );
     }
 }

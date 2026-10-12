@@ -26,6 +26,7 @@ final readonly class InfoResponse implements \JsonSerializable
             'name' => $this->info->identity->name,
             'id' => $this->info->identity->id,
             'version' => $this->info->identity->version,
+            'description' => $this->info->description,
             'metadata' => $this->info->identity->metadata,
             'endpoints' => array_map(
                 static fn(EndpointInfo $endpointInfo): array => [

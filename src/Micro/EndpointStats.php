@@ -15,6 +15,8 @@ final class EndpointStats
      * @param ?non-empty-string $queueGroup
      * @param non-negative-int $numRequests
      * @param non-negative-int $numErrors
+     * @param non-negative-int $processingTime total processing time in nanoseconds
+     * @param non-negative-int $averageProcessingTime average processing time in nanoseconds
      */
     public function __construct(
         public string $name,
@@ -23,8 +25,8 @@ final class EndpointStats
         public int $numRequests = 0,
         public int $numErrors = 0,
         public ?\Throwable $lastError = null,
-        public float $processingTime = 0,
-        public float $averageProcessingTime = 0,
+        public int $processingTime = 0,
+        public int $averageProcessingTime = 0,
         public ?string $data = null,
     ) {}
 }
