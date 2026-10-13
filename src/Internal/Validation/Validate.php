@@ -40,7 +40,10 @@ final class Validate
     public static function duration(float $seconds, string $what): void
     {
         if (!is_finite($seconds) || $seconds <= 0) {
-            throw new \InvalidArgumentException("The {$what} must be a positive finite number of seconds, {$seconds} given.");
+            // NAN is not interpolated: PHP 8.5 warns when it is coerced to string.
+            $given = is_nan($seconds) ? 'NAN' : (string) $seconds;
+
+            throw new \InvalidArgumentException("The {$what} must be a positive finite number of seconds, {$given} given.");
         }
     }
 

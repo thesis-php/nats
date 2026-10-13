@@ -246,7 +246,7 @@ final class RequestTest extends NatsTestCase
     }
 
     /**
-     * @param array{maxMessages?: int, stall?: float, timeout?: float} $arguments
+     * @param array{stall?: float, timeout?: float} $arguments
      */
     #[TestWith([['timeout' => -1.0]])]
     #[TestWith([['timeout' => 0.0]])]
@@ -254,15 +254,29 @@ final class RequestTest extends NatsTestCase
     #[TestWith([['timeout' => NAN]])]
     #[TestWith([['timeout' => 1.0, 'stall' => 0.0]])]
     #[TestWith([['timeout' => 1.0, 'stall' => INF]])]
-    #[TestWith([['maxMessages' => 0]])]
-    #[TestWith([['maxMessages' => -1]])]
-    public function testRequestManyRejectsInvalidNumbersBeforeSubscribing(array $arguments): void
+    public function testRequestManyRejectsInvalidDurationsBeforeSubscribing(array $arguments): void
     {
         $client = $this->client();
 
         try {
             $client->requestMany(Id\generateUniqueId() . '.scatter', new Message('?'), ...$arguments);
-            self::fail('The arguments are invalid, the request must be refused.');
+            self::fail('The durations are invalid, the request must be refused.');
+        } catch (\InvalidArgumentException) {
+        }
+
+        self::assertSame([], self::subscribers($client));
+    }
+
+    #[TestWith([0])]
+    #[TestWith([-1])]
+    public function testRequestManyRejectsNonPositiveMaxMessagesBeforeSubscribing(int $maxMessages): void
+    {
+        $client = $this->client();
+
+        try {
+            /** @phpstan-ignore argument.type */
+            $client->requestMany(Id\generateUniqueId() . '.scatter', new Message('?'), maxMessages: $maxMessages, timeout: 1);
+            self::fail('The maxMessages is invalid, the request must be refused.');
         } catch (\InvalidArgumentException) {
         }
 
