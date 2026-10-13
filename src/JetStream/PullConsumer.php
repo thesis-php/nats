@@ -7,9 +7,9 @@ namespace Thesis\Nats\JetStream;
 use Amp\Cancellation;
 use Amp\Future;
 use Amp\Pipeline;
-use Revolt\EventLoop;
 use Thesis\Nats\Client;
 use Thesis\Nats\Internal\Id;
+use Thesis\Nats\Internal\Timer;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Api\Router;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
@@ -84,14 +84,13 @@ final class PullConsumer
         );
 
         if ($config->noWait !== true) {
-            $callbackId = EventLoop::delay(
+            $timer = Timer::delay(
                 $config->maxWait->add(TimeSpan::fromSeconds(1))->toSeconds(),
                 static fn() => $subscription->stop(),
             );
 
-            $subscription = $subscription->onComplete(
-                static fn() => EventLoop::cancel($callbackId),
-            );
+            // Keeps the timer referenced, and so scheduled, until the subscription completes.
+            $subscription = $subscription->onComplete($timer->cancel(...));
         }
 
         $watchdog->subscribe($subscription->error(...));

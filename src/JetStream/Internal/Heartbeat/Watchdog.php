@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\Internal\Heartbeat;
 
-use Revolt\EventLoop;
 use Thesis\Nats\Exception\NoHeartbeatsReceived;
+use Thesis\Nats\Internal\Timer;
 use Thesis\Time\TimeSpan;
 
 /**
@@ -13,7 +13,7 @@ use Thesis\Time\TimeSpan;
  */
 final class Watchdog
 {
-    private ?string $callbackId = null;
+    private ?Timer $timer = null;
 
     private readonly float $interval;
 
@@ -68,22 +68,14 @@ final class Watchdog
     public function stop(): void
     {
         $this->missed = 0;
-
-        if ($this->callbackId !== null) {
-            EventLoop::cancel($this->callbackId);
-            $this->callbackId = null;
-        }
-    }
-
-    public function __destruct()
-    {
-        $this->stop();
+        $this->timer?->cancel();
+        $this->timer = null;
     }
 
     private function schedule(): void
     {
         if ($this->interval > 0) {
-            $this->callbackId = EventLoop::repeat($this->interval, $this->func);
+            $this->timer = Timer::repeat($this->interval, $this->func);
         }
     }
 }

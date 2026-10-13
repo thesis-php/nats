@@ -32,6 +32,33 @@ final class Validate
     private const string PRIORITY_GROUP_REGEX = '/^[a-zA-Z0-9\/_=-]{1,16}$/';
 
     /**
+     * A timeout, a stall or another duration in seconds.
+     *
+     * @param non-empty-string $what
+     * @throws \InvalidArgumentException
+     */
+    public static function duration(float $seconds, string $what): void
+    {
+        if (!is_finite($seconds) || $seconds <= 0) {
+            throw new \InvalidArgumentException("The {$what} must be a positive finite number of seconds, {$seconds} given.");
+        }
+    }
+
+    /**
+     * A number of messages, which the phpdoc types promise to be positive: checked anyway, since zero
+     * would make the server remove a subscription the client keeps waiting on.
+     *
+     * @param non-empty-string $what
+     * @throws \InvalidArgumentException
+     */
+    public static function count(int $count, string $what): void
+    {
+        if ($count <= 0) {
+            throw new \InvalidArgumentException("The {$what} must be positive, {$count} given.");
+        }
+    }
+
+    /**
      * A literal subject, e.g. of publish, request or reply-to: wildcards are not allowed.
      *
      * @throws InvalidSubject

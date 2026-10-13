@@ -15,9 +15,12 @@ use Thesis\Nats\NatsException;
 interface Connection
 {
     /**
+     * Writes the frames at once, in verbose mode then waits for the acknowledgements of all of them.
+     *
+     * @param Protocol\Frame|non-empty-list<Protocol\Frame> $frames
      * @throws NatsException
      */
-    public function execute(Protocol\Frame $frame, ?Cancellation $cancellation = null): void;
+    public function execute(Protocol\Frame|array $frames, ?Cancellation $cancellation = null): void;
 
     public function hooks(): Hooks\Provider;
 

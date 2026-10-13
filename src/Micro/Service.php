@@ -149,7 +149,10 @@ final class Service
         $encoder = $this->encoder;
         $this->verbs[$name] = $this->nc->subscribe(
             $subject->value,
-            static function (Delivery $delivery) use ($handler, $encoder): void {
+            static function (Delivery $delivery) use (
+                $handler,
+                $encoder,
+            ): void {
                 $handler(new Request($delivery, $encoder));
             },
         );

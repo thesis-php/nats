@@ -373,12 +373,18 @@ final class ClientTest extends NatsTestCase
             }
         };
 
-        EventLoop::queue(static function () use ($server, $upstream, $forward): void {
+        EventLoop::queue(static function () use (
+            $server,
+            $upstream,
+            $forward,
+        ): void {
             while (($client = $server->accept()) !== null) {
                 $nats = connect($upstream);
 
-                async($forward, $client, $nats)->ignore();
-                async($forward, $nats, $client)->ignore();
+                $future = async($forward, $client, $nats);
+                $future->ignore();
+                $future = async($forward, $nats, $client);
+                $future->ignore();
             }
         });
 

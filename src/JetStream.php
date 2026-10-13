@@ -806,7 +806,10 @@ final readonly class JetStream
      */
     private function publishPrefix(string $prefix, ?string $jsPrefix = null): \Closure
     {
-        return static function (string $cmd) use ($prefix, $jsPrefix): string {
+        return static function (string $cmd) use (
+            $prefix,
+            $jsPrefix,
+        ): string {
             $subject = '';
 
             if ($jsPrefix !== null) {

@@ -7,6 +7,9 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Publish-Subscribe](#pub-sub)
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
+  - [Request Many](#request-many)
+  - [Auto-unsubscribe](#auto-unsubscribe)
+  - [Slow consumers](#slow-consumers)
 - [NATS JetStream](https://docs.nats.io/nats-concepts/jetstream)
   - [Publish](#publish)
   - [Publish Options](#publish-options)
@@ -156,6 +159,162 @@ dump("Received response {$response->message->payload}");
 $nc->drain();
 ```
 
+A request waits for the reply until it is cancelled, unless a timeout is given: per call, or for all requests with `Nats\Config::$requestTimeout`
+(`?request_timeout=5` in the URI), which also applies to the JetStream API calls. A request without a reply in time throws `Nats\Exception\RequestTimedOut`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::fromURI('tcp://127.0.0.1:4222?request_timeout=5'));
+
+try {
+    $response = $nc->request('foo.bar', new Nats\Message('Hello World!'), timeout: 0.5); // overrides the default
+} catch (Nats\Exception\RequestTimedOut $e) {
+    dump($e->getMessage());
+}
+```
+
+#### Request many
+
+`Client::requestMany()` publishes one request and yields the replies of all responders as they arrive (scatter-gather, [ADR-47](https://github.com/nats-io/nats-architecture-and-design/blob/main/adr/ADR-47.md)).
+The iterator ends after `maxMessages` replies, once `timeout` has passed since the request (`Config::$requestTimeout` by default), when no reply arrives within `stall`
+after the previous one, on the reply the `sentinel` matches, which is not yielded, or once the `cancellation` is requested (iterating then throws `Amp\CancelledException`).
+The `stall` is counted between the replies only, as in ADR-47, since the first reply may take longer to come: it does not end the wait for a silent responder.
+So at least one of the other conditions is required, otherwise `requestMany()` throws `\InvalidArgumentException` instead of possibly gathering forever.
+If nobody listens to the subject, iterating throws `Nats\Exception\RequestHasNoResponders`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::default());
+
+foreach (['eu', 'us', 'asia'] as $region) {
+    $nc->subscribe('discovery', static function (Nats\Delivery $delivery) use ($region): void {
+        $delivery->reply(new Nats\Message($region));
+    });
+}
+
+// Whoever answers within a second.
+foreach ($nc->requestMany('discovery', timeout: 1) as $reply) {
+    dump("Found {$reply->message->payload}");
+}
+
+// The first two answers, and no more than 100ms of silence between them.
+$replies = $nc->requestMany('discovery', maxMessages: 2, stall: 0.1, timeout: 1);
+foreach ($replies as $reply) {
+    dump("Found {$reply->message->payload}");
+}
+
+$nc->subscribe('report', static function (Nats\Delivery $delivery) use ($nc): void {
+    if ($delivery->replyTo === null) {
+        return;
+    }
+
+    foreach (['line 1', 'line 2', 'line 3'] as $line) {
+        $nc->publish($delivery->replyTo, new Nats\Message($line));
+    }
+
+    $nc->publish($delivery->replyTo, new Nats\Message()); // end of stream
+});
+
+// A streamed reply, ended by an empty message.
+$lines = $nc->requestMany(
+    subject: 'report',
+    sentinel: static fn(Nats\Delivery $delivery): bool => ($delivery->message->payload ?? '') === '',
+    timeout: 5,
+);
+foreach ($lines as $line) {
+    dump($line->message->payload);
+}
+
+$nc->drain();
+```
+
+#### Auto-unsubscribe
+
+With `max`, the server removes the subscription after delivering that many messages. The subscription then completes once the handler has processed them:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::default());
+
+$subscription = $nc->subscribe('foo.bar', static function (Nats\Delivery $delivery): void {
+    dump("Received message {$delivery->message->payload}");
+}, max: 2);
+
+foreach (['1', '2', '3'] as $payload) {
+    $nc->publish('foo.bar', new Nats\Message($payload)); // the third one is not delivered
+}
+
+$subscription->awaitCompletion();
+
+// The same for an iterator: the loop ends after the third message.
+$deliveries = $nc->subscribeIterator('foo.baz', max: 3);
+
+$nc->drain();
+```
+
+#### Slow consumers
+
+The messages a subscription has received, but its handler has not taken yet, are pending. By default a subscription keeps at most 524288 pending messages
+and 64 MiB of their payload, like nats.go does; `pendingLimits` of `subscribe()` and `subscribeIterator()` changes that. The messages beyond the limits are dropped, and `Nats\Exception\SlowConsumer` with the subscription
+is passed to the error callback, once until the handler catches up.
+
+The `bufferSize` of `subscribe()` is a different limit: it is the capacity of the queue in front of the handler, and a message that does not fit
+is not dropped, but waits until the handler takes one. Such a waiting message is pending too, so the pending limits are reached only behind a full buffer.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::default());
+
+$nc->onError(static function (\Throwable $e): void {
+    if ($e instanceof Nats\Exception\SlowConsumer && $e->subscription !== null) {
+        $stats = $e->subscription->stats();
+        dump("{$e->subscription->subject}: {$stats->pendingMessages} pending, {$stats->dropped} dropped");
+    }
+});
+
+$subscription = $nc->subscribe(
+    subject: 'metrics.>',
+    handler: static function (Nats\Delivery $delivery): void {
+        // a slow handler
+    },
+    pendingLimits: new Nats\PendingLimits(messages: 10_000, bytes: null), // null for no limit
+);
+
+// The same for an iterator, here without any limits.
+$deliveries = $nc->subscribeIterator('events.>', pendingLimits: Nats\PendingLimits::unlimited());
+
+$stats = $subscription->stats();
+dump($stats->pendingMessages, $stats->pendingBytes, $stats->delivered, $stats->dropped);
+```
+
 #### Server errors
 
 The errors the server answers a particular call with are thrown from that call: `Nats\Exception\AuthorizationViolation` from the first call over a new connection,
@@ -175,7 +334,8 @@ $nc = new Nats\Client(Nats\Config::default());
 
 $nc->onError(static function (\Throwable $e): void {
     // e.g. Nats\Exception\PermissionViolated for a publish to a subject the user is not allowed to publish to,
-    // or Nats\Exception\SlowConsumer, after which the server closes the connection
+    // Nats\Exception\SlowConsumer, after which the server closes the connection,
+    // or Nats\Exception\SlowConsumer with a subscription that drops messages, see Slow consumers
     dump($e->getMessage());
 });
 ```

@@ -57,7 +57,7 @@ final readonly class Err implements Frame
             str_starts_with($this->message, 'Stale Connection') => new Exception\StaleConnection(),
             str_starts_with($this->message, 'Maximum Connections Exceeded') => new Exception\MaximumConnectionsExceeded(),
             str_starts_with($this->message, 'Maximum Payload Violation') => new Exception\MaximumPayloadViolation(),
-            str_starts_with($this->message, 'Slow Consumer') => new Exception\SlowConsumer(),
+            str_starts_with($this->message, 'Slow Consumer') => Exception\SlowConsumer::fromServer(),
             str_starts_with($this->message, 'Invalid Subject') => new Exception\InvalidSubject(),
             str_starts_with($this->message, 'Permissions Violation') => new Exception\PermissionViolated($this->message),
             default => new \RuntimeException($this->message),

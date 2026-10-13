@@ -6,6 +6,7 @@ namespace Thesis\Nats;
 
 use Amp\Cancellation;
 use Amp\Future;
+use Thesis\Nats\Internal\Subscription\Backlog;
 use Thesis\Nats\Internal\Subscription\Drain;
 use Thesis\Nats\Internal\Subscription\Error;
 use Thesis\Nats\Internal\Subscription\Operation;
@@ -24,13 +25,24 @@ final class Subscription
     private array $onComplete = [];
 
     /**
+     * @internal
+     * @param non-empty-string $subject
+     * @param ?non-empty-string $queueGroup
      * @param Future<void> $completeMarker
      * @param \Closure(Operation<*>): void $complete
      */
     public function __construct(
+        public readonly string $subject,
+        public readonly ?string $queueGroup,
         private readonly Future $completeMarker,
         private readonly \Closure $complete,
+        private readonly Backlog $backlog,
     ) {}
+
+    public function stats(): SubscriptionStats
+    {
+        return $this->backlog->stats();
+    }
 
     /**
      * @param callable(): void ...$callbacks

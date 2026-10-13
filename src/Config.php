@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Internal\Validation\Validate;
+
 /**
  * @api
  */
@@ -34,6 +36,8 @@ final readonly class Config
      * @param positive-int $maxPings the maximum number of pings that we have not received a response to, after which the connection to the server will be closed
      * @param ?non-empty-string $jetStreamDomain
      * @param non-empty-string $clientName
+     * @param ?float $requestTimeout in seconds, the default timeout of {@see Client::request()} and {@see Client::requestMany()}, null for none
+     * @throws \InvalidArgumentException
      */
     public function __construct(
         public array $urls = [self::DEFAULT_URL],
@@ -54,7 +58,12 @@ final readonly class Config
         public int $maxPings = self::DEFAULT_MAX_PINGS,
         public ?string $jetStreamDomain = null,
         public string $clientName = self::DEFAULT_CLIENT_NAME,
+        public ?float $requestTimeout = null,
     ) {
+        if ($requestTimeout !== null) {
+            Validate::duration($requestTimeout, 'request timeout');
+        }
+
         $this->version = '0.1.x';
     }
 
@@ -162,6 +171,11 @@ final readonly class Config
             $clientName = $query['client_name'];
         }
 
+        $requestTimeout = null;
+        if (isset($query['request_timeout']) && is_numeric($query['request_timeout']) && (float) $query['request_timeout'] > 0) {
+            $requestTimeout = (float) $query['request_timeout'];
+        }
+
         return new self(
             urls: $urls,
             verbose: $verbose,
@@ -177,6 +191,7 @@ final readonly class Config
             maxPings: $maxPings,
             jetStreamDomain: $jetStreamDomain,
             clientName: $clientName,
+            requestTimeout: $requestTimeout,
         );
     }
 
@@ -196,7 +211,9 @@ final readonly class Config
      *     max_pings?: positive-int,
      *     jetstream_domain?: non-empty-string,
      *     client_name?: non-empty-string,
+     *     request_timeout?: float,
      * } $options
+     * @throws \InvalidArgumentException
      */
     public static function fromArray(#[\SensitiveParameter] array $options): self
     {
@@ -215,6 +232,7 @@ final readonly class Config
             maxPings: $options['max_pings'] ?? self::DEFAULT_MAX_PINGS,
             jetStreamDomain: $options['jetstream_domain'] ?? null,
             clientName: $options['client_name'] ?? self::DEFAULT_CLIENT_NAME,
+            requestTimeout: $options['request_timeout'] ?? null,
         );
     }
 }

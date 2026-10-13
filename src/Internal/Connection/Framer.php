@@ -29,7 +29,10 @@ final readonly class Framer
         $queue = new Queue();
         $this->iterator = $queue->iterate();
 
-        EventLoop::queue(static function () use ($socket, $queue): void {
+        EventLoop::queue(static function () use (
+            $socket,
+            $queue,
+        ): void {
             $parser = new Protocol\Parser($queue->push(...));
 
             try {
