@@ -49,13 +49,7 @@ final readonly class Description implements \Stringable
      */
     public function startsWith(string ...$prefixes): bool
     {
-        foreach ($prefixes as $prefix) {
-            if (str_starts_with($this->value, $prefix)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($prefixes, fn(string $prefix): bool => str_starts_with($this->value, $prefix));
     }
 
     /**

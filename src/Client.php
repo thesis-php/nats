@@ -819,14 +819,14 @@ final class Client
             /** @var ?\Throwable $reason the fatal server error that closed the connection */
             $reason = null;
 
-            $connection->hooks()->onMessage($this->invokeSubscriber(...));
-            $connection->hooks()->onError(function (Hooks\ErrorReceived $event) use (
+            $connection->hooks->onMessage($this->invokeSubscriber(...));
+            $connection->hooks->onError(function (Hooks\ErrorReceived $event) use (
                 $connection,
                 &$reason,
             ): void {
                 $reason ??= $this->handleError($event, $connection);
             });
-            $connection->hooks()->onClose(function () use (
+            $connection->hooks->onClose(function () use (
                 $connection,
                 &$reason,
             ): void {

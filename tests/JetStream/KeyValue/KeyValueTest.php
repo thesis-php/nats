@@ -1092,7 +1092,7 @@ final class KeyValueTest extends NatsTestCase
             }
         }
 
-        self::assertTrue((new WatchConfig(includeHistory: true, resumeFromRevision: 1))->includeHistory);
+        self::assertTrue(new WatchConfig(includeHistory: true, resumeFromRevision: 1)->includeHistory);
     }
 
     /**

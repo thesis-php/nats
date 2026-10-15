@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Internal\Connection;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\MockObject\Runtime\PropertyHook;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Internal\Hooks\ConcurrentProvider;
 use Thesis\Nats\Internal\Hooks\PingReceived;
@@ -21,7 +22,7 @@ final class PingPongHandlerTest extends TestCase
 
         $connection = $this->createMock(Connection::class);
         $connection
-            ->method('hooks')
+            ->method(PropertyHook::get('hooks'))
             ->willReturn($provider);
 
         $connection

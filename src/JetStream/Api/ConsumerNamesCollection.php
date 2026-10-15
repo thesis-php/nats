@@ -23,11 +23,6 @@ final readonly class ConsumerNamesCollection implements PaginatedResponse
         public ?array $consumers = null,
     ) {}
 
-    public function total(): int
-    {
-        return $this->total;
-    }
-
     public function getIterator(): \Traversable
     {
         yield from $this->consumers ?? [];

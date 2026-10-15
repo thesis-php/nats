@@ -146,13 +146,13 @@ abstract class NatsTestCase extends TestCase
     final protected static function pendingRequests(Client $client): int
     {
         /** @var ?Future<Rpc\Handler> $rpc */
-        $rpc = (new \ReflectionProperty(Client::class, 'rpc'))->getValue($client);
+        $rpc = new \ReflectionProperty(Client::class, 'rpc')->getValue($client);
         if ($rpc === null) {
             return 0;
         }
 
         /** @var array<array-key, mixed> $pendings */
-        $pendings = (new \ReflectionProperty(Rpc\Handler::class, 'pendings'))->getValue($rpc->await());
+        $pendings = new \ReflectionProperty(Rpc\Handler::class, 'pendings')->getValue($rpc->await());
 
         return \count($pendings);
     }

@@ -14,18 +14,10 @@ use Thesis\Nats\JetStream\KeyValue\Entry;
 final class EntryCollector
 {
     /** @var list<Entry> */
-    private array $entries = [];
+    public private(set) array $entries = [];
 
     public function __invoke(Entry $entry): void
     {
         $this->entries[] = $entry;
-    }
-
-    /**
-     * @return list<Entry>
-     */
-    public function entries(): array
-    {
-        return $this->entries;
     }
 }

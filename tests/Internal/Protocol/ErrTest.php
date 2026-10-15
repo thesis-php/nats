@@ -25,19 +25,19 @@ final class ErrTest extends TestCase
     #[TestWith(['Authorization Violation', null])]
     public function testViolatedSubscription(string $message, ?array $subscription): void
     {
-        self::assertSame($subscription, (new Err($message))->violatedSubscription());
+        self::assertSame($subscription, new Err($message)->violatedSubscription());
     }
 
     public function testToException(): void
     {
-        self::assertInstanceOf(AuthorizationViolation::class, (new Err('Authorization Violation'))->toException());
-        self::assertInstanceOf(MaximumPayloadViolation::class, (new Err('Maximum Payload Violation'))->toException());
+        self::assertInstanceOf(AuthorizationViolation::class, new Err('Authorization Violation')->toException());
+        self::assertInstanceOf(MaximumPayloadViolation::class, new Err('Maximum Payload Violation')->toException());
 
-        $e = (new Err('Permissions Violation for Publish to "events.happens"'))->toException();
+        $e = new Err('Permissions Violation for Publish to "events.happens"')->toException();
         self::assertInstanceOf(PermissionViolated::class, $e);
         self::assertSame('Permissions Violation for Publish to "events.happens"', $e->getMessage());
 
-        $e = (new Err('Something Unexpected'))->toException();
+        $e = new Err('Something Unexpected')->toException();
         self::assertInstanceOf(\RuntimeException::class, $e);
         self::assertSame('Something Unexpected', $e->getMessage());
     }

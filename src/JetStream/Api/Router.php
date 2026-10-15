@@ -7,29 +7,19 @@ namespace Thesis\Nats\JetStream\Api;
 /**
  * @internal
  */
-final class Router
+final readonly class Router
 {
     public const string DEFAULT_PREFIX = '$JS.API.';
 
     /** @var non-empty-string */
-    private string $prefix = self::DEFAULT_PREFIX;
+    public string $prefix;
 
     /**
      * @param ?non-empty-string $domain
      */
     public function __construct(?string $domain = null)
     {
-        if ($domain !== null) {
-            $this->prefix = substr_replace($this->prefix, "\$JS.{$domain}.API.", 0);
-        }
-    }
-
-    /**
-     * @return non-empty-string
-     */
-    public function prefix(): string
-    {
-        return $this->prefix;
+        $this->prefix = $domain !== null ? "\$JS.{$domain}.API." : self::DEFAULT_PREFIX;
     }
 
     /**

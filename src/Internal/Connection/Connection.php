@@ -22,7 +22,7 @@ interface Connection
      */
     public function execute(Protocol\Frame|array $frames, ?Cancellation $cancellation = null): void;
 
-    public function hooks(): Hooks\Provider;
+    public Hooks\Provider $hooks { get; }
 
     /**
      * @throws NatsException

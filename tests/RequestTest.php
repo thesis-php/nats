@@ -375,6 +375,6 @@ final class RequestTest extends NatsTestCase
     private static function subscribers(Client $client): array
     {
         /** @var array<array-key, mixed> */
-        return (new \ReflectionProperty(Client::class, 'subscribers'))->getValue($client);
+        return new \ReflectionProperty(Client::class, 'subscribers')->getValue($client);
     }
 }

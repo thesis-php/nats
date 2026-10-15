@@ -19,7 +19,7 @@ final readonly class Message
     public static function incr(int $value): self
     {
         return new self(
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(Incr::Header, $value),
         );
     }

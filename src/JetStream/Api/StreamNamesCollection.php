@@ -23,11 +23,6 @@ final readonly class StreamNamesCollection implements PaginatedResponse
         public ?array $streams = null,
     ) {}
 
-    public function total(): int
-    {
-        return $this->total;
-    }
-
     public function getIterator(): \Traversable
     {
         yield from $this->streams ?? [];
