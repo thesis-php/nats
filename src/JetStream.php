@@ -8,6 +8,7 @@ use Amp\Cancellation;
 use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\NoServerResponse;
 use Thesis\Nats\Exception\RequestHasNoResponders;
+use Thesis\Nats\Exception\StreamNameAlreadyInUse;
 use Thesis\Nats\Exception\StreamNotFound;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Validation\Validate;
@@ -21,6 +22,7 @@ use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Json\NativeEncoder;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Serialization\ValinorSerializer;
+use Thesis\Time\TimeSpan;
 use function Amp\delay;
 
 /**
@@ -28,6 +30,9 @@ use function Amp\delay;
  */
 final readonly class JetStream
 {
+    private const string KV_STREAM_PREFIX = 'KV_';
+    private const int KV_MAX_DUPLICATE_WINDOW_MINUTES = 2;
+
     private Api\Router $router;
 
     /**
@@ -201,13 +206,17 @@ final readonly class JetStream
         ?int $sequence = null,
         ?int $keep = null,
         ?string $subject = null,
+        ?Cancellation $cancellation = null,
     ): Api\StreamPurged {
-        return $this->request(new Api\PurgeStreamRequest(
-            name: $name,
-            sequence: $sequence,
-            keep: $keep,
-            subject: $subject,
-        ));
+        return $this->request(
+            new Api\PurgeStreamRequest(
+                name: $name,
+                sequence: $sequence,
+                keep: $keep,
+                subject: $subject,
+            ),
+            $cancellation,
+        );
     }
 
     /**
@@ -289,8 +298,9 @@ final readonly class JetStream
     public function createOrUpdateConsumer(
         string $stream,
         Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+        ?Cancellation $cancellation = null,
     ): JetStream\Consumer {
-        return $this->upsertConsumer($stream, $config);
+        return $this->upsertConsumer($stream, $config, cancellation: $cancellation);
     }
 
     /**
@@ -313,12 +323,18 @@ final readonly class JetStream
      * @param non-empty-string $consumer
      * @throws NatsException
      */
-    public function deleteConsumer(string $stream, string $consumer): Api\ConsumerDeleted
-    {
-        return $this->request(new Api\DeleteConsumerRequest(
-            stream: $stream,
-            consumer: $consumer,
-        ));
+    public function deleteConsumer(
+        string $stream,
+        string $consumer,
+        ?Cancellation $cancellation = null,
+    ): Api\ConsumerDeleted {
+        return $this->request(
+            new Api\DeleteConsumerRequest(
+                stream: $stream,
+                consumer: $consumer,
+            ),
+            $cancellation,
+        );
     }
 
     /**
@@ -398,55 +414,34 @@ final readonly class JetStream
     }
 
     /**
+     * Creates the bucket, fails with {@see StreamNameAlreadyInUse} if it exists with another config.
+     *
+     * @throws NatsException
+     */
+    public function createKeyValue(KeyValue\BucketConfig $config): KeyValue\Bucket
+    {
+        return $this->setupKeyValue($config->bucket, $this->createStream($this->keyValueStreamConfig($config)));
+    }
+
+    /**
+     * Updates the config of the bucket, fails with {@see StreamNotFound} if there is no bucket.
+     *
+     * @throws NatsException
+     */
+    public function updateKeyValue(KeyValue\BucketConfig $config): KeyValue\Bucket
+    {
+        return $this->setupKeyValue(
+            $config->bucket,
+            $this->setupStream($this->updateStream($this->keyValueStreamConfig($config))),
+        );
+    }
+
+    /**
      * @throws NatsException
      */
     public function createOrUpdateKeyValue(KeyValue\BucketConfig $config): KeyValue\Bucket
     {
-        $allowMessageTtl = false;
-        $subjectDeleteMarkerTtl = null;
-
-        if ($config->limitMarkerTtl !== null) {
-            $info = $this->accountInfo();
-
-            if ($info->api->level < 1) {
-                throw FeatureIsNotSupported::forLimitMarkerTtl();
-            }
-
-            $allowMessageTtl = true;
-            $subjectDeleteMarkerTtl = $config->limitMarkerTtl;
-        }
-
-        $stream = $this->createOrUpdateStream(new Api\StreamConfig(
-            name: "KV_{$config->bucket}",
-            description: $config->description,
-            subjects: ["\$KV.{$config->bucket}.>"],
-            discard: Api\DiscardPolicy::New,
-            maxConsumers: -1,
-            maxMessages: -1,
-            maxBytes: $config->maxBytes,
-            maxAge: $config->ttl,
-            maxMessagesPerSubject: $config->history,
-            maxMessageSize: $config->maxValueSize,
-            storageType: $config->storageType,
-            replicas: $config->replicas,
-            duplicateWindow: $config->ttl,
-            placement: $config->placement,
-            denyDelete: true,
-            allowRollup: true,
-            compression: $config->compression ? Api\StoreCompression::S2 : Api\StoreCompression::None,
-            rePublish: $config->rePublish,
-            allowDirect: true,
-            allowMessageTtl: $allowMessageTtl,
-            subjectDeleteMarkerTtl: $subjectDeleteMarkerTtl,
-        ));
-
-        return new KeyValue\Bucket(
-            name: $config->bucket,
-            js: $this,
-            stream: $stream,
-            prefix: "\$KV.{$config->bucket}.",
-            jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
-        );
+        return $this->setupKeyValue($config->bucket, $this->createOrUpdateStream($this->keyValueStreamConfig($config)));
     }
 
     /**
@@ -458,7 +453,7 @@ final readonly class JetStream
         Validate::bucket($bucket);
 
         try {
-            $this->deleteStream("KV_{$bucket}");
+            $this->deleteStream(self::kvStreamName($bucket));
         } catch (StreamNotFound) {
         }
     }
@@ -470,19 +465,9 @@ final readonly class JetStream
     {
         Validate::bucket($bucket);
 
-        $stream = $this->stream("KV_{$bucket}");
+        $stream = $this->stream(self::kvStreamName($bucket));
 
-        if ($stream !== null) {
-            return new KeyValue\Bucket(
-                name: $bucket,
-                js: $this,
-                stream: $stream,
-                prefix: "\$KV.{$bucket}.",
-                jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
-            );
-        }
-
-        return null;
+        return $stream !== null ? $this->setupKeyValue($bucket, $stream) : null;
     }
 
     /**
@@ -684,7 +669,7 @@ final readonly class JetStream
      * @internal
      * @param non-empty-string $endpoint
      */
-    public function rawRequest(string $endpoint, mixed $payload = null): Message
+    public function rawRequest(string $endpoint, mixed $payload = null, ?Cancellation $cancellation = null): Message
     {
         return $this->nats
             ->rawRequest(
@@ -692,6 +677,7 @@ final readonly class JetStream
                 message: new Message(
                     payload: $payload !== null ? $this->encoder->encode($payload) : null,
                 ),
+                cancellation: $cancellation,
             )
             ->message;
     }
@@ -703,11 +689,160 @@ final readonly class JetStream
      * @return T
      * @throws NatsException
      */
-    public function request(Api\Request $request): mixed
+    public function request(Api\Request $request, ?Cancellation $cancellation = null): mixed
     {
         return $this->mapResponse(
-            message: $this->rawRequest($request->endpoint(), $request->payload()),
+            message: $this->rawRequest($request->endpoint(), $request->payload(), $cancellation),
             type: $request->type(),
+        );
+    }
+
+    /**
+     * @throws NatsException
+     */
+    private function keyValueStreamConfig(KeyValue\BucketConfig $config): Api\StreamConfig
+    {
+        $allowMessageTtl = false;
+        $subjectDeleteMarkerTtl = null;
+
+        if ($config->limitMarkerTtl !== null) {
+            $info = $this->accountInfo();
+
+            if ($info->api->level < 1) {
+                throw FeatureIsNotSupported::forLimitMarkerTtl();
+            }
+
+            $allowMessageTtl = true;
+            $subjectDeleteMarkerTtl = $config->limitMarkerTtl;
+        }
+
+        // As in nats.go: the server default of two minutes, unless the entries expire earlier.
+        $duplicateWindow = TimeSpan::fromMinutes(self::KV_MAX_DUPLICATE_WINDOW_MINUTES);
+        if ($config->ttl !== null && $config->ttl->isPositive() && $config->ttl->isLessThan($duplicateWindow)) {
+            $duplicateWindow = $config->ttl;
+        }
+
+        $subjects = ["\$KV.{$config->bucket}.>"];
+        $mirror = null;
+        $sources = null;
+
+        if ($config->mirror !== null) {
+            // A mirror keeps the subjects of the origin bucket and takes no subjects of its own.
+            $mirror = self::kvStreamSource(
+                source: $config->mirror,
+                name: self::kvStreamName(self::kvBucketName($config->mirror->name)),
+                subjectTransforms: $config->mirror->subjectTransforms,
+            );
+            $subjects = null;
+        } elseif ($config->sources !== null && $config->sources !== []) {
+            $sources = [];
+
+            foreach ($config->sources as $source) {
+                $sourceBucket = self::kvBucketName($source->name);
+
+                // The entries of the source bucket become the entries of this one, unless it is the same bucket in another domain.
+                $subjectTransforms = $source->external === null || $sourceBucket !== $config->bucket
+                    ? [new Api\SubjectTransformConfig("\$KV.{$sourceBucket}.>", "\$KV.{$config->bucket}.>")]
+                    : $source->subjectTransforms;
+
+                $sources[] = self::kvStreamSource(
+                    source: $source,
+                    name: self::kvStreamName($sourceBucket),
+                    subjectTransforms: $subjectTransforms,
+                );
+            }
+        }
+
+        return new Api\StreamConfig(
+            name: self::kvStreamName($config->bucket),
+            description: $config->description,
+            subjects: $subjects,
+            discard: Api\DiscardPolicy::New,
+            maxConsumers: -1,
+            maxMessages: -1,
+            maxBytes: $config->maxBytes,
+            maxAge: $config->ttl,
+            maxMessagesPerSubject: $config->history,
+            maxMessageSize: $config->maxValueSize,
+            storageType: $config->storageType,
+            replicas: $config->replicas,
+            duplicateWindow: $duplicateWindow,
+            placement: $config->placement,
+            mirror: $mirror,
+            sources: $sources,
+            denyDelete: true,
+            allowRollup: true,
+            compression: $config->compression ? Api\StoreCompression::S2 : Api\StoreCompression::None,
+            rePublish: $config->rePublish,
+            allowDirect: true,
+            mirrorDirect: $mirror !== null,
+            allowMessageTtl: $allowMessageTtl,
+            subjectDeleteMarkerTtl: $subjectDeleteMarkerTtl,
+        );
+    }
+
+    /**
+     * @param non-empty-string $bucket
+     */
+    private function setupKeyValue(string $bucket, JetStream\Stream $stream): KeyValue\Bucket
+    {
+        $jsPrefix = $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : '';
+
+        $prefix = "\$KV.{$bucket}.";
+        $putPrefix = "{$jsPrefix}{$prefix}";
+
+        $mirror = $stream->info->config->mirror;
+
+        if ($mirror !== null) {
+            // The entries of a mirror are stored under the subjects of the origin bucket, and are put to the origin.
+            $origin = self::kvBucketName($mirror->name);
+            $prefix = "\$KV.{$origin}.";
+            $api = $mirror->external?->api;
+            $putPrefix = $api !== null ? "{$api}.{$prefix}" : "{$jsPrefix}{$prefix}";
+        }
+
+        return new KeyValue\Bucket(
+            name: $bucket,
+            js: $this,
+            stream: $stream,
+            prefix: $prefix,
+            putPrefix: $putPrefix,
+        );
+    }
+
+    /**
+     * @param non-empty-string $name a bucket name or the name of its stream
+     * @return non-empty-string
+     */
+    private static function kvBucketName(string $name): string
+    {
+        $bucket = str_starts_with($name, self::KV_STREAM_PREFIX) ? substr($name, \strlen(self::KV_STREAM_PREFIX)) : $name;
+
+        return $bucket !== '' ? $bucket : $name;
+    }
+
+    /**
+     * @param non-empty-string $bucket
+     * @return non-empty-string
+     */
+    private static function kvStreamName(string $bucket): string
+    {
+        return self::KV_STREAM_PREFIX . $bucket;
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @param ?list<Api\SubjectTransformConfig> $subjectTransforms
+     */
+    private static function kvStreamSource(Api\StreamSource $source, string $name, ?array $subjectTransforms): Api\StreamSource
+    {
+        return new Api\StreamSource(
+            name: $name,
+            startSeq: $source->startSeq,
+            startTime: $source->startTime,
+            filterSubject: $source->filterSubject,
+            subjectTransforms: $subjectTransforms,
+            external: $source->external,
         );
     }
 
@@ -716,20 +851,27 @@ final readonly class JetStream
      * @param ?Api\CreateConsumerRequest::ACTION_* $action
      * @throws NatsException
      */
-    private function upsertConsumer(string $stream, Api\ConsumerConfig $config, ?string $action = null): JetStream\Consumer
-    {
+    private function upsertConsumer(
+        string $stream,
+        Api\ConsumerConfig $config,
+        ?string $action = null,
+        ?Cancellation $cancellation = null,
+    ): JetStream\Consumer {
         $consumerName = $config->name ?? $config->durableName;
 
         if ($consumerName === null || $consumerName === '') {
             $consumerName = Id\generateUniqueId(10);
         }
 
-        $info = $this->request(new Api\CreateConsumerRequest(
-            stream: $stream,
-            consumer: $consumerName,
-            config: $config,
-            action: $action,
-        ));
+        $info = $this->request(
+            new Api\CreateConsumerRequest(
+                stream: $stream,
+                consumer: $consumerName,
+                config: $config,
+                action: $action,
+            ),
+            $cancellation,
+        );
 
         return $this->setupConsumer($info);
     }

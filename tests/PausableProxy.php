@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats;
 
 use Amp\DeferredFuture;
+use Amp\Future;
 use Amp\Socket\ServerSocket;
 use Amp\Socket\Socket;
 use Revolt\EventLoop;
@@ -21,6 +22,9 @@ final class PausableProxy
 {
     /** @var ?DeferredFuture<void> */
     private ?DeferredFuture $paused = null;
+
+    /** @var ?array{non-empty-string, DeferredFuture<void>} */
+    private ?array $pauseBefore = null;
 
     /**
      * @param non-empty-string $address
@@ -68,6 +72,21 @@ final class PausableProxy
     }
 
     /**
+     * Holds back what the clients send starting from the given bytes, until resume().
+     *
+     * @param non-empty-string $needle
+     * @return Future<void> completes once the bytes have been sent and held back
+     */
+    public function pauseBefore(string $needle): Future
+    {
+        /** @var DeferredFuture<void> $held */
+        $held = new DeferredFuture();
+        $this->pauseBefore = [$needle, $held];
+
+        return $held->getFuture();
+    }
+
+    /**
      * Forwards what has been held back and everything the clients send next.
      */
     public function resume(): void
@@ -86,6 +105,17 @@ final class PausableProxy
     {
         try {
             while (($chunk = $from->read()) !== null) {
+                if ($pausable && $this->pauseBefore !== null && ($position = strpos($chunk, $this->pauseBefore[0])) !== false) {
+                    [, $held] = $this->pauseBefore;
+                    $this->pauseBefore = null;
+
+                    $to->write(substr($chunk, 0, $position));
+                    $chunk = substr($chunk, $position);
+
+                    $this->pause();
+                    $held->complete();
+                }
+
                 while ($pausable && ($paused = $this->paused) !== null) {
                     $paused->getFuture()->await();
                 }

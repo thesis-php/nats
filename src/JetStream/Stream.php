@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream;
 
+use Amp\Cancellation;
 use Thesis\Nats\Client;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\HeadersIsInvalid;
@@ -57,12 +58,14 @@ final readonly class Stream
         ?int $sequence = null,
         ?int $keep = null,
         ?string $subject = null,
+        ?Cancellation $cancellation = null,
     ): Api\StreamPurged {
         return $this->js->purgeStream(
             name: $this->name,
             sequence: $sequence,
             keep: $keep,
             subject: $subject,
+            cancellation: $cancellation,
         );
     }
 
@@ -112,18 +115,20 @@ final readonly class Stream
     /**
      * @throws NatsException
      */
-    public function createOrUpdateConsumer(Api\ConsumerConfig $config = new Api\ConsumerConfig()): Consumer
-    {
-        return $this->js->createOrUpdateConsumer($this->name, $config);
+    public function createOrUpdateConsumer(
+        Api\ConsumerConfig $config = new Api\ConsumerConfig(),
+        ?Cancellation $cancellation = null,
+    ): Consumer {
+        return $this->js->createOrUpdateConsumer($this->name, $config, $cancellation);
     }
 
     /**
      * @param non-empty-string $consumer
      * @throws NatsException
      */
-    public function deleteConsumer(string $consumer): Api\ConsumerDeleted
+    public function deleteConsumer(string $consumer, ?Cancellation $cancellation = null): Api\ConsumerDeleted
     {
-        return $this->js->deleteConsumer($this->name, $consumer);
+        return $this->js->deleteConsumer($this->name, $consumer, $cancellation);
     }
 
     /**

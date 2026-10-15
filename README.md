@@ -21,7 +21,13 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Get message](#get-message)
 - [NATS KV](https://docs.nats.io/nats-concepts/jetstream/key-value-store)
   - [Store key values](#store-key-values)
+  - [Create and update buckets](#create-and-update-buckets)
+  - [Create, update and expire keys](#create-update-and-expire-keys)
+  - [Keys and history](#keys-and-history)
+  - [Bucket status](#bucket-status)
+  - [Purge deletes](#purge-deletes)
   - [Watch KV](#watch-kv)
+  - [Mirrors and sources](#mirrors-and-sources)
 - [NATS ObjectStore](https://docs.nats.io/nats-concepts/jetstream/obj_store)
   - [Store objects](#store-objects-in-the-buckets)
   - [Watch Object Store](#watch-object-store)
@@ -771,7 +777,94 @@ dump(
 $nc->drain();
 ```
 
-#### Watch KV
+#### Create and update buckets
+
+`createOrUpdateKeyValue()` creates the bucket or updates its config. `createKeyValue()` only creates it and fails with `StreamNameAlreadyInUse` if the bucket exists with another config,
+`updateKeyValue()` only updates it and fails with `StreamNotFound` if there is no bucket.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\Exception\StreamNotFound;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$js->deleteKeyValue('configs');
+
+try {
+    $js->updateKeyValue(new BucketConfig(bucket: 'configs'));
+} catch (StreamNotFound) {
+    dump('There is no bucket to update yet.');
+}
+
+$js->createKeyValue(new BucketConfig(bucket: 'configs'));
+
+$kv = $js->updateKeyValue(new BucketConfig(bucket: 'configs', history: 5));
+
+dump($kv->status()->history); // 5
+
+$nc->drain();
+```
+
+#### Create, update and expire keys
+
+`create()` puts the value only if the key has no value: it was never put, or it was deleted or purged. `update()` puts the value only if the latest revision of the key is the given one.
+Both fail with `WrongLastSequence` otherwise. `put()`, `create()` and `update()` take a TTL of the entry, which requires the bucket to have `limitMarkerTtl`:
+once the entry expires, the server places a marker that `get()` returns as a purged entry, and the key can be created again.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\Exception\WrongLastSequence;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use Thesis\Time\TimeSpan;
+use function Amp\delay;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$kv = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'locks',
+    limitMarkerTtl: TimeSpan::fromMinutes(1),
+));
+
+$revision = $kv->create('job.report', 'worker-1', ttl: TimeSpan::fromSeconds(10));
+
+try {
+    $kv->create('job.report', 'worker-2');
+} catch (WrongLastSequence) {
+    dump('The lock is taken.');
+}
+
+// Prolong the lock, only if nobody has changed it meanwhile.
+$revision = $kv->update('job.report', $revision, 'worker-1', ttl: TimeSpan::fromSeconds(10));
+
+// Release the lock: a deleted key can be created again.
+$kv->delete('job.report', $revision);
+$kv->create('job.report', 'worker-2');
+
+$kv->put('job.cleanup', 'worker-3', ttl: TimeSpan::fromSeconds(1));
+delay(2);
+dump($kv->get('job.cleanup')?->state); // EntryState::Purged
+
+$nc->drain();
+```
+
+#### Keys and history
+
+`keys()` returns the keys that have a value, optionally only the ones matching the filters, `history()` returns every stored revision of a key or of the keys matching a pattern, delete and purge markers included. Both read through a short-lived watch; the cancellation they take limits the whole read, the server requests included.
 
 ```php
 <?php
@@ -782,27 +875,259 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Thesis\Nats;
 use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$kv = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs',
+    history: 10,
+));
+
+$kv->put('app.env', 'prod');
+$kv->put('app.env', 'dev');
+$kv->put('app.debug', '1');
+$kv->put('database.dsn', 'mysql:host=127.0.0.1;port=3306');
+$kv->delete('app.debug');
+
+dump($kv->keys()); // ['app.env', 'database.dsn']
+dump($kv->keys('app.*')); // ['app.env']
+dump($kv->keys(['app.>', 'database.dsn'])); // ['app.env', 'database.dsn']
+
+foreach ($kv->history('app.env') as $entry) {
+    dump("{$entry->revision}: {$entry->value}");
+}
+
+$nc->drain();
+```
+
+#### Bucket status
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use Thesis\Time\TimeSpan;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$kv = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs',
+    history: 5,
+    ttl: TimeSpan::fromHours(1),
+    compression: true,
+));
+
+$kv->put('app.env', 'prod');
+
+$status = $kv->status();
+
+dump(
+    $status->bucket,       // configs
+    $status->values,       // the number of stored revisions, markers included
+    $status->history,      // 5
+    $status->ttl?->toSeconds(), // 3600
+    $status->bytes,
+    $status->backingStore, // JetStream
+    $status->compressed,   // true
+);
+
+// The info of the stream behind the bucket.
+dump($status->info->config->maxBytes);
+
+$nc->drain();
+```
+
+#### Purge deletes
+
+`delete()` and `purge()` leave a marker, so that watches see the key is gone. `purgeDeletes()` removes the revisions of the deleted and purged keys and the markers older than the given age (30 minutes by default),
+the recent markers are kept. Pass zero to remove all markers.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use Thesis\Time\TimeSpan;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$kv = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs',
+    history: 10,
+));
+
+$kv->put('app.env', 'prod');
+$kv->put('app.env', 'dev');
+$kv->delete('app.env');
+
+$kv->purgeDeletes();
+dump(\count($kv->history('app.env'))); // 1, the recent delete marker
+
+$kv->purgeDeletes(TimeSpan::fromSeconds(0));
+dump(\count($kv->history('app.env'))); // 0
+
+$nc->drain();
+```
+
+#### Watch KV
+
+`watch()` first calls the handler with the latest entry of every watched key, deleted keys included, and then with every change. It returns a `Watcher`:
+`awaitInitialValues()` returns once the handler has been called for every entry the bucket had when the watch started, so the watcher is up to date from then on.
+`stop()` stops the watch and deletes its consumer.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use Thesis\Nats\JetStream\KeyValue\Entry;
 use function Amp\trapSignal;
 
 $nc = new Nats\Client(Nats\Config::default());
 $js = $nc->jetStream();
 
-$js->deleteKeyValue('configs');
-
 $kv = $js->createOrUpdateKeyValue(new BucketConfig(
     bucket: 'configs',
 ));
 
-$subscription = $kv->watch(static function (Nats\JetStream\KeyValue\Entry $entry): void {
-    dump("Config key {$entry->key} value changed to {$entry->value}");
+$kv->put('app.env', 'prod');
+
+$watcher = $kv->watch(static function (Entry $entry): void {
+    dump("Config key {$entry->key} is {$entry->value}, revision {$entry->revision}");
 });
 
-$kv->put('app.env', 'prod');
+$watcher->awaitInitialValues();
+dump('The current configs are loaded.');
+
+$kv->put('app.env', 'dev');
 $kv->put('database.dsn', 'mysql:host=127.0.0.1;port=3306');
 
 trapSignal([\SIGTERM, \SIGINT]);
 
-$subscription->stop();
+$watcher->stop();
+
+$nc->drain();
+```
+
+`WatchConfig` changes what is delivered:
+- `includeHistory` delivers every stored revision of the watched keys, not only the latest ones;
+- `updatesOnly` delivers only the changes made after the watch has started, `awaitInitialValues()` returns at once;
+- `metaOnly` delivers entries without values, `Entry::$size` still has the size of the value;
+- `ignoreDeletes` does not pass delete and purge markers to the handler;
+- `resumeFromRevision` delivers every revision starting from the given one, e.g. to continue a watch from the last handled revision.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use Thesis\Nats\JetStream\KeyValue\Entry;
+use Thesis\Nats\JetStream\KeyValue\WatchConfig;
+use function Amp\delay;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$kv = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs',
+    history: 10,
+));
+
+$kv->put('app.env', 'prod');
+$kv->put('app.env', 'dev');
+
+$watcher = $kv->watch(
+    static function (Entry $entry): void {
+        dump("{$entry->key}@{$entry->revision}: {$entry->value}");
+    },
+    keys: 'app.*',
+    config: new WatchConfig(includeHistory: true, ignoreDeletes: true),
+);
+
+$watcher->awaitInitialValues();
+$watcher->stop();
+
+$watcher = $kv->watch(
+    static function (Entry $entry): void {
+        dump("{$entry->key} changed to {$entry->value}");
+    },
+    config: new WatchConfig(updatesOnly: true),
+);
+
+$kv->put('app.env', 'test');
+
+delay(1);
+$watcher->stop();
+
+$nc->drain();
+```
+
+#### Mirrors and sources
+
+A bucket with a `mirror` is a read-only copy of another bucket: it gets every entry of the origin, and a `put()` to the mirror goes to the origin.
+A bucket with `sources` gets the entries of the source buckets next to its own ones. The sources and the mirror are named by the bucket name.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\Api\StreamSource;
+use Thesis\Nats\JetStream\KeyValue\BucketConfig;
+use function Amp\delay;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$eu = $js->createOrUpdateKeyValue(new BucketConfig(bucket: 'configs-eu'));
+$us = $js->createOrUpdateKeyValue(new BucketConfig(bucket: 'configs-us'));
+
+$replica = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs-eu-replica',
+    mirror: new StreamSource('configs-eu'),
+));
+
+$all = $js->createOrUpdateKeyValue(new BucketConfig(
+    bucket: 'configs-all',
+    sources: [
+        new StreamSource('configs-eu'),
+        new StreamSource('configs-us'),
+    ],
+));
+
+$eu->put('eu.dsn', 'mysql:host=10.0.0.1');
+$us->put('us.dsn', 'mysql:host=10.1.0.1');
+
+delay(1); // mirrors and sources are copied asynchronously
+
+dump(
+    $replica->get('eu.dsn')?->value,
+    $all->get('eu.dsn')?->value,
+    $all->get('us.dsn')?->value,
+);
 
 $nc->drain();
 ```

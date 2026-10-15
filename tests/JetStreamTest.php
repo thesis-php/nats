@@ -74,6 +74,38 @@ final class JetStreamTest extends NatsTestCase
         $stream->delete();
     }
 
+    public function testStreamInfoHasConfigLimits(): void
+    {
+        $client = $this->client();
+        $js = $client->jetStream();
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: [$subject],
+            maxMessages: 100,
+            maxMessagesPerSubject: 7,
+            maxMessageSize: 1024,
+            storageType: JetStream\Api\StorageType::Memory,
+            allowRollup: true,
+            rePublish: new JetStream\Api\RePublish(dest: "republished.{$subject}", src: $subject, headersOnly: true),
+            allowMessageTtl: true,
+        ));
+
+        $config = $js->streamInfo($stream->name)->config;
+        self::assertSame(100, $config->maxMessages);
+        self::assertSame(7, $config->maxMessagesPerSubject);
+        self::assertSame(1024, $config->maxMessageSize);
+        self::assertSame(JetStream\Api\StorageType::Memory, $config->storageType);
+        self::assertSame(1, $config->replicas);
+        self::assertTrue($config->allowRollup);
+        self::assertTrue($config->allowMessageTtl);
+        self::assertEquals(new JetStream\Api\RePublish(dest: "republished.{$subject}", src: $subject, headersOnly: true), $config->rePublish);
+
+        $stream->delete();
+    }
+
     public function testUpdateStream(): void
     {
         $client = $this->client();

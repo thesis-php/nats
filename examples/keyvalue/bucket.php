@@ -13,7 +13,7 @@ $js = $nc->jetStream();
 
 $kv = $js->createOrUpdateKeyValue(new KeyValue\BucketConfig('profiles'));
 
-$subscription = $kv->watch(static function (KeyValue\Entry $entry): void {
+$watcher = $kv->watch(static function (KeyValue\Entry $entry): void {
     if ($entry->state === KeyValue\EntryState::Created) {
         dump("Entry '{$entry->key}' in kv '{$entry->bucket}' was inserted.");
     } else {
@@ -28,5 +28,5 @@ dump($kv->get('user.1')?->value);
 $kv->delete('user.1');
 
 trapSignal([\SIGINT, \SIGTERM]);
-$subscription->stop();
-$subscription->awaitCompletion();
+$watcher->stop();
+$watcher->awaitCompletion();
