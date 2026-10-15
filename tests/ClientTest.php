@@ -405,6 +405,84 @@ final class ClientTest extends NatsTestCase
         gc_collect_cycles();
     }
 
+    public function testDroppedClientClosesItsConnection(): void
+    {
+        $name = Id\generateUniqueId();
+        $client = new Client($this->namedConfig($name));
+
+        // Connects, sets up the request inbox and the JetStream acks.
+        $client->jetStream();
+        self::assertTrue($this->isConnected($name));
+
+        $reference = \WeakReference::create($client);
+        unset($client);
+
+        // Released at once, without waiting for the cycle collector.
+        self::assertNull($reference->get());
+        $this->awaitDisconnected($name);
+    }
+
+    public function testDroppedClientWithSubscriptionClosesItsConnection(): void
+    {
+        $name = Id\generateUniqueId();
+        $client = new Client($this->namedConfig($name));
+        $client->subscribe('events.*', static function (): void {});
+
+        self::assertTrue($this->isConnected($name));
+
+        unset($client);
+        // The client and its subscriptions refer to each other.
+        gc_collect_cycles();
+
+        $this->awaitDisconnected($name);
+    }
+
+    public function testHeldSubscriptionKeepsItsClientAlive(): void
+    {
+        $id = Id\generateUniqueId();
+
+        /** @var DeferredFuture<Delivery> $deferred */
+        $deferred = new DeferredFuture();
+
+        $subscription = new Client($this->config())->subscribe("{$id}.*", $deferred->complete(...));
+        gc_collect_cycles();
+
+        $this->client()->publish("{$id}.happens", new Message('ok'));
+
+        self::assertSame('ok', $deferred->getFuture()->await(new TimeoutCancellation(5))->message->payload);
+
+        $subscription->stop();
+    }
+
+    /**
+     * @param non-empty-string $name
+     */
+    private function namedConfig(string $name): Config
+    {
+        $config = $this->config();
+
+        return new Config(
+            urls: $config->urls,
+            user: $config->user,
+            password: $config->password,
+            noResponders: $config->noResponders,
+            clientName: $name,
+        );
+    }
+
+    /**
+     * @param non-empty-string $name
+     */
+    private function awaitDisconnected(string $name): void
+    {
+        // The server notices the closed socket a moment later.
+        for ($attempt = 0; $attempt < 20 && $this->isConnected($name); ++$attempt) {
+            delay(0.05);
+        }
+
+        self::assertFalse($this->isConnected($name));
+    }
+
     /**
      * @return non-empty-string an address on which nothing is listening at the moment
      */

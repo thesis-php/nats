@@ -63,8 +63,6 @@ final class Client
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
 
-    private readonly Acks $acks;
-
     public function __construct(
         private readonly Config $config,
         private readonly Serializer $serializer = new ValinorSerializer(),
@@ -72,7 +70,6 @@ final class Client
     ) {
         $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
         $this->subscriptionIdGenerator = new Id\SubscriptionIdGenerator();
-        $this->acks = Acks::fromClient($this);
     }
 
     /**
@@ -404,7 +401,8 @@ final class Client
         return new JetStreamDelivery(
             message: $delivery->message,
             subject: $delivery->subject,
-            acks: $this->acks,
+            // Created per delivery: kept in a property, the acks would form a reference cycle with the client.
+            acks: Acks::fromClient($this),
             metadata: $delivery->replyTo !== null ? Metadata::parse($delivery->replyTo) : null,
             replyTo: $delivery->replyTo,
         );
@@ -520,8 +518,14 @@ final class Client
             throw $e;
         }
 
-        return function (?Cancellation $cancellation = null) use ($subscriptionId): void {
-            $this->unsubscribe($subscriptionId, $cancellation);
+        // The client keeps the request inbox subscription, so it is referred back to weakly.
+        $client = \WeakReference::create($this);
+
+        return static function (?Cancellation $cancellation = null) use (
+            $client,
+            $subscriptionId,
+        ): void {
+            $client->get()?->unsubscribe($subscriptionId, $cancellation);
         };
     }
 
@@ -813,18 +817,30 @@ final class Client
             /** @var ?\Throwable $reason the fatal server error that closed the connection */
             $reason = null;
 
-            $connection->hooks->onMessage($this->invokeSubscriber(...));
-            $connection->hooks->onError(function (Hooks\ErrorReceived $event) use (
-                $connection,
-                &$reason,
-            ): void {
-                $reason ??= $this->handleError($event, $connection);
+            // The connection's reader runs in the event loop: strong references from its hooks would keep the client
+            // alive for as long as the socket is open, so the destructor that closes the socket would never run.
+            // Once the client is gone, its hooks do nothing: e.g. the close event of the connection it closed itself.
+            $client = \WeakReference::create($this);
+
+            $connection->hooks->onMessage(static function (Hooks\MessageReceived $event) use ($client): void {
+                $client->get()?->invokeSubscriber($event);
             });
-            $connection->hooks->onClose(function () use (
+            $connection->hooks->onError(static function (Hooks\ErrorReceived $event) use (
+                $client,
                 $connection,
                 &$reason,
             ): void {
-                $this->closed($connection, $reason);
+                $self = $client->get();
+                if ($self !== null) {
+                    $reason ??= $self->handleError($event, $connection);
+                }
+            });
+            $connection->hooks->onClose(static function () use (
+                $client,
+                $connection,
+                &$reason,
+            ): void {
+                $client->get()?->closed($connection, $reason);
             });
 
             return $connection;

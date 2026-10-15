@@ -97,6 +97,8 @@ trapSignal([\SIGTERM, \SIGINT]);
 $nc->drain();
 ```
 
+The connection lives as long as the client: keep a reference to the client (or to an object that uses it, such as a subscription, a JetStream context or a consumer) while you need it. A client that is no longer referenced closes its connection without draining, so prefer an explicit `drain()` or `stop()`.
+
 #### Queues
 
 ```php

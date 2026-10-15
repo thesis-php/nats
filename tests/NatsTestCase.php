@@ -111,33 +111,55 @@ abstract class NatsTestCase extends TestCase
      */
     final protected function kick(string $name): void
     {
-        $sys = $this->sysClient ??= new Client(new Config(
+        $connection = $this->connectionNamed($name) ?? self::fail("The client '{$name}' is not connected.");
+
+        self::decodeServerResponse(
+            $this->sysClient()->request(
+                "\$SYS.REQ.SERVER.{$connection['server']}.KICK",
+                new Message(json_encode(['cid' => $connection['cid']], JSON_THROW_ON_ERROR)),
+                new TimeoutCancellation(5),
+            ),
+        );
+    }
+
+    /**
+     * Whether the server still has a connection of the client connected under the given name.
+     *
+     * @param non-empty-string $name
+     */
+    final protected function isConnected(string $name): bool
+    {
+        return $this->connectionNamed($name) !== null;
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @return ?array{server: non-empty-string, cid: int}
+     */
+    private function connectionNamed(string $name): ?array
+    {
+        /** @var array{server: array{id: non-empty-string}, data: array{connections: list<array{cid: int, name?: string}>}} $connz */
+        $connz = self::decodeServerResponse(
+            $this->sysClient()->request('$SYS.REQ.SERVER.PING.CONNZ', new Message('{"acc": "CLIENT"}'), new TimeoutCancellation(5)),
+        );
+
+        foreach ($connz['data']['connections'] as $connection) {
+            if (($connection['name'] ?? null) === $name) {
+                return ['server' => $connz['server']['id'], 'cid' => $connection['cid']];
+            }
+        }
+
+        return null;
+    }
+
+    private function sysClient(): Client
+    {
+        return $this->sysClient ??= new Client(new Config(
             urls: $this->config()->urls,
             user: 'admin',
             password: 'Pswd1',
             noResponders: true,
         ));
-
-        /** @var array{server: array{id: non-empty-string}, data: array{connections: list<array{cid: int, name?: string}>}} $connz */
-        $connz = self::decodeServerResponse(
-            $sys->request('$SYS.REQ.SERVER.PING.CONNZ', new Message('{"acc": "CLIENT"}'), new TimeoutCancellation(5)),
-        );
-
-        foreach ($connz['data']['connections'] as $connection) {
-            if (($connection['name'] ?? null) === $name) {
-                self::decodeServerResponse(
-                    $sys->request(
-                        "\$SYS.REQ.SERVER.{$connz['server']['id']}.KICK",
-                        new Message(json_encode(['cid' => $connection['cid']], JSON_THROW_ON_ERROR)),
-                        new TimeoutCancellation(5),
-                    ),
-                );
-
-                return;
-            }
-        }
-
-        self::fail("The client '{$name}' is not connected.");
     }
 
     /**
