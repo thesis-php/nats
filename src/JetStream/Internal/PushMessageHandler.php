@@ -7,6 +7,7 @@ namespace Thesis\Nats\JetStream\Internal;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
+use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
@@ -55,6 +56,13 @@ final readonly class PushMessageHandler
             switch ([$status, $description]) {
                 case [Status::Control, Description::FlowControl]: // @phpstan-ignore switch.type
                     $delivery->reply(new Message());
+                    break;
+                case [Status::Control, Description::IdleHeartbeat]: // @phpstan-ignore switch.type
+                    $stalled = $delivery->message->headers?->exists(Header\ConsumerStalled::header()) ?? false;
+
+                    if (!$stalled && $this->handler instanceof IdleListener) {
+                        $this->handler->idle();
+                    }
                     break;
                 case [Status::Conflict, Description::ConsumerDeleted]: // @phpstan-ignore switch.type
                     $subscription->stop();

@@ -96,11 +96,12 @@ final readonly class Consumer
     /**
      * @throws NatsException
      */
-    public function delete(): Api\ConsumerDeleted
+    public function delete(?Cancellation $cancellation = null): Api\ConsumerDeleted
     {
         return $this->js->deleteConsumer(
             stream: $this->stream,
             consumer: $this->name,
+            cancellation: $cancellation,
         );
     }
 
