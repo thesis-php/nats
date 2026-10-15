@@ -48,7 +48,14 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
             $keypair,
         );
 
-        $connection->startup();
+        try {
+            $connection->startup();
+        } catch (\Throwable $e) {
+            // Nobody owns the connection yet: without closing it here a silent or misbehaving peer would keep the socket.
+            $connection->close();
+
+            throw $e;
+        }
 
         return $connection;
     }

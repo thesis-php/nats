@@ -9,10 +9,12 @@ use Amp\CancelledException;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Socket\Socket;
+use Amp\TimeoutCancellation;
 use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Nkey\KeyPair;
 use Thesis\Nats\Internal\Protocol;
@@ -68,48 +70,17 @@ final class SocketConnection implements Connection
      */
     public function startup(): void
     {
-        $frame = $this->framer->readFrame() ?? throw new ConnectionIsNotAvailable();
-
-        if (!$frame instanceof Protocol\ServerInfo) {
-            throw new \UnexpectedValueException(
-                \sprintf('An unexpected "%s" startup frame received.', $frame::class),
-            );
-        }
-
-        if ($this->state !== ConnectionState::Alive) {
-            $this->run();
-        }
-
-        $this->info ??= ConnectionInfo::fromServerInfo($frame);
-
-        /** @var DeferredFuture<void> $handshake */
-        $handshake = new DeferredFuture();
-        $this->handshake = $handshake;
+        // The connection timeout bounds the handshake too: a peer that accepts the socket and stays silent
+        // (a hung server, a proxy or a load balancer without a backend) must not make the connection attempt hang.
+        $timeout = $this->config->connectionTimeout;
 
         try {
-            $this->connect(new Protocol\Connect(
-                verbose: $this->config->verbose,
-                pedantic: $this->config->pedantic,
-                tlsRequired: false,
-                name: $this->config->clientName,
-                version: version(self::PACKAGE_NAME),
-                user: $this->config->user,
-                pass: $this->config->password,
-                sig: $this->keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $this->keypair->sign($frame->nonce) : null,
-                jwt: $this->config->jwt,
-                noResponders: $this->config->noResponders,
-                headers: $this->info->allowHeaders,
-                nkey: $this->keypair?->publicKey,
-            ));
-
-            // In non-verbose mode the server does not acknowledge CONNECT: it stays silent on success and answers
-            // with -ERR (e.g. Authorization Violation) before closing the socket on failure. A PING forces a reply
-            // (PONG or -ERR), so that the errors surface from here instead of being lost, the same way nats.go does it.
-            $this->framer->writeFrame(Protocol\Ping::Frame);
-            $handshake->getFuture()->await();
-        } finally {
-            $this->handshake = null;
-            $handshake->getFuture()->ignore();
+            $this->handshake(new TimeoutCancellation($timeout));
+        } catch (CancelledException $e) {
+            throw new ServerIsNotAvailable(
+                \sprintf('The nats server did not complete the handshake within %s seconds.', $timeout),
+                previous: $e,
+            );
         }
 
         if (($interval = $this->config->ping) !== null) {
@@ -160,6 +131,58 @@ final class SocketConnection implements Connection
 
                 throw $frame->toException();
             }
+        }
+    }
+
+    /**
+     * Reads INFO, sends CONNECT and waits for the server to answer the PING that follows it.
+     *
+     * @throws \Throwable
+     */
+    private function handshake(Cancellation $cancellation): void
+    {
+        $frame = $this->framer->readFrame($cancellation) ?? throw new ConnectionIsNotAvailable();
+
+        if (!$frame instanceof Protocol\ServerInfo) {
+            throw new \UnexpectedValueException(
+                \sprintf('An unexpected "%s" startup frame received.', $frame::class),
+            );
+        }
+
+        if ($this->state !== ConnectionState::Alive) {
+            $this->run();
+        }
+
+        $this->info ??= ConnectionInfo::fromServerInfo($frame);
+
+        /** @var DeferredFuture<void> $handshake */
+        $handshake = new DeferredFuture();
+        $this->handshake = $handshake;
+
+        try {
+            $this->connect(new Protocol\Connect(
+                verbose: $this->config->verbose,
+                pedantic: $this->config->pedantic,
+                tlsRequired: false,
+                name: $this->config->clientName,
+                version: version(self::PACKAGE_NAME),
+                user: $this->config->user,
+                pass: $this->config->password,
+                sig: $this->keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $this->keypair->sign($frame->nonce) : null,
+                jwt: $this->config->jwt,
+                noResponders: $this->config->noResponders,
+                headers: $this->info->allowHeaders,
+                nkey: $this->keypair?->publicKey,
+            ), $cancellation);
+
+            // In non-verbose mode the server does not acknowledge CONNECT: it stays silent on success and answers
+            // with -ERR (e.g. Authorization Violation) before closing the socket on failure. A PING forces a reply
+            // (PONG or -ERR), so that the errors surface from here instead of being lost, the same way nats.go does it.
+            $this->framer->writeFrame(Protocol\Ping::Frame);
+            $handshake->getFuture()->await($cancellation);
+        } finally {
+            $this->handshake = null;
+            $handshake->getFuture()->ignore();
         }
     }
 
@@ -270,10 +293,10 @@ final class SocketConnection implements Connection
      *
      * @throws \Throwable
      */
-    private function connect(Protocol\Connect $connect): void
+    private function connect(Protocol\Connect $connect, Cancellation $cancellation): void
     {
         try {
-            $this->execute($connect);
+            $this->execute($connect, $cancellation);
         } catch (ConnectionWasClosed $e) {
             // The server closed the connection without acknowledging CONNECT, the same as without answering PING.
             throw new ConnectionIsNotAvailable(previous: $e);

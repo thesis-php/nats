@@ -322,6 +322,73 @@ final class ClientTest extends NatsTestCase
         }
     }
 
+    public function testConnectFailsWhenServerAcceptsAndStaysSilent(): void
+    {
+        $server = listen('127.0.0.1:0');
+        $address = $server->getAddress()->toString();
+        \assert($address !== '');
+
+        // The peer accepts the connection, but never sends INFO.
+        $accepted = async($server->accept(...));
+
+        $client = $this->clientWithUrls([$address]);
+        $startedAt = microtime(true);
+
+        try {
+            $client->publish('events.happens', new Message('ok'), cancellation: new TimeoutCancellation(5));
+            self::fail('The server never sends INFO, publish must fail.');
+        } catch (ServerIsNotAvailable) {
+        }
+
+        // The connection timeout of the client is 1 second.
+        self::assertLessThan(3, microtime(true) - $startedAt);
+
+        $peer = $accepted->await(new TimeoutCancellation(1));
+        self::assertNotNull($peer);
+        // The client has closed the socket it gave up on.
+        self::assertNull($peer->read(new TimeoutCancellation(1)));
+
+        $server->close();
+    }
+
+    public function testConnectFailsWhenServerDoesNotAnswerHandshake(): void
+    {
+        $proxy = PausableProxy::start($this->natsAddress());
+
+        try {
+            // The server sends INFO, but never sees CONNECT and the PING after it, so it never answers with PONG.
+            $proxy->pause();
+
+            $client = $this->clientWithUrls([$proxy->address]);
+            $startedAt = microtime(true);
+
+            try {
+                $client->publish('events.happens', new Message('ok'), cancellation: new TimeoutCancellation(5));
+                self::fail('The server never answers the handshake, publish must fail.');
+            } catch (ServerIsNotAvailable) {
+            }
+
+            self::assertLessThan(3, microtime(true) - $startedAt);
+
+            // Once the server answers again, the next call establishes a new connection.
+            $proxy->resume();
+
+            $id = Id\generateUniqueId();
+
+            /** @var DeferredFuture<Delivery> $deferred */
+            $deferred = new DeferredFuture();
+
+            $client->subscribe("{$id}.*", $deferred->complete(...));
+            $client->publish("{$id}.happens", new Message('ok'));
+
+            self::assertSame('ok', $deferred->getFuture()->await(new TimeoutCancellation(5))->message->payload);
+
+            $client->stop();
+        } finally {
+            $proxy->stop();
+        }
+    }
+
     #[DoesNotPerformAssertions]
     public function testClientWithFailedConnectionIsDestroyedQuietly(): void
     {
