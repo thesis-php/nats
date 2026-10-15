@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro\Internal;
 
 use Thesis\Nats\Micro\EndpointStats;
+use Thesis\Nats\Micro\ServiceError;
 use Thesis\Nats\Micro\Stats;
 
 /**
@@ -35,7 +36,7 @@ final readonly class StatsResponse implements \JsonSerializable
                     'queue_group' => $stats->queueGroup,
                     'num_requests' => $stats->numRequests,
                     'num_errors' => $stats->numErrors,
-                    'last_error' => $stats->lastError?->getMessage(),
+                    'last_error' => self::formatError($stats->lastError),
                     'processing_time' => $stats->processingTime,
                     'average_processing_time' => $stats->averageProcessingTime,
                     'data' => $stats->data,
@@ -43,5 +44,17 @@ final readonly class StatsResponse implements \JsonSerializable
                 $this->stats->endpoints,
             ),
         ];
+    }
+
+    /**
+     * Formats a service error as "code:description", the same way nats.go does.
+     */
+    private static function formatError(?\Throwable $error): ?string
+    {
+        if ($error instanceof ServiceError) {
+            return "{$error->getCode()}:{$error->description}";
+        }
+
+        return $error?->getMessage();
     }
 }

@@ -21,7 +21,9 @@ final readonly class Response
     {
         return new self(
             data: $this->data,
-            headers: $this->headers->with(Header\ServiceErrorCode::header(), $code),
+            headers: $this->headers
+                ->without(Header\ServiceErrorCode::header())
+                ->with(Header\ServiceErrorCode::header(), $code),
         );
     }
 
@@ -32,7 +34,9 @@ final readonly class Response
     {
         return new self(
             data: $this->data,
-            headers: $this->headers->with(Header\ServiceError::header(), $description),
+            headers: $this->headers
+                ->without(Header\ServiceError::header())
+                ->with(Header\ServiceError::header(), $description),
         );
     }
 }

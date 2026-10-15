@@ -44,6 +44,9 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Micro Service](#micro-service) 
   - [Endpoints](#service-endpoints)
   - [Groups](#groups)
+  - [Errors](#service-errors)
+  - [Custom stats](#custom-stats)
+  - [Stopping a service](#stopping-a-service)
 
 ## Installation
 
@@ -1526,6 +1529,146 @@ $nc
                 });
 
 dump($nc->request('srv.api.v1.echo', new Nats\Message('ping'))->message->payload);
+```
+
+#### Service errors
+
+`Request::error()` replies with the `Nats-Service-Error-Code` and `Nats-Service-Error` headers and an optional payload, and counts the request as failed in the endpoint stats (`num_errors`, `last_error`).
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig('UserService', '1.0.0'));
+
+$srv
+    ->addEndpoint(new Micro\EndpointConfig('find', subject: 'users.find'), static function (Micro\Request $request): void {
+        $request->error(404, 'User not found', '{"id": 42}');
+    });
+
+$response = $nc->request('users.find', new Nats\Message('42'));
+
+dump(
+    $response->message->headers?->get(Nats\Header\ServiceErrorCode::header()), // 404
+    $response->message->headers?->get(Nats\Header\ServiceError::header()), // User not found
+    $response->message->payload, // {"id": 42}
+);
+```
+
+A handler can also throw a `Micro\ServiceError` to reply with its code, description and payload.
+Any other exception thrown before the handler has replied is answered with code `500` and the exception message as the description, so the requester does not wait for its timeout.
+Either way the error the requester got is counted in the endpoint stats: `lastError` is that `Micro\ServiceError`, with the original exception as the previous one, and `last_error` in `$SRV.STATS` reads e.g. `500:<message>`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig('UserService', '1.0.0'));
+
+$srv
+    ->addEndpoint(new Micro\EndpointConfig('create', subject: 'users.create'), static function (Micro\Request $request): void {
+        throw new Micro\ServiceError(409, 'User already exists');
+    });
+
+$response = $nc->request('users.create', new Nats\Message('{"name": "John"}'));
+
+dump($response->message->headers?->get(Nats\Header\ServiceErrorCode::header())); // 409
+```
+
+#### Custom stats
+
+The `statsHandler` returns the custom `data` of every endpoint's stats. The value is encoded as JSON in the `$SRV.STATS` responses and is available in `Service::stats()` as is.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig(
+    name: 'EchoService',
+    version: '1.0.0',
+    statsHandler: static fn(Micro\EndpointInfo $endpoint): array => ['endpoint' => $endpoint->name, 'memory' => memory_get_usage()],
+));
+
+$srv->addEndpoint(new Micro\EndpointConfig('echo'), static function (Micro\Request $request): void {
+    $request->respond(new Micro\Response($request->data));
+});
+
+dump($srv->stats()->endpoints[0]->data);
+```
+
+#### Stopping a service
+
+`Service::stop()` unsubscribes the endpoints at once and drops the requests they have not handled yet, `Service::drain()` unsubscribes them and waits until the requests already received are handled.
+The service is also stopped when its subscriptions are completed from the outside: when the client is stopped, or when the server rejects a subscription, e.g. on a permissions violation.
+Once the service has started stopping, `addEndpoint()` (on the service or a group) throws `Nats\Exception\ServiceAlreadyStopped`.
+`Service::$state` transitions from `Micro\Service\State::Alive` to `Stopping` as soon as shutdown starts, and to `Stopped` once shutdown completes.
+New endpoints and groups cannot be added while the service is stopping or after it has stopped: these calls throw `ServiceAlreadyStopped`.
+
+The `doneHandler` is called asynchronously once the service has stopped, for any of these reasons. The `errorHandler` is called asynchronously with the error of a failed service subscription, after which the service is stopped.
+Subscription failures are reported once, for the first failed subscription only: e.g. a permissions violation fails all the `$SRV` subscriptions at once, but the service is already stopping after the first one (nats.go calls its handler for every failed subscription).
+Exceptions from `doneHandler` are also passed to `errorHandler`. If no `errorHandler` is configured, or it throws an exception itself, the exception goes to the Revolt event loop error handler (`EventLoop::setErrorHandler()`).
+Callback failures do not change the service's `Stopped` state. Callbacks may call `stop()` or `drain()` again.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+use Thesis\Nats\Micro;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$nc = new Nats\Client(
+    Nats\Config::default(),
+);
+
+$srv = $nc->createService(new Micro\ServiceConfig(
+    name: 'EchoService',
+    version: '1.0.0',
+    doneHandler: static function (Micro\Service $srv): void {
+        dump("Service {$srv->info()->identity->id} has stopped.");
+    },
+    errorHandler: static function (Micro\Service $srv, \Throwable $e): void {
+        dump("Service {$srv->info()->identity->id} has failed: {$e->getMessage()}");
+    },
+));
+
+$srv->addEndpoint(new Micro\EndpointConfig('echo'), static function (Micro\Request $request): void {
+    $request->respond(new Micro\Response($request->data));
+});
+
+$srv->drain();
 ```
 
 ## License
