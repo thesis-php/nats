@@ -329,7 +329,10 @@ final class KeyValueTest extends NatsTestCase
         $count = 0;
 
         $subscription = $kv->watch(
-            static function (Entry $entry, Subscription $subscription) use (&$changes, &$count): void {
+            static function (Entry $entry, Subscription $subscription) use (
+                &$changes,
+                &$count,
+            ): void {
                 $changes["{$entry->key}:{$entry->revision}"] = [$entry->value, $entry->size];
 
                 if (++$count >= 2) {

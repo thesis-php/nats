@@ -7,6 +7,7 @@ namespace Thesis\Nats\Internal\Connection;
 use Amp\Cancellation;
 use Amp\CancelledException;
 use Amp\DeferredFuture;
+use Amp\Future;
 use Amp\Socket\Socket;
 use Revolt\EventLoop;
 use Thesis\Nats\Config;
@@ -116,51 +117,49 @@ final class SocketConnection implements Connection
         }
     }
 
-    public function execute(Protocol\Frame $frame, ?Cancellation $cancellation = null): void
+    public function execute(Protocol\Frame|array $frames, ?Cancellation $cancellation = null): void
     {
-        /** @var ?DeferredFuture<Protocol\Frame> $deferred */
-        $deferred = null;
+        $frames = $frames instanceof Protocol\Frame ? [$frames] : $frames;
 
-        if ($this->config->verbose && self::isAcknowledged($frame)) {
-            /** @var DeferredFuture<Protocol\Frame> $deferred */
-            $deferred = new DeferredFuture();
-            $this->queue->push($deferred);
+        /** @var list<Future<Protocol\Frame>> $acks */
+        $acks = [];
+
+        if ($this->config->verbose) {
+            foreach ($frames as $frame) {
+                if (self::isAcknowledged($frame)) {
+                    /** @var DeferredFuture<Protocol\Frame> $deferred */
+                    $deferred = new DeferredFuture();
+                    $this->queue->push($deferred);
+                    $acks[] = $deferred->getFuture();
+                }
+            }
         }
 
         try {
-            $this->framer->writeFrame($frame);
+            $this->framer->writeFrame($frames);
         } catch (\Throwable $e) {
-            // The deferred is failed or dropped together with the rest of the queue once the connection is closed.
-            $deferred?->getFuture()->ignore();
+            // The deferreds are failed or dropped together with the rest of the queue once the connection is closed.
+            foreach ($acks as $ack) {
+                $ack->ignore();
+            }
 
             throw $e;
         }
 
-        if ($deferred === null) {
-            return;
-        }
+        foreach ($acks as $i => $ack) {
+            try {
+                $frame = $ack->await($cancellation);
+            } catch (CancelledException $e) {
+                $this->routeLateErrors(\array_slice($acks, $i));
 
-        $future = $deferred->getFuture();
+                throw $e;
+            }
 
-        try {
-            $frame = $future->await($cancellation);
-        } catch (CancelledException $e) {
-            // The deferred stays in the queue, so that the acknowledgement of this command is not attributed
-            // to the next one. An -ERR that arrives for it later is routed the same way as in non-verbose mode.
-            $hooks = $this->hooks;
-            $future
-                ->map(static function (Protocol\Frame $frame) use ($hooks): void {
-                    if ($frame instanceof Protocol\Err) {
-                        $hooks->dispatch(new Hooks\ErrorReceived($frame));
-                    }
-                })
-                ->ignore();
+            if ($frame instanceof Protocol\Err) {
+                $this->routeLateErrors(\array_slice($acks, $i + 1));
 
-            throw $e;
-        }
-
-        if ($frame instanceof Protocol\Err) {
-            throw $frame->toException();
+                throw $frame->toException();
+            }
         }
     }
 
@@ -283,6 +282,27 @@ final class SocketConnection implements Connection
         } catch (ConnectionWasClosed $e) {
             // The server closed the connection without acknowledging CONNECT, the same as without answering PING.
             throw new ConnectionIsNotAvailable(previous: $e);
+        }
+    }
+
+    /**
+     * The deferreds of the acknowledgements nobody awaits anymore stay in the queue, so that they are not attributed
+     * to the next commands. An -ERR that arrives for them later is routed the same way as in non-verbose mode.
+     *
+     * @param list<Future<Protocol\Frame>> $acks
+     */
+    private function routeLateErrors(array $acks): void
+    {
+        $hooks = $this->hooks;
+
+        foreach ($acks as $ack) {
+            $ack
+                ->map(static function (Protocol\Frame $frame) use ($hooks): void {
+                    if ($frame instanceof Protocol\Err) {
+                        $hooks->dispatch(new Hooks\ErrorReceived($frame));
+                    }
+                })
+                ->ignore();
         }
     }
 

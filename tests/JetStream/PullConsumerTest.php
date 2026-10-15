@@ -351,7 +351,13 @@ final class PullConsumerTest extends NatsTestCase
         // does when it drops waiting requests, e.g. on a consumer leader change.
         $observer = $nc->subscribe(
             subject: "\$JS.API.CONSUMER.MSG.NEXT.{$streamName}.{$consumerName}",
-            handler: static function (Delivery $delivery) use ($nc, $status, $description, &$pulls, $repulled): void {
+            handler: static function (Delivery $delivery) use (
+                $nc,
+                $status,
+                $description,
+                &$pulls,
+                $repulled,
+            ): void {
                 /** @var array{batch: int, ...} $pull */
                 $pull = json_decode($delivery->message->payload ?? '', true, flags: JSON_THROW_ON_ERROR);
 

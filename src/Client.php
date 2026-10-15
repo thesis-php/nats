@@ -6,10 +6,13 @@ namespace Thesis\Nats;
 
 use Amp\Cancellation;
 use Amp\CancelledException;
+use Amp\CompositeCancellation;
 use Amp\Future;
 use Amp\Pipeline;
+use Amp\TimeoutCancellation;
 use Revolt\EventLoop;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\RequestTimedOut;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
@@ -154,6 +157,7 @@ final class Client
      * @param non-empty-string $subject
      * @param ?non-empty-string $queueGroup
      * @param positive-int $bufferSize
+     * @param ?positive-int $max the number of messages after which the subscription ends, see {@see subscribe()}
      * @return Iterator<Delivery>
      * @throws NatsException
      */
@@ -162,6 +166,8 @@ final class Client
         ?string $queueGroup = null,
         ?Cancellation $cancellation = null,
         int $bufferSize = self::DEFAULT_DELIVERY_BUFFER_SIZE,
+        ?int $max = null,
+        PendingLimits $pendingLimits = new PendingLimits(),
     ): Iterator {
         /** @var Pipeline\Queue<Delivery> $queue */
         $queue = new Pipeline\Queue(bufferSize: $bufferSize);
@@ -172,27 +178,11 @@ final class Client
             handler: static fn(mixed $delivery): bool => Iter\push($queue, $delivery),
             queueGroup: $queueGroup,
             cancellation: $cancellation,
+            max: $max,
+            pendingLimits: $pendingLimits,
         );
 
-        // The iterator ends the way the subscription does: cleanly after stop() or drain(), with the error
-        // after a failure, e.g. the connection closed by the server. Otherwise the consumer would wait forever.
-        async(static function () use ($queue, $subscription): void {
-            try {
-                $subscription->awaitCompletion();
-            } catch (\Throwable $e) {
-                if (!$queue->isComplete()) {
-                    $queue->error($e);
-                }
-
-                return;
-            }
-
-            if (!$queue->isComplete()) {
-                $queue->complete();
-            }
-        })->ignore();
-
-        return Iter\PipelineIterator::fromQueue($queue, $subscription);
+        return self::iterate($queue, $subscription);
     }
 
     /**
@@ -200,6 +190,9 @@ final class Client
      * @param callable(Delivery, Subscription): void $handler
      * @param ?non-empty-string $queueGroup
      * @param positive-int $bufferSize
+     * @param ?positive-int $max the number of messages after which the server removes the subscription (UNSUB <sid> <max>),
+     *                           the subscription is then drained and completes once the handler has processed them
+     * @param PendingLimits $pendingLimits the messages beyond them are dropped, unlike the ones beyond the buffer size
      * @throws NatsException
      * @throws \Throwable
      */
@@ -209,6 +202,8 @@ final class Client
         ?string $queueGroup = null,
         int $bufferSize = 1_000,
         ?Cancellation $cancellation = null,
+        ?int $max = null,
+        PendingLimits $pendingLimits = new PendingLimits(),
     ): Subscription {
         Validate::subscribeSubject($subject);
 
@@ -216,47 +211,102 @@ final class Client
             Validate::queueGroup($queueGroup);
         }
 
-        $subscriptionId = $this->subscriptionIdGenerator->nextId();
-        $unsubscribe = $this->unsubscribe(...);
-
-        $handler = new SubscriptionHandler(
-            unsubscribe: static function () use ($subscriptionId, $unsubscribe): void {
-                $unsubscribe($subscriptionId);
-            },
-            handler: $handler,
-            bufferSize: $bufferSize,
-        );
-
-        $this->subscribers[$subscriptionId] = new Subscriber(
-            subject: $subject,
-            queueGroup: $queueGroup,
-            push: $handler->push(...),
-            subscription: $subscription = $handler->subscription,
-        );
-
-        try {
-            $this->sub($subject, $subscriptionId, $queueGroup, $cancellation);
-        } catch (\Throwable $e) {
-            unset($this->subscribers[$subscriptionId]);
-
-            throw $e;
+        if ($max !== null) {
+            Validate::count($max, 'max');
         }
 
-        return $subscription;
+        return $this->register($subject, $handler, $queueGroup, $bufferSize, $cancellation, $max, $pendingLimits);
     }
 
     /**
      * @param non-empty-string $subject
+     * @param ?float $timeout in seconds, {@see Config::$requestTimeout} by default
+     * @throws RequestTimedOut if no reply arrives in time
      * @throws NatsException
      */
     public function request(
         string $subject,
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
+        ?float $timeout = null,
     ): Delivery {
         Validate::publishSubject($subject);
 
-        return $this->rawRequest($subject, $message, $cancellation);
+        return $this->rawRequest($subject, $message, $cancellation, $timeout);
+    }
+
+    /**
+     * Scatter-gather, see ADR-47: publishes the request and yields the replies as they arrive. The iterator ends
+     * after $maxMessages replies, once $timeout has passed since the request, when no reply arrives within $stall
+     * after the previous one, on the reply $sentinel matches (which is not yielded), on $cancellation, or when stopped.
+     * The stall is counted between the replies only, as in ADR-47: the first one may take longer to come. So a silent
+     * responder is not ended by the stall, and at least one of the other conditions, besides stop(), is required.
+     *
+     * @param non-empty-string $subject
+     * @param ?positive-int $maxMessages
+     * @param ?float $stall in seconds
+     * @param ?\Closure(Delivery): bool $sentinel
+     * @param ?float $timeout in seconds, {@see Config::$requestTimeout} by default
+     * @param positive-int $bufferSize
+     * @return Iterator<Delivery> fails with {@see Exception\RequestHasNoResponders} if the first reply says nobody listens,
+     *                            and with {@see CancelledException} once $cancellation is requested
+     * @throws \InvalidArgumentException if nothing would end the gathering without a reply
+     * @throws NatsException
+     */
+    public function requestMany(
+        string $subject,
+        Message $message = new Message(),
+        ?int $maxMessages = null,
+        ?float $stall = null,
+        ?\Closure $sentinel = null,
+        ?float $timeout = null,
+        ?Cancellation $cancellation = null,
+        int $bufferSize = self::DEFAULT_DELIVERY_BUFFER_SIZE,
+    ): Iterator {
+        Validate::publishSubject($subject);
+
+        if ($maxMessages !== null) {
+            Validate::count($maxMessages, 'maxMessages');
+        }
+
+        if ($stall !== null) {
+            Validate::duration($stall, 'stall');
+        }
+
+        if ($timeout !== null) {
+            Validate::duration($timeout, 'timeout');
+        }
+
+        $timeout ??= $this->config->requestTimeout;
+        if ($maxMessages === null && $sentinel === null && $timeout === null && $cancellation === null) {
+            throw new \InvalidArgumentException(
+                'The gathering would never end without a reply: give maxMessages, sentinel, timeout or cancellation, or set Config::$requestTimeout. The stall is counted between the replies only.',
+            );
+        }
+
+        /** @var Pipeline\Queue<Delivery> $queue */
+        $queue = new Pipeline\Queue(bufferSize: $bufferSize);
+        $handler = new Rpc\RequestManyHandler($queue, $stall, $sentinel);
+
+        $subscription = $this->register(
+            subject: $inbox = Id\generateInboxId(),
+            handler: $handler,
+            bufferSize: $bufferSize,
+            cancellation: $cancellation,
+            max: $maxMessages,
+            onReceive: $handler->received(...),
+        );
+
+        try {
+            $handler->start($subscription, $timeout, $cancellation);
+            $this->publish($subject, $message, $inbox, $cancellation);
+        } catch (\Throwable $e) {
+            $subscription->stop();
+
+            throw $e;
+        }
+
+        return self::iterate($queue, $subscription);
     }
 
     /**
@@ -264,13 +314,20 @@ final class Client
      *
      * @internal
      * @param non-empty-string $subject
+     * @param ?float $timeout in seconds, {@see Config::$requestTimeout} by default
+     * @throws RequestTimedOut if no reply arrives in time
      * @throws NatsException
      */
     public function rawRequest(
         string $subject,
         Message $message = new Message(),
         ?Cancellation $cancellation = null,
+        ?float $timeout = null,
     ): Delivery {
+        if ($timeout !== null) {
+            Validate::duration($timeout, 'timeout');
+        }
+
         $subscribe = $this->subscribeCallback(...);
         $this->rpc ??= async(function () use ($subscribe): Rpc\Handler {
             $handler = new Rpc\Handler();
@@ -288,9 +345,28 @@ final class Client
             return $handler;
         });
 
-        return $this->rpc
-            ->await($cancellation)
-            ->request($subject, $message, $this, $cancellation);
+        $timeout ??= $this->config->requestTimeout;
+        if ($timeout === null) {
+            return $this->rpc
+                ->await($cancellation)
+                ->request($subject, $message, $this, $cancellation);
+        }
+
+        $deadline = new TimeoutCancellation($timeout);
+        $composite = $cancellation !== null ? new CompositeCancellation($cancellation, $deadline) : $deadline;
+
+        try {
+            return $this->rpc
+                ->await($composite)
+                ->request($subject, $message, $this, $composite);
+        } catch (CancelledException $e) {
+            // The caller's own cancellation wins, even if the deadline has passed as well.
+            if ($deadline->isRequested() && !($cancellation?->isRequested() ?? false)) {
+                throw RequestTimedOut::after($subject, $timeout, $e);
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -359,6 +435,66 @@ final class Client
     }
 
     /**
+     * Registers a validated subscription.
+     *
+     * @param non-empty-string $subject
+     * @param callable(Delivery, Subscription): void $handler
+     * @param ?non-empty-string $queueGroup
+     * @param positive-int $bufferSize
+     * @param ?positive-int $max
+     * @param ?\Closure(): void $onReceive called once a message arrives, before it waits for the handler
+     * @throws NatsException
+     * @throws \Throwable
+     */
+    private function register(
+        string $subject,
+        callable $handler,
+        ?string $queueGroup = null,
+        int $bufferSize = self::DEFAULT_DELIVERY_BUFFER_SIZE,
+        ?Cancellation $cancellation = null,
+        ?int $max = null,
+        PendingLimits $pendingLimits = new PendingLimits(),
+        ?\Closure $onReceive = null,
+    ): Subscription {
+        $subscriptionId = $this->subscriptionIdGenerator->nextId();
+        $unsubscribe = $this->unsubscribe(...);
+
+        $handler = new SubscriptionHandler(
+            subject: $subject,
+            queueGroup: $queueGroup,
+            unsubscribe: static function () use (
+                $subscriptionId,
+                $unsubscribe,
+            ): void {
+                $unsubscribe($subscriptionId);
+            },
+            handler: $handler,
+            bufferSize: $bufferSize,
+            onSlowConsumer: $this->reportError(...),
+            remaining: $max,
+            onReceive: $onReceive,
+            pendingLimits: $pendingLimits,
+        );
+
+        $this->subscribers[$subscriptionId] = new Subscriber(
+            subject: $subject,
+            queueGroup: $queueGroup,
+            push: $handler->push(...),
+            subscription: $subscription = $handler->subscription,
+        );
+
+        try {
+            $this->sub($subject, $subscriptionId, $queueGroup, $cancellation, $max);
+        } catch (\Throwable $e) {
+            unset($this->subscribers[$subscriptionId]);
+
+            throw $e;
+        }
+
+        return $subscription;
+    }
+
+    /**
      * @param non-empty-string $subject
      * @param callable(Delivery): void $handler
      * @return \Closure(?Cancellation=): void
@@ -399,18 +535,31 @@ final class Client
      * @param non-empty-string $subject
      * @param non-empty-string $sid
      * @param ?non-empty-string $queueGroup
+     * @param ?positive-int $max
      * @throws NatsException
      */
-    private function sub(string $subject, string $sid, ?string $queueGroup = null, ?Cancellation $cancellation = null): void
-    {
+    private function sub(
+        string $subject,
+        string $sid,
+        ?string $queueGroup = null,
+        ?Cancellation $cancellation = null,
+        ?int $max = null,
+    ): void {
         $connection = $this->connection($cancellation);
 
         try {
-            $connection->execute(Internal\Command::sub($subject, $sid, $queueGroup), $cancellation);
+            // Written at once, so that no message can slip past the limit between the two commands.
+            $connection->execute(
+                $max !== null
+                    ? [Internal\Command::sub($subject, $sid, $queueGroup), Internal\Command::unsub($sid, $max)]
+                    : Internal\Command::sub($subject, $sid, $queueGroup),
+                $cancellation,
+            );
         } catch (CancelledException $e) {
             // In verbose mode the SUB has already been sent when the wait for +OK is cancelled:
             // the server-side subscription must not outlive the failed call.
-            async($connection->execute(...), Internal\Command::unsub($sid))->ignore();
+            $future = async($connection->execute(...), Internal\Command::unsub($sid));
+            $future->ignore();
 
             throw $e;
         }
@@ -493,7 +642,8 @@ final class Client
 
         foreach ($this->subscribers as $subscriber) {
             if ($subscriber->subscription !== null && $subscriber->subject === $subject && $subscriber->queueGroup === $queueGroup) {
-                async($subscriber->subscription->error(...), $e)->ignore();
+                $future = async($subscriber->subscription->error(...), $e);
+                $future->ignore();
                 $failed = true;
             }
         }
@@ -578,7 +728,10 @@ final class Client
 
         // A pending setup has no requests to fail yet: its failure is thrown to the request that started it.
         if ($rpc !== null && $rpc->isComplete()) {
-            $completes[] = async(static function () use ($rpc, $e): void {
+            $completes[] = async(static function () use (
+                $rpc,
+                $e,
+            ): void {
                 self::awaitOrNull($rpc)?->shutdown(reason: $e);
             });
         }
@@ -594,6 +747,37 @@ final class Client
                 $this->reportError($error);
             }
         }
+    }
+
+    /**
+     * @param Pipeline\Queue<Delivery> $queue
+     * @return Iterator<Delivery>
+     */
+    private static function iterate(Pipeline\Queue $queue, Subscription $subscription): Iterator
+    {
+        // The iterator ends the way the subscription does: cleanly after stop() or drain(), with the error
+        // after a failure, e.g. the connection closed by the server. Otherwise the consumer would wait forever.
+        $future = async(static function () use (
+            $queue,
+            $subscription,
+        ): void {
+            try {
+                $subscription->awaitCompletion();
+            } catch (\Throwable $e) {
+                if (!$queue->isComplete()) {
+                    $queue->error($e);
+                }
+
+                return;
+            }
+
+            if (!$queue->isComplete()) {
+                $queue->complete();
+            }
+        });
+        $future->ignore();
+
+        return Iter\PipelineIterator::fromQueue($queue, $subscription);
     }
 
     /**
@@ -636,10 +820,16 @@ final class Client
             $reason = null;
 
             $connection->hooks()->onMessage($this->invokeSubscriber(...));
-            $connection->hooks()->onError(function (Hooks\ErrorReceived $event) use ($connection, &$reason): void {
+            $connection->hooks()->onError(function (Hooks\ErrorReceived $event) use (
+                $connection,
+                &$reason,
+            ): void {
                 $reason ??= $this->handleError($event, $connection);
             });
-            $connection->hooks()->onClose(function () use ($connection, &$reason): void {
+            $connection->hooks()->onClose(function () use (
+                $connection,
+                &$reason,
+            ): void {
                 $this->closed($connection, $reason);
             });
 

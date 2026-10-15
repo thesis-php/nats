@@ -183,6 +183,18 @@ final class ConfigTest extends TestCase
             ),
         ],
     )]
+    #[TestWith(
+        [
+            'tcp://127.0.0.1:4222?request_timeout=2.5',
+            new Config(requestTimeout: 2.5),
+        ],
+    )]
+    #[TestWith(
+        [
+            'tcp://127.0.0.1:4222?request_timeout=-1',
+            new Config(),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
@@ -220,5 +232,20 @@ final class ConfigTest extends TestCase
         );
 
         self::assertEquals($expected, $config);
+    }
+
+    public function testFromArrayWithRequestTimeout(): void
+    {
+        self::assertEquals(new Config(requestTimeout: 0.5), Config::fromArray(['request_timeout' => 0.5]));
+    }
+
+    #[TestWith([0.0])]
+    #[TestWith([-1.0])]
+    #[TestWith([INF])]
+    #[TestWith([NAN])]
+    public function testRequestTimeoutMustBePositive(float $timeout): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Config(requestTimeout: $timeout);
     }
 }

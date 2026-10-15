@@ -45,12 +45,16 @@ final class ValidationTest extends NatsTestCase
         $server = listen('127.0.0.1:0');
         $connections = 0;
 
-        async(static function () use ($server, &$connections): void {
+        $future = async(static function () use (
+            $server,
+            &$connections,
+        ): void {
             while (($socket = $server->accept()) !== null) {
                 ++$connections;
                 $socket->close();
             }
-        })->ignore();
+        });
+        $future->ignore();
 
         try {
             $nc = $this->clientWithUrls([self::address($server)]);

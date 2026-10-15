@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
-use Revolt\EventLoop;
 use Thesis\Nats\Internal\Protocol;
+use Thesis\Nats\Internal\Timer;
 
 /**
  * @internal
  */
 final class PingPongHandler
 {
-    private ?string $callbackId = null;
+    private ?Timer $timer = null;
 
     /** @var non-negative-int */
     private int $pings = 0;
@@ -29,7 +29,7 @@ final class PingPongHandler
     {
         $interval /= 1_000;
 
-        $this->callbackId = EventLoop::repeat($interval, function () use ($maxPings): void {
+        $this->timer = Timer::repeat($interval, function () use ($maxPings): void {
             if (++$this->pings > $maxPings) {
                 $this->forceStop();
 
@@ -52,9 +52,7 @@ final class PingPongHandler
 
     public function stop(): void
     {
-        if ($this->callbackId !== null) {
-            EventLoop::cancel($this->callbackId);
-        }
+        $this->timer?->cancel();
     }
 
     private function forceStop(): void

@@ -41,12 +41,18 @@ final class PausableProxy
 
         $proxy = new self($server, $address);
 
-        EventLoop::queue(static function () use ($proxy, $server, $upstream): void {
+        EventLoop::queue(static function () use (
+            $proxy,
+            $server,
+            $upstream,
+        ): void {
             while (($client = $server->accept()) !== null) {
                 $nats = connect($upstream);
 
-                async(static fn() => $proxy->forward($client, $nats, pausable: true))->ignore();
-                async(static fn() => $proxy->forward($nats, $client, pausable: false))->ignore();
+                $future = async(static fn() => $proxy->forward($client, $nats, pausable: true));
+                $future->ignore();
+                $future = async(static fn() => $proxy->forward($nats, $client, pausable: false));
+                $future->ignore();
             }
         });
 

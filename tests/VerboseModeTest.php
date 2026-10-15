@@ -80,7 +80,10 @@ final class VerboseModeTest extends NatsTestCase
         $received = [];
         /** @var DeferredFuture<void> $done */
         $done = new DeferredFuture();
-        $client->subscribe("{$id}.*", static function (Delivery $delivery) use (&$received, $done): void {
+        $client->subscribe("{$id}.*", static function (Delivery $delivery) use (
+            &$received,
+            $done,
+        ): void {
             $received[] = $delivery->message->payload ?? '';
             if (\count($received) === 2) {
                 $done->complete();
@@ -191,6 +194,50 @@ final class VerboseModeTest extends NatsTestCase
         $client->publish("allowed.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
 
         self::assertSame([], $errors);
+
+        $client->stop();
+    }
+
+    public function testSubscribeWithMaxAwaitsBothAcknowledgements(): void
+    {
+        $client = $this->verboseClient(user: 'restricted', password: 'Pswd1');
+        $id = Id\generateUniqueId();
+
+        /** @var \ArrayObject<int, ?string> $received */
+        $received = new \ArrayObject();
+
+        $subscription = $client->subscribe(
+            "allowed.{$id}",
+            static function (Delivery $delivery) use ($received): void {
+                $received[] = $delivery->message->payload;
+            },
+            cancellation: new TimeoutCancellation(5),
+            max: 2,
+        );
+
+        foreach (['1', '2', '3'] as $payload) {
+            $client->publish("allowed.{$id}", new Message($payload), cancellation: new TimeoutCancellation(5));
+        }
+
+        $subscription->awaitCompletion(new TimeoutCancellation(5));
+        self::assertSame(['1', '2'], $received->getArrayCopy());
+
+        // SUB is rejected, the +OK of the UNSUB written along with it must not go to the next command.
+        try {
+            $client->subscribe("forbidden.{$id}", static fn() => null, cancellation: new TimeoutCancellation(5), max: 1);
+            self::fail('The subscription is not permitted, it must fail.');
+        } catch (PermissionViolated $e) {
+            self::assertStringContainsString("forbidden.{$id}", $e->getMessage());
+        }
+
+        try {
+            $client->publish("forbidden.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
+            self::fail('The -ERR must be attributed to the publish into the forbidden subject.');
+        } catch (PermissionViolated $e) {
+            self::assertStringContainsString("forbidden.{$id}", $e->getMessage());
+        }
+
+        $client->publish("allowed.{$id}", new Message('ok'), cancellation: new TimeoutCancellation(5));
 
         $client->stop();
     }
