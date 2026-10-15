@@ -234,6 +234,38 @@ final class SubscriptionTest extends NatsTestCase
         $deliveries->stop();
     }
 
+    public function testPendingMessagesBehindSlowHandlerDoNotHoldFibers(): void
+    {
+        $client = $this->client();
+
+        $id = Id\generateUniqueId();
+
+        /** @var DeferredFuture<void> $release */
+        $release = new DeferredFuture();
+
+        $subscription = $client->subscribe($id, static fn() => $release->getFuture()->await());
+
+        $client->publish($id, new Message('first'));
+        self::waitFor(static fn() => $subscription->stats()->delivered === 1);
+
+        $messages = 5_000;
+        $before = memory_get_usage();
+
+        for ($i = 0; $i < $messages; ++$i) {
+            $client->publish($id, new Message('x'));
+        }
+
+        self::waitFor(static fn() => $subscription->stats()->pendingMessages === $messages, timeout: 10);
+
+        // A suspended fiber alone takes about 16 KiB, a pending message without one takes a fraction of that.
+        self::assertLessThan(4 * 1024, intdiv(memory_get_usage() - $before, $messages));
+
+        $release->complete();
+        self::waitFor(static fn() => $subscription->stats()->delivered === $messages + 1, timeout: 10);
+
+        $subscription->stop();
+    }
+
     public function testStatsAreResetOnStop(): void
     {
         $client = $this->client();

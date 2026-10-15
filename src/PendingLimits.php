@@ -11,9 +11,13 @@ use Thesis\Nats\Internal\Validation\Validate;
  * are dropped and reported to {@see Client::onError()} as {@see Exception\SlowConsumer}, once until the handler catches up.
  * Only the payload is counted towards the bytes, as in nats.go.
  *
- * Unlike these limits, the buffer size of {@see Client::subscribe()} does not drop anything: it is the capacity
- * of the queue in front of the handler, a message that does not fit waits until the handler takes one.
- * Such a waiting message is pending as well, so the limits are reached only behind a full buffer.
+ * The limits are what bounds the memory a slow handler makes the pending messages take: the client never stops reading
+ * the connection for it, so that the server keeps getting answered and the other subscriptions keep getting messages,
+ * as in nats.go. With {@see unlimited()} nothing bounds that memory.
+ *
+ * The buffer size of {@see Client::subscribeIterator()} and {@see Client::requestMany()} is a different thing:
+ * it is how many messages the iterator holds ahead of the consumer, they are not pending anymore. A message that does
+ * not fit stays pending until the consumer takes one, so the limits are reached only behind a full buffer.
  *
  * @api
  */

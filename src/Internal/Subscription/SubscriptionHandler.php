@@ -33,7 +33,6 @@ final class SubscriptionHandler
      * @param ?non-empty-string $queueGroup
      * @param \Closure(): void $unsubscribe
      * @param callable(Delivery, Subscription): void $handler
-     * @param positive-int $bufferSize
      * @param \Closure(SlowConsumer): void $onSlowConsumer
      * @param ?positive-int $remaining the number of messages after which the server removes the subscription
      * @param ?\Closure(): void $onReceive called once a message arrives, before it waits for the handler
@@ -43,7 +42,6 @@ final class SubscriptionHandler
         ?string $queueGroup,
         \Closure $unsubscribe,
         callable $handler,
-        int $bufferSize,
         private readonly \Closure $onSlowConsumer,
         private ?int $remaining = null,
         private readonly ?\Closure $onReceive = null,
@@ -51,8 +49,11 @@ final class SubscriptionHandler
     ) {
         $this->backlog = $backlog = new Backlog($pendingLimits, $this->reportSlowConsumer(...));
 
+        // Unbounded, so that a push never suspends the fiber the connection dispatches the message in: a slow handler
+        // must neither hold a fiber per pending message nor stall the connection. The backlog limits bound the queue.
+        // Half of the int range, since amp adds the buffer size to the queue position.
         /** @var Pipeline\Queue<Delivery> $queue */
-        $queue = new Pipeline\Queue($bufferSize);
+        $queue = new Pipeline\Queue(PHP_INT_MAX >> 1);
 
         /** @var DeferredFuture<Operation<*>> */
         $completeSubscriptionDeferred = new DeferredFuture();
@@ -194,7 +195,6 @@ final class SubscriptionHandler
             return true;
         }
 
-        // Admitted before the push, which waits while the buffer is full: the waiting messages are pending as well.
         if (!$this->backlog->admit($delivery)) {
             return true;
         }

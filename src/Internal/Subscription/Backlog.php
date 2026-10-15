@@ -12,8 +12,8 @@ use Thesis\Nats\SubscriptionStats;
 /**
  * The messages a subscription has received, but not yet passed to its handler, shared by the handler, which accounts
  * them, and the public {@see Subscription}, which exposes the stats. See {@see PendingLimits} for how the limits differ
- * from the buffer size. Since every received message is dispatched in its own fiber, the limits also bound the number
- * of fibers that pile up behind a slow handler.
+ * from the buffer size of an iterator. The limits are the only thing that bounds the memory the pending messages take:
+ * the connection never waits for a slow handler, so that it keeps answering the server and serving the other subscriptions.
  *
  * @internal
  */
