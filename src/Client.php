@@ -156,7 +156,7 @@ final class Client
     /**
      * @param non-empty-string $subject
      * @param ?non-empty-string $queueGroup
-     * @param positive-int $bufferSize
+     * @param positive-int $bufferSize how many deliveries the iterator holds ahead of the consumer, see {@see PendingLimits}
      * @param ?positive-int $max the number of messages after which the subscription ends, see {@see subscribe()}
      * @return Iterator<Delivery>
      * @throws NatsException
@@ -189,10 +189,9 @@ final class Client
      * @param non-empty-string $subject
      * @param callable(Delivery, Subscription): void $handler
      * @param ?non-empty-string $queueGroup
-     * @param positive-int $bufferSize
      * @param ?positive-int $max the number of messages after which the server removes the subscription (UNSUB <sid> <max>),
      *                           the subscription is then drained and completes once the handler has processed them
-     * @param PendingLimits $pendingLimits the messages beyond them are dropped, unlike the ones beyond the buffer size
+     * @param PendingLimits $pendingLimits the messages the handler has not taken yet, the ones beyond them are dropped
      * @throws NatsException
      * @throws \Throwable
      */
@@ -200,7 +199,6 @@ final class Client
         string $subject,
         callable $handler,
         ?string $queueGroup = null,
-        int $bufferSize = 1_000,
         ?Cancellation $cancellation = null,
         ?int $max = null,
         PendingLimits $pendingLimits = new PendingLimits(),
@@ -215,7 +213,7 @@ final class Client
             Validate::count($max, 'max');
         }
 
-        return $this->register($subject, $handler, $queueGroup, $bufferSize, $cancellation, $max, $pendingLimits);
+        return $this->register($subject, $handler, $queueGroup, $cancellation, $max, $pendingLimits);
     }
 
     /**
@@ -291,7 +289,6 @@ final class Client
         $subscription = $this->register(
             subject: $inbox = Id\generateInboxId(),
             handler: $handler,
-            bufferSize: $bufferSize,
             cancellation: $cancellation,
             max: $maxMessages,
             onReceive: $handler->received(...),
@@ -440,7 +437,6 @@ final class Client
      * @param non-empty-string $subject
      * @param callable(Delivery, Subscription): void $handler
      * @param ?non-empty-string $queueGroup
-     * @param positive-int $bufferSize
      * @param ?positive-int $max
      * @param ?\Closure(): void $onReceive called once a message arrives, before it waits for the handler
      * @throws NatsException
@@ -450,7 +446,6 @@ final class Client
         string $subject,
         callable $handler,
         ?string $queueGroup = null,
-        int $bufferSize = self::DEFAULT_DELIVERY_BUFFER_SIZE,
         ?Cancellation $cancellation = null,
         ?int $max = null,
         PendingLimits $pendingLimits = new PendingLimits(),
@@ -469,7 +464,6 @@ final class Client
                 $unsubscribe($subscriptionId);
             },
             handler: $handler,
-            bufferSize: $bufferSize,
             onSlowConsumer: $this->reportError(...),
             remaining: $max,
             onReceive: $onReceive,

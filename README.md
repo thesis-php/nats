@@ -288,8 +288,12 @@ The messages a subscription has received, but its handler has not taken yet, are
 and 64 MiB of their payload, like nats.go does; `pendingLimits` of `subscribe()` and `subscribeIterator()` changes that. The messages beyond the limits are dropped, and `Nats\Exception\SlowConsumer` with the subscription
 is passed to the error callback, once until the handler catches up.
 
-The `bufferSize` of `subscribe()` is a different limit: it is the capacity of the queue in front of the handler, and a message that does not fit
-is not dropped, but waits until the handler takes one. Such a waiting message is pending too, so the pending limits are reached only behind a full buffer.
+The client never stops reading the connection for a slow handler, so that it keeps answering the server's pings, the replies to the requests
+the handler makes and the messages of the other subscriptions. Hence the pending limits are what bounds the memory the pending messages take,
+and `PendingLimits::unlimited()` lets them grow with no bound.
+
+The `bufferSize` of `subscribeIterator()` and `requestMany()` is a different thing: it is how many messages the iterator holds ahead of the consumer,
+they are not pending anymore. A message that does not fit stays pending until the consumer takes one, so the pending limits are reached only behind a full buffer.
 
 ```php
 <?php

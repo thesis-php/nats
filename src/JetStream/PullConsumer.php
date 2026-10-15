@@ -67,7 +67,6 @@ final class PullConsumer
         $subscription = $this->nats->subscribe(
             subject: $reply = Id\generateInboxId(),
             handler: $handler,
-            bufferSize: $config->batch,
             cancellation: $cancellation,
         );
 
