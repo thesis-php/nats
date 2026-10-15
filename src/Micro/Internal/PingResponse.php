@@ -25,7 +25,7 @@ final readonly class PingResponse implements \JsonSerializable
             'name' => $this->identity->name,
             'id' => $this->identity->id,
             'version' => $this->identity->version,
-            'metadata' => $this->identity->metadata,
+            'metadata' => (object) $this->identity->metadata,
         ];
     }
 }

@@ -147,6 +147,51 @@ final class ServiceTest extends NatsTestCase
         $srv->stop();
     }
 
+    public function testEmptyMetadataIsEncodedAsJsonObject(): void
+    {
+        $nc = $this->client();
+
+        $srv = $nc->createService(new ServiceConfig(
+            name: 'NoMetadataService',
+            version: '1.0.0',
+        ));
+
+        $srv->addEndpoint(new EndpointConfig('echo', subject: 'no-metadata.echo'), static function (Request $request): void {
+            $request->respond(new Response($request->data));
+        });
+
+        foreach (['PING', 'INFO', 'STATS'] as $verb) {
+            $payload = (string) $nc->request("\$SRV.{$verb}.NoMetadataService")->message->payload;
+
+            self::assertStringContainsString('"metadata":{}', $payload, $verb);
+            self::assertStringNotContainsString('"metadata":[]', $payload, $verb);
+        }
+
+        $srv->stop();
+    }
+
+    public function testMetadataIsEncodedAsJsonObject(): void
+    {
+        $nc = $this->client();
+
+        $srv = $nc->createService(new ServiceConfig(
+            name: 'MetadataService',
+            version: '1.0.0',
+            metadata: ['env' => 'test'],
+        ));
+
+        $srv->addEndpoint(new EndpointConfig('echo', subject: 'metadata.echo', metadata: ['v' => '1']), static function (Request $request): void {
+            $request->respond(new Response($request->data));
+        });
+
+        $payload = (string) $nc->request('$SRV.INFO.MetadataService')->message->payload;
+
+        self::assertStringContainsString('"metadata":{"env":"test"}', $payload);
+        self::assertStringContainsString('"metadata":{"v":"1"}', $payload);
+
+        $srv->stop();
+    }
+
     public function testGroups(): void
     {
         $nc = $this->client();
