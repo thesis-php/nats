@@ -27,7 +27,7 @@ final readonly class Config
 
     /**
      * @param non-empty-list<non-empty-string> $urls
-     * @param float $connectionTimeout in seconds
+     * @param float $connectionTimeout in seconds, bounds both the TCP connect and the handshake (INFO, CONNECT, PING/PONG)
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
      * @param ?non-empty-string $jwt JWT token for authentication
