@@ -26,7 +26,7 @@ final readonly class StatsResponse implements \JsonSerializable
             'name' => $this->stats->identity->name,
             'id' => $this->stats->identity->id,
             'version' => $this->stats->identity->version,
-            'metadata' => $this->stats->identity->metadata,
+            'metadata' => (object) $this->stats->identity->metadata,
             'started' => $this->stats->started->format(\DateTimeInterface::RFC3339),
             'endpoints' => array_map(
                 static fn(EndpointStats $stats): array => array_filter([
