@@ -7,7 +7,7 @@ namespace Thesis\Nats\Micro;
 /**
  * @api
  */
-final class EndpointStats
+final readonly class EndpointStats
 {
     /**
      * @param non-empty-string $name
@@ -17,6 +17,7 @@ final class EndpointStats
      * @param non-negative-int $numErrors
      * @param non-negative-int $processingTime total processing time in nanoseconds
      * @param non-negative-int $averageProcessingTime average processing time in nanoseconds
+     * @param mixed $data the value returned by {@see ServiceConfig::$statsHandler}, reported as JSON
      */
     public function __construct(
         public string $name,
@@ -27,6 +28,6 @@ final class EndpointStats
         public ?\Throwable $lastError = null,
         public int $processingTime = 0,
         public int $averageProcessingTime = 0,
-        public ?string $data = null,
+        public mixed $data = null,
     ) {}
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro;
 
 use Amp\Cancellation;
+use Thesis\Nats\Exception\ServiceAlreadyStopped;
 use Thesis\Nats\NatsException;
 
 /**
@@ -25,6 +26,7 @@ final readonly class Group
 
     /**
      * @param callable(Request): void $handler
+     * @throws ServiceAlreadyStopped once the service has started stopping
      * @throws NatsException
      */
     public function addEndpoint(
@@ -46,6 +48,9 @@ final readonly class Group
         return $this;
     }
 
+    /**
+     * @throws ServiceAlreadyStopped once the service has started stopping
+     */
     public function addGroup(GroupConfig $config): self
     {
         return $this->svc->addGroup(

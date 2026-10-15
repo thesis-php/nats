@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Thesis\Nats\Micro;
 
 use Amp\Cancellation;
+use Amp\Future;
+use Revolt\EventLoop;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery;
+use Thesis\Nats\Exception\ServiceAlreadyStopped;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Subscription;
+use function Amp\async;
 
 /**
  * @api
@@ -32,6 +36,11 @@ final class Service
     /** @var non-empty-string */
     private readonly string $queue;
 
+    /** @var ?Future<void> */
+    private ?Future $shutdown = null;
+
+    public private(set) Service\State $state = Service\State::Alive;
+
     public function __construct(
         private readonly Client $nc,
         private readonly ServiceIdentity $identity,
@@ -48,8 +57,15 @@ final class Service
         $this->registerVerbHandler(Internal\Verb::Stats, $this->handleStats(...));
     }
 
+    /**
+     * @throws ServiceAlreadyStopped once the service has started stopping
+     */
     public function addGroup(GroupConfig $config): Group
     {
+        if ($this->stopping()) {
+            throw new ServiceAlreadyStopped();
+        }
+
         return $this->groups[$config->name] ??= new Group(
             svc: $this,
             name: $config->name,
@@ -59,6 +75,7 @@ final class Service
 
     /**
      * @param callable(Request): void $handler
+     * @throws ServiceAlreadyStopped once the service has started stopping
      * @throws NatsException
      */
     public function addEndpoint(
@@ -66,6 +83,10 @@ final class Service
         callable $handler,
         ?Cancellation $cancellation = null,
     ): self {
+        if ($this->stopping()) {
+            throw new ServiceAlreadyStopped();
+        }
+
         $endpointHandler = new Internal\EndpointHandler(
             info: new EndpointInfo(
                 name: $config->name,
@@ -75,6 +96,7 @@ final class Service
             ),
             handler: $handler,
             encoder: $this->encoder,
+            statsHandler: $this->config->statsHandler,
         );
 
         $subscription = $this->nc->subscribe(
@@ -84,7 +106,15 @@ final class Service
             cancellation: $cancellation,
         );
 
+        // The service has started stopping while subscribing: the stop no longer sees the endpoint, so it must not outlive the service.
+        if ($this->stopping()) {
+            $subscription->stop();
+
+            throw new ServiceAlreadyStopped();
+        }
+
         $this->endpoints[] = new Internal\SubscribedEndpoint($endpointHandler, $subscription);
+        $this->supervise($subscription, $endpointHandler);
 
         return $this;
     }
@@ -113,11 +143,33 @@ final class Service
         );
     }
 
+    /**
+     * Unsubscribes the endpoints at once, dropping the requests they have not handled yet.
+     * The cancellation stops waiting only: the service is stopped to the end anyway.
+     */
     public function stop(?Cancellation $cancellation = null): void
     {
-        $this->stopEndpoints($cancellation);
-        $this->stopInternalEndpoints($cancellation);
-        $this->stopGroups();
+        $this->shutdown(static fn(Subscription $subscription) => $subscription->stop(), $cancellation);
+    }
+
+    /**
+     * Unsubscribes the endpoints and waits for them to handle the requests already received.
+     * The cancellation stops waiting only: the service keeps draining and is stopped once the handlers are done.
+     */
+    public function drain(?Cancellation $cancellation = null): void
+    {
+        $this->shutdown(
+            static function (Subscription $subscription): void {
+                $subscription->drain();
+
+                try {
+                    $subscription->awaitCompletion();
+                } catch (\Throwable) {
+                    // The subscription has failed while draining, e.g. the connection is lost: the service is going down anyway.
+                }
+            },
+            $cancellation,
+        );
     }
 
     public function reset(): void
@@ -147,7 +199,7 @@ final class Service
         callable $handler,
     ): void {
         $encoder = $this->encoder;
-        $this->verbs[$name] = $this->nc->subscribe(
+        $this->verbs[$name] = $subscription = $this->nc->subscribe(
             $subject->value,
             static function (Delivery $delivery) use (
                 $handler,
@@ -156,6 +208,8 @@ final class Service
                 $handler(new Request($delivery, $encoder));
             },
         );
+
+        $this->supervise($subscription);
     }
 
     private function handlePing(Request $request): void
@@ -173,28 +227,97 @@ final class Service
         $request->respondJson(new Internal\StatsResponse($this->stats()));
     }
 
-    private function stopEndpoints(?Cancellation $cancellation = null): void
+    /**
+     * Stops the service once a subscription of it completes from the outside: the client is stopped,
+     * or the server rejected the subscription, which is reported to the error handler.
+     */
+    private function supervise(Subscription $subscription, ?Internal\EndpointHandler $endpoint = null): void
     {
-        $endpoints = $this->endpoints;
-        $this->endpoints = [];
+        $future = async(function () use (
+            $subscription,
+            $endpoint,
+        ): void {
+            try {
+                $subscription->awaitCompletion();
+            } catch (\Throwable $e) {
+                if (!$this->stopping()) {
+                    $endpoint?->fail($e);
+                    $this->reportError($e);
+                }
+            }
 
-        foreach ($endpoints as $it) {
-            $it->subscription->stop($cancellation);
+            if (!$this->stopping()) {
+                $this->stop();
+            }
+        });
+        $future->ignore();
+    }
+
+    private function stopping(): bool
+    {
+        return $this->state !== Service\State::Alive;
+    }
+
+    /**
+     * @param \Closure(Subscription): void $complete
+     */
+    private function shutdown(\Closure $complete, ?Cancellation $cancellation = null): void
+    {
+        if ($this->shutdown === null) {
+            $this->state = Service\State::Stopping;
+            $this->shutdown = async($this->complete(...), $complete);
+        }
+
+        $this->shutdown->await($cancellation);
+    }
+
+    /**
+     * @param \Closure(Subscription): void $complete
+     */
+    private function complete(\Closure $complete): void
+    {
+        try {
+            // The endpoints go first, so that the service still answers PING, INFO and STATS while it drains.
+            Future\await(array_map(
+                static fn(Internal\SubscribedEndpoint $it): Future => async($complete, $it->subscription),
+                $this->endpoints,
+            ));
+
+            Future\await(array_map(
+                static fn(Subscription $it): Future => async($complete, $it),
+                $this->verbs,
+            ));
+        } finally {
+            $this->endpoints = [];
+            $this->verbs = [];
+            $this->groups = [];
+            $this->state = Service\State::Stopped;
+
+            if ($this->config->doneHandler !== null) {
+                EventLoop::queue($this->callDoneHandler(...));
+            }
         }
     }
 
-    private function stopInternalEndpoints(?Cancellation $cancellation = null): void
+    private function callDoneHandler(): void
     {
-        $verbs = $this->verbs;
-        $this->verbs = [];
+        try {
+            if ($this->config->doneHandler !== null) {
+                ($this->config->doneHandler)($this);
+            }
+        } catch (\Throwable $e) {
+            if ($this->config->errorHandler === null) {
+                throw $e;
+            }
 
-        foreach ($verbs as $sub) {
-            $sub->stop($cancellation);
+            $this->reportError($e);
         }
     }
 
-    private function stopGroups(): void
+    private function reportError(\Throwable $e): void
     {
-        $this->groups = [];
+        if ($this->config->errorHandler !== null) {
+            EventLoop::queue($this->config->errorHandler, $this, $e);
+        }
     }
 }

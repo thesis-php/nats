@@ -25,9 +25,13 @@ final readonly class Request
     /** @var ?non-empty-string */
     public ?string $reply;
 
+    /**
+     * @internal
+     */
     public function __construct(
         private Delivery $delivery,
         private Encoder $encoder,
+        private Internal\RequestOutcome $outcome = new Internal\RequestOutcome(),
     ) {
         $this->data = $this->delivery->message->payload;
         $this->headers = $this->delivery->message->headers ?? new Headers();
@@ -37,14 +41,38 @@ final readonly class Request
 
     public function respond(Response $response, ?Cancellation $cancellation = null): void
     {
+        $this->outcome->markReplied();
         $this->delivery->reply(new Message($response->data, $response->headers), $cancellation);
     }
 
     public function respondJson(mixed $response, ?Cancellation $cancellation = null): void
     {
-        $this->delivery->reply(
-            new Message($this->encoder->encode($response)),
+        // Encoded first: a response that cannot be encoded is not sent, so the requester still gets the error reply.
+        $message = new Message($this->encoder->encode($response));
+
+        $this->outcome->markReplied();
+        $this->delivery->reply($message, $cancellation);
+    }
+
+    /**
+     * Replies with the Nats-Service-Error and Nats-Service-Error-Code headers and counts the request as failed in the endpoint stats.
+     *
+     * @param non-empty-string $description
+     */
+    public function error(
+        int $code,
+        string $description,
+        ?string $data = null,
+        Headers $headers = new Headers(),
+        ?Cancellation $cancellation = null,
+    ): void {
+        $this->respond(
+            new Response($data, $headers)
+                ->withErrorCode($code)
+                ->withErrorDescription($description),
             $cancellation,
         );
+
+        $this->outcome->fail(new ServiceError($code, $description, $data));
     }
 }
