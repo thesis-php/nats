@@ -449,7 +449,7 @@ final class JetStreamTest extends NatsTestCase
 
         $consumer = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit));
 
-        $until = (new \DateTimeImmutable())->add(new \DateInterval('P1D'));
+        $until = new \DateTimeImmutable()->add(new \DateInterval('P1D'));
 
         $response = $consumer->pause($until);
 
@@ -561,7 +561,7 @@ final class JetStreamTest extends NatsTestCase
         try {
             self::expectException(WrongLastSequence::class);
             $js->publish("{$subject}.xxx", new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(ExpectedLastSeq::Header, 1),
             ));
         } finally {
@@ -589,7 +589,7 @@ final class JetStreamTest extends NatsTestCase
         try {
             self::expectException(WrongLastSequence::class);
             $js->publish("{$subject}.xxx", new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(ExpectedLastSubjSeq::Header, 1),
             ));
         } finally {
@@ -617,7 +617,7 @@ final class JetStreamTest extends NatsTestCase
         try {
             self::expectException(WrongLastMessageId::class);
             $js->publish("{$subject}.xxx", new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(ExpectedLastMsgID::header(), '123'),
             ));
         } finally {
@@ -645,7 +645,7 @@ final class JetStreamTest extends NatsTestCase
         try {
             self::expectException(StreamDoesNotMatch::class);
             $js->publish("{$subject}.xxx", new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(ExpectedStream::header(), 'xxx'),
             ));
         } finally {
@@ -667,7 +667,7 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(MsgTtl::Header, TimeSpan::fromSeconds(1)),
         ));
 
@@ -692,7 +692,7 @@ final class JetStreamTest extends NatsTestCase
         ));
 
         $response = $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(MsgId::header(), '123'),
         ));
 
@@ -701,7 +701,7 @@ final class JetStreamTest extends NatsTestCase
 
         for ($i = 0; $i < 5; ++$i) {
             $response = $js->publish("{$subject}.xxx", new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgId::header(), '123'),
             ));
 
@@ -710,7 +710,7 @@ final class JetStreamTest extends NatsTestCase
         }
 
         $response = $js->publish("{$subject}.xxx", new Message(
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(MsgId::header(), '124'),
         ));
 
@@ -792,7 +792,7 @@ final class JetStreamTest extends NatsTestCase
         try {
             $ack = $js->publish(
                 "{$subject}.a",
-                new Message(headers: (new Headers())->with(ExpectedStream::header(), 'xxx')),
+                new Message(headers: new Headers()->with(ExpectedStream::header(), 'xxx')),
                 new PublishOptions(expectedStream: $name),
             );
 
@@ -955,7 +955,7 @@ final class JetStreamTest extends NatsTestCase
 
             $response = $js->publish("{$subject}.xxx", new Message(
                 payload: $payload,
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgId::header(), "id:{$i}"),
             ));
 
@@ -1004,7 +1004,7 @@ final class JetStreamTest extends NatsTestCase
         for ($i = 0; $i < 2; ++$i) {
             $js->publish($publishSubject, new Message(
                 payload: "Message#{$i}",
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgId::header(), "id:{$i}"),
             ));
         }
@@ -1104,7 +1104,7 @@ final class JetStreamTest extends NatsTestCase
 
         $js->publish('scheduler.recurrents.1', new Message(
             payload: '{"id":1}',
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(Header\Schedule::Header, new \DateTimeImmutable('+2 seconds'))
                 ->with(Header\ScheduleTarget::header(), 'recurrents'),
         ));
@@ -1151,7 +1151,7 @@ final class JetStreamTest extends NatsTestCase
 
         $js->publish("{$subject}.schedules.1", new Message(
             payload: '{"id":1}',
-            headers: (new Headers())
+            headers: new Headers()
                 ->with(Header\Schedule::Header, $at)
                 ->with(Header\ScheduleTarget::header(), $subject),
         ));

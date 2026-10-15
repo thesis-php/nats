@@ -25,7 +25,7 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
 
     public static function fromConfig(Config $config): self
     {
-        $context = (new ConnectContext())
+        $context = new ConnectContext()
             ->withConnectTimeout($config->connectionTimeout);
 
         if ($config->tcpNoDelay) {

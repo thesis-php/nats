@@ -160,7 +160,7 @@ final readonly class Bucket
         $this->publish(
             $key,
             new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(Header\KvOperation::header(), Header\KvOperation::OP_DEL),
             ),
             new PublishOptions(expectedLastSubjectSequence: $revision),
@@ -180,7 +180,7 @@ final readonly class Bucket
         $this->publish(
             $key,
             new Message(
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(Header\KvOperation::header(), Header\KvOperation::OP_PURGE)
                     ->with(Header\MsgRollup::header(), Header\MsgRollup::ROLLUP_SUBJECT),
             ),
@@ -294,7 +294,7 @@ final readonly class Bucket
             }
         }
 
-        return $entries->entries();
+        return $entries->entries;
     }
 
     /**

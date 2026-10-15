@@ -51,6 +51,6 @@ final class StreamConfigTest extends TestCase
 
     public function testEmptySourceFilterMeansNone(): void
     {
-        self::assertSame('', (new StreamSource('SOURCE', filterSubject: ''))->filterSubject);
+        self::assertSame('', new StreamSource('SOURCE', filterSubject: '')->filterSubject);
     }
 }

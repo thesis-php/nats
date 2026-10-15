@@ -39,15 +39,15 @@ final class PingPongHandler
             $this->connection->execute(Protocol\Ping::Frame);
         });
 
-        $this->connection->hooks()->onPing(function (): void {
+        $this->connection->hooks->onPing(function (): void {
             $this->connection->execute(Protocol\Pong::Frame);
         });
 
-        $this->connection->hooks()->onPong(function (): void {
+        $this->connection->hooks->onPong(function (): void {
             $this->pings = 0;
         });
 
-        $this->connection->hooks()->onClose($this->stop(...));
+        $this->connection->hooks->onClose($this->stop(...));
     }
 
     public function stop(): void

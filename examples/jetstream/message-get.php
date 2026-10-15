@@ -21,7 +21,7 @@ $js->publish(
     subject: 'events.activated',
     message: new Nats\Message(
         payload: 'Message',
-        headers: (new Nats\Headers())
+        headers: new Nats\Headers()
             ->with(Nats\Header\ScalarKey::string('x'), 'y'),
     ),
 );

@@ -38,7 +38,7 @@ final class ErrorTest extends TestCase
     #[DataProvider('provideExceptionCases')]
     public function testException(int $code, int $errCode, string $class): void
     {
-        $e = (new Error($code, $errCode, 'description'))->exception();
+        $e = new Error($code, $errCode, 'description')->exception();
 
         self::assertSame($class, $e::class);
         self::assertSame($code, $e->getCode());

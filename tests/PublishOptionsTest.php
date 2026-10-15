@@ -33,7 +33,7 @@ final class PublishOptionsTest extends TestCase
 
     public function testApplySetsHeaders(): void
     {
-        $headers = (new PublishOptions(
+        $headers = new PublishOptions(
             msgId: 'id-1',
             expectedStream: 'orders',
             expectedLastSequence: 10,
@@ -41,7 +41,7 @@ final class PublishOptionsTest extends TestCase
             expectedLastSubjectSequenceSubject: 'orders.*',
             expectedLastMsgId: 'id-0',
             ttl: TimeSpan::fromMinutes(1),
-        ))->apply(null);
+        )->apply(null);
 
         self::assertNotNull($headers);
         self::assertSame('id-1', $headers->get(MsgId::header()));
@@ -57,8 +57,8 @@ final class PublishOptionsTest extends TestCase
     {
         $custom = ScalarKey::string('X-Custom');
 
-        $headers = (new PublishOptions(msgId: 'from-options'))->apply(
-            (new Headers())
+        $headers = new PublishOptions(msgId: 'from-options')->apply(
+            new Headers()
                 ->with(MsgId::header(), 'by-hand')
                 ->with($custom, 'value'),
         );
@@ -70,7 +70,7 @@ final class PublishOptionsTest extends TestCase
 
     public function testNeverExpiringTtl(): void
     {
-        $headers = (new PublishOptions(ttl: TimeSpan::fromSeconds(-1)))->apply(null);
+        $headers = new PublishOptions(ttl: TimeSpan::fromSeconds(-1))->apply(null);
 
         self::assertNotNull($headers);
         self::assertSame(-1, $headers->get(MsgTtl::Header)?->toSeconds());

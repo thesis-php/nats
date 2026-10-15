@@ -75,7 +75,7 @@ final readonly class Metadata
             delivered: (int) $tokens[4],
             streamSequence: (int) $tokens[5],
             consumerSequence: (int) $tokens[6],
-            timestamp: (new \DateTimeImmutable())->setTimestamp(
+            timestamp: new \DateTimeImmutable()->setTimestamp(
                 TimeSpan::fromNanoseconds((int) $tokens[7])->toSeconds(),
             ),
             pending: (int) $tokens[8],

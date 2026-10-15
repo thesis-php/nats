@@ -14,7 +14,7 @@ interface PaginatedResponse extends
     \Countable
 {
     /**
-     * @return non-negative-int
+     * @var non-negative-int
      */
-    public function total(): int;
+    public int $total { get; }
 }

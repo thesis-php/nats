@@ -68,7 +68,7 @@ final class HeadersTest extends TestCase
 
     public function testSequenceHeaders(): void
     {
-        $headers = (new Headers())
+        $headers = new Headers()
             ->with(Header\LastSequence::Header, 10)
             ->with(Header\UpToSequence::Header, 20);
 

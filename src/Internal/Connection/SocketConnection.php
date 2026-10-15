@@ -30,7 +30,7 @@ final class SocketConnection implements Connection
     /** @var \SplQueue<DeferredFuture<Protocol\Frame>> */
     private readonly \SplQueue $queue;
 
-    private readonly Hooks\ConcurrentProvider $hooks;
+    public readonly Hooks\ConcurrentProvider $hooks;
 
     private readonly PingPongHandler $pingpongs;
 
@@ -161,11 +161,6 @@ final class SocketConnection implements Connection
                 throw $frame->toException();
             }
         }
-    }
-
-    public function hooks(): Hooks\Provider
-    {
-        return $this->hooks;
     }
 
     public function info(): ConnectionInfo

@@ -23,7 +23,7 @@ final readonly class ValinorSerializer implements Serializer
      */
     public function __construct(?string $cachePath = null, bool $debug = false)
     {
-        $builder = (new MapperBuilder())
+        $builder = new MapperBuilder()
             ->allowSuperfluousKeys()
             ->registerConstructor(
                 TimeSpan::fromNanoseconds(...),

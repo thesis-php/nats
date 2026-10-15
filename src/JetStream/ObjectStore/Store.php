@@ -172,7 +172,7 @@ final readonly class Store
             subject: $subject,
             message: new Message(
                 payload: $this->json->encode($objectInfo),
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
             ),
         );
@@ -204,7 +204,7 @@ final readonly class Store
             subject: "\$O.{$info->bucket}.M." . self::base64encode($info->name),
             message: new Message(
                 payload: $this->json->encode($info),
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
             ),
         );
@@ -313,7 +313,7 @@ final readonly class Store
             subject: "\$O.{$info->bucket}.M." . self::base64encode($info->name),
             message: new Message(
                 payload: $this->json->encode($info->withoutTime()),
-                headers: (new Headers())
+                headers: new Headers()
                     ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
             ),
         );

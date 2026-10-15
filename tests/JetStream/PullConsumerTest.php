@@ -364,7 +364,7 @@ final class PullConsumerTest extends NatsTestCase
                 if (++$pulls === 1) {
                     \assert($delivery->replyTo !== null);
 
-                    $nc->publish($delivery->replyTo, new Message(headers: (new Headers())
+                    $nc->publish($delivery->replyTo, new Message(headers: new Headers()
                         ->with(StatusCode::Header, $status)
                         ->with(StatusDescription::Header, new Description($description))));
                 } elseif (!$repulled->isComplete()) {

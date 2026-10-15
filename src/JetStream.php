@@ -630,7 +630,7 @@ final readonly class JetStream
             prefix: $prefix = "\$CNT.{$config->name}.",
             publishPrefix: $this->publishPrefix(
                 prefix: $prefix,
-                jsPrefix: $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : null,
+                jsPrefix: $this->router->prefix !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix : null,
             ),
         );
     }
@@ -786,7 +786,7 @@ final readonly class JetStream
      */
     private function setupKeyValue(string $bucket, JetStream\Stream $stream): KeyValue\Bucket
     {
-        $jsPrefix = $this->router->prefix() !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix() : '';
+        $jsPrefix = $this->router->prefix !== Api\Router::DEFAULT_PREFIX ? $this->router->prefix : '';
 
         $prefix = "\$KV.{$bucket}.";
         $putPrefix = "{$jsPrefix}{$prefix}";
@@ -914,7 +914,7 @@ final readonly class JetStream
 
             $offset += \count($response);
 
-            if ($offset >= $response->total()) {
+            if ($offset >= $response->total) {
                 break;
             }
         }
