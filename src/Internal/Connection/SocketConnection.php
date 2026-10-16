@@ -170,7 +170,8 @@ final class SocketConnection implements Connection
                 pass: $this->config->password,
                 sig: $this->keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $this->keypair->sign($frame->nonce) : null,
                 jwt: $this->config->jwt,
-                noResponders: $this->config->noResponders,
+                // The server rejects no_responders without headers: the no responders status is a header.
+                noResponders: $this->config->noResponders && $this->info->allowHeaders,
                 headers: $this->info->allowHeaders,
                 nkey: $this->keypair?->publicKey,
             ), $cancellation);

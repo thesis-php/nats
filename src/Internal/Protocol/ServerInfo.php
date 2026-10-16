@@ -35,15 +35,15 @@ final readonly class ServerInfo implements Frame, \JsonSerializable
     public static function fromArray(array $payload): self
     {
         return new self(
-            serverId: self::assert($payload, 'server_id', self::nonEmptyString(...)),
-            serverName: self::assert($payload, 'server_name', self::nonEmptyString(...)),
             version: self::assert($payload, 'version', self::nonEmptyString(...)),
-            go: self::assert($payload, 'go', self::nonEmptyString(...)),
-            host: self::assert($payload, 'host', self::nonEmptyString(...)),
-            port: self::assert($payload, 'port', self::positiveInt(...)),
-            headers: self::assert($payload, 'headers', self::bool(...)),
-            maxPayload: self::assert($payload, 'max_payload', self::positiveInt(...)),
-            proto: self::assert($payload, 'proto', self::int(...)),
+            serverId: self::nullable($payload, 'server_id', self::nonEmptyString(...)),
+            serverName: self::nullable($payload, 'server_name', self::nonEmptyString(...)),
+            go: self::nullable($payload, 'go', self::nonEmptyString(...)),
+            host: self::nullable($payload, 'host', self::nonEmptyString(...)),
+            port: self::nullable($payload, 'port', self::positiveInt(...)),
+            headers: self::nullable($payload, 'headers', self::bool(...)) ?? false,
+            maxPayload: self::nullable($payload, 'max_payload', self::positiveInt(...)),
+            proto: self::nullable($payload, 'proto', self::int(...)) ?? 0,
             clientId: self::nullable($payload, 'client_id', self::int(...)),
             authRequired: self::nullable($payload, 'auth_required', self::bool(...)),
             tlsRequired: self::nullable($payload, 'tls_required', self::bool(...)),
@@ -63,14 +63,18 @@ final readonly class ServerInfo implements Frame, \JsonSerializable
     }
 
     /**
-     * @param non-empty-string $serverId the unique identifier of the NATS server
-     * @param non-empty-string $serverName the name of the NATS server
+     * Only the version is required: old servers (before 2.2) and some proxies omit the rest, so, like nats.go,
+     * a missing field means "unknown", a missing headers flag means no header support and a missing proto means
+     * the original protocol.
+     *
      * @param non-empty-string $version the version of NATS
-     * @param non-empty-string $go the version of golang the NATS server was built with
-     * @param non-empty-string $host the IP address used to start the NATS server, by default this will be 0.0.0.0 and can be configured with -client_advertise host:port
-     * @param positive-int $port the port number the NATS server is configured to listen on
+     * @param ?non-empty-string $serverId the unique identifier of the NATS server
+     * @param ?non-empty-string $serverName the name of the NATS server
+     * @param ?non-empty-string $go the version of golang the NATS server was built with
+     * @param ?non-empty-string $host the IP address used to start the NATS server, by default this will be 0.0.0.0 and can be configured with -client_advertise host:port
+     * @param ?positive-int $port the port number the NATS server is configured to listen on
      * @param bool $headers whether the server supports headers
-     * @param positive-int $maxPayload maximum payload size, in bytes, that the server will accept from the client
+     * @param ?positive-int $maxPayload maximum payload size, in bytes, that the server will accept from the client
      * @param int $proto an integer indicating the protocol version of the server. The server version 1.2.0 sets this to 1 to indicate that it supports the "Echo" feature
      * @param ?int $clientId the internal client identifier in the server. This can be used to filter client connections in monitoring, correlate with error logs
      * @param ?bool $authRequired if this is true, then the client should try to authenticate upon connect
@@ -89,15 +93,15 @@ final readonly class ServerInfo implements Frame, \JsonSerializable
      * @param ?string $domain the configured NATS domain of the server
      */
     public function __construct(
-        public string $serverId,
-        public string $serverName,
         public string $version,
-        public string $go,
-        public string $host,
-        public int $port,
-        public bool $headers,
-        public int $maxPayload,
-        public int $proto,
+        public ?string $serverId = null,
+        public ?string $serverName = null,
+        public ?string $go = null,
+        public ?string $host = null,
+        public ?int $port = null,
+        public bool $headers = false,
+        public ?int $maxPayload = null,
+        public int $proto = 0,
         public ?int $clientId = null,
         public ?bool $authRequired = null,
         public ?bool $tlsRequired = null,

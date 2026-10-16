@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Revolt\EventLoop;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Id;
@@ -389,6 +390,46 @@ final class ClientTest extends NatsTestCase
         }
     }
 
+    public function testConnectsToServerWithMinimalInfo(): void
+    {
+        // Old servers (before 2.2) and some proxies send only a part of the INFO fields.
+        $address = self::reserveFreePort();
+        $stopProxy = self::proxyToNats(
+            $address,
+            $this->natsAddress(),
+            static function (string $info): string {
+                /** @var array{version: string} $payload */
+                $payload = json_decode(substr($info, \strlen('INFO ')), associative: true, flags: JSON_THROW_ON_ERROR);
+
+                return 'INFO ' . json_encode(['version' => $payload['version']], flags: JSON_THROW_ON_ERROR);
+            },
+        );
+
+        try {
+            $client = $this->clientWithUrls([$address]);
+            $id = Id\generateUniqueId();
+
+            /** @var DeferredFuture<Delivery> $deferred */
+            $deferred = new DeferredFuture();
+
+            $client->subscribe("{$id}.*", $deferred->complete(...));
+            $client->publish("{$id}.happens", new Message('ok'));
+
+            self::assertSame('ok', $deferred->getFuture()->await(new TimeoutCancellation(5))->message->payload);
+
+            // Without the headers flag the server is treated as one without header support.
+            try {
+                $client->publish("{$id}.happens", new Message('ok', new Headers(['X-Id' => [$id]])));
+                self::fail('The server does not announce header support, publish with headers must fail.');
+            } catch (FeatureIsNotSupported) {
+            }
+
+            $client->stop();
+        } finally {
+            $stopProxy();
+        }
+    }
+
     #[DoesNotPerformAssertions]
     public function testClientWithFailedConnectionIsDestroyedQuietly(): void
     {
@@ -502,9 +543,10 @@ final class ClientTest extends NatsTestCase
      *
      * @param non-empty-string $listen
      * @param non-empty-string $upstream
+     * @param ?\Closure(string): string $rewriteInfo replaces the INFO line (without the trailing CRLF) of the server
      * @return \Closure(): void stops the proxy
      */
-    private static function proxyToNats(string $listen, string $upstream): \Closure
+    private static function proxyToNats(string $listen, string $upstream, ?\Closure $rewriteInfo = null): \Closure
     {
         $server = listen($listen);
 
@@ -522,9 +564,21 @@ final class ClientTest extends NatsTestCase
             $server,
             $upstream,
             $forward,
+            $rewriteInfo,
         ): void {
             while (($client = $server->accept()) !== null) {
                 $nats = connect($upstream);
+
+                if ($rewriteInfo !== null) {
+                    $buffer = '';
+
+                    while (!str_contains($buffer, "\r\n") && ($chunk = $nats->read()) !== null) {
+                        $buffer .= $chunk;
+                    }
+
+                    $end = (int) strpos($buffer, "\r\n");
+                    $client->write($rewriteInfo(substr($buffer, 0, $end)) . substr($buffer, $end));
+                }
 
                 $future = async($forward, $client, $nats);
                 $future->ignore();
