@@ -56,7 +56,9 @@ final readonly class Err implements Frame
             str_starts_with($this->message, 'Secure Connection - TLS Required') => new Exception\TLSRequired(),
             str_starts_with($this->message, 'Stale Connection') => new Exception\StaleConnection(),
             str_starts_with($this->message, 'Maximum Connections Exceeded') => new Exception\MaximumConnectionsExceeded(),
-            str_starts_with($this->message, 'Maximum Payload Violation') => new Exception\MaximumPayloadViolation(),
+            str_starts_with($this->message, 'Maximum Payload Violation') => Exception\MaximumPayloadViolation::fromServer(),
+            // Unlike the others, this one is sent lowercase, with the details of the violation after a colon.
+            str_starts_with(strtolower($this->message), 'maximum control line exceeded') => new Exception\MaximumControlLineExceeded($this->message),
             str_starts_with($this->message, 'Slow Consumer') => Exception\SlowConsumer::fromServer(),
             str_starts_with($this->message, 'Invalid Subject') => new Exception\InvalidSubject(),
             str_starts_with($this->message, 'Permissions Violation') => new Exception\PermissionViolated($this->message),

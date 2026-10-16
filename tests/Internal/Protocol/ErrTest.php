@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Thesis\Nats\Exception\AuthorizationViolation;
+use Thesis\Nats\Exception\MaximumControlLineExceeded;
 use Thesis\Nats\Exception\MaximumPayloadViolation;
 use Thesis\Nats\Exception\PermissionViolated;
 
@@ -32,6 +33,10 @@ final class ErrTest extends TestCase
     {
         self::assertInstanceOf(AuthorizationViolation::class, new Err('Authorization Violation')->toException());
         self::assertInstanceOf(MaximumPayloadViolation::class, new Err('Maximum Payload Violation')->toException());
+
+        $e = new Err('maximum control line exceeded: State 4, max_control_line 4096, Buffer len 4100')->toException();
+        self::assertInstanceOf(MaximumControlLineExceeded::class, $e);
+        self::assertSame('maximum control line exceeded: State 4, max_control_line 4096, Buffer len 4100', $e->getMessage());
 
         $e = new Err('Permissions Violation for Publish to "events.happens"')->toException();
         self::assertInstanceOf(PermissionViolated::class, $e);

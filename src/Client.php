@@ -142,12 +142,21 @@ final class Client
         ?Cancellation $cancellation = null,
     ): void {
         $connection = $this->connection($cancellation);
+        $info = $connection->info();
 
-        if ($message->headers !== null && \count($message->headers) > 0 && !$connection->info()->allowHeaders) {
-            throw Exception\FeatureIsNotSupported::forHeaders($connection->info()->serverVersion);
+        if ($message->headers !== null && \count($message->headers) > 0 && !$info->allowHeaders) {
+            throw Exception\FeatureIsNotSupported::forHeaders($info->serverVersion);
         }
 
-        $connection->execute(Internal\Command::pub($subject, $message, $replyTo), $cancellation);
+        $pub = Internal\Command::pub($subject, $message, $replyTo);
+
+        // The server closes the connection on a message over its limit, failing every subscription of the client:
+        // the message is refused before it is sent instead, the same way nats.go does it.
+        if ($info->maxPayload !== null && ($size = $pub->message->size()) > $info->maxPayload) {
+            throw Exception\MaximumPayloadViolation::forMessage($size, $info->maxPayload);
+        }
+
+        $connection->execute($pub, $cancellation);
     }
 
     /**

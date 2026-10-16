@@ -355,6 +355,17 @@ $nc->onError(static function (\Throwable $e): void {
 });
 ```
 
+A fatal error makes the server close the connection: the subscriptions fail with it, it is passed to the error callback, and the next call connects again.
+A call interrupted by the close throws `Nats\Exception\ConnectionWasClosed` with the server's error as the previous exception when the server sent one:
+
+```php
+try {
+    $nc->publish('events.happens', new Nats\Message($payload));
+} catch (Nats\Exception\ConnectionWasClosed $e) {
+    dump($e->getPrevious()); // e.g. Nats\Exception\MaximumPayloadViolation for a payload over the limit of the user's account
+}
+```
+
 #### Validation
 
 Subjects and names are checked before anything is sent, following the rules of nats-server and nats.go:
@@ -368,6 +379,8 @@ Subjects and names are checked before anything is sent, following the rules of n
 - A key-value or object store bucket name matches `^[a-zA-Z0-9_-]+$`: `Nats\Exception\InvalidBucketName`.
 - A key-value key matches `^[-/_=.a-zA-Z0-9]+$` and is a valid subject; the keys to watch may contain wildcards: `Nats\Exception\InvalidKey`.
 - An object name is non-empty: `Nats\Exception\ObjectIsInvalid`.
+- A message (headers and payload together) is at most the `max_payload` the server announces, 1 MiB by default: `Nats\Exception\MaximumPayloadViolation`.
+  The server would close the connection on a larger one. An account limit lower than that is known only to the server, which then closes the connection.
 - A micro endpoint name matches `^[A-Za-z0-9_-]+$` (`Nats\Exception\InvalidName`), a group name is a subject without `>` (`Nats\Exception\InvalidSubject`).
 
 ## Nats JetStream
