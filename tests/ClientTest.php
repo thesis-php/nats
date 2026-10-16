@@ -390,6 +390,25 @@ final class ClientTest extends NatsTestCase
         }
     }
 
+    public function testConnectsWithServerListInNatsGoForm(): void
+    {
+        // Every server repeats its scheme and credentials, the first one is down and the second has no port, as nats.go accepts it.
+        // The first password of user:Pswd1 is percent-encoded ("P" is %50), as in any url, so both decode to the same one.
+        $refused = self::reserveFreePort();
+        $host = explode(':', $this->natsAddress())[0];
+
+        $client = $this->clientWithConfig(Config::fromURI("nats://user:%50swd1@{$refused}, nats://user:Pswd1@{$host}/?connection_timeout=1"));
+        $id = Id\generateUniqueId();
+
+        /** @var DeferredFuture<Delivery> $deferred */
+        $deferred = new DeferredFuture();
+
+        $client->subscribe($id, $deferred->complete(...));
+        $client->publish($id, new Message('ok'));
+
+        self::assertSame('ok', $deferred->getFuture()->await(new TimeoutCancellation(5))->message->payload);
+    }
+
     public function testConnectsToServerWithMinimalInfo(): void
     {
         // Old servers (before 2.2) and some proxies send only a part of the INFO fields.

@@ -4,6 +4,7 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 
 ## Features
 - [NATS Core](https://docs.nats.io/nats-concepts/core-nats) 
+  - [Connection](#connection)
   - [Publish-Subscribe](#pub-sub)
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
@@ -57,6 +58,28 @@ composer require thesis/nats
 ## Nats Core
 
 The library implements the full functionality of NATS Core, including pub-sub, queues and request–reply.
+
+#### Connection
+
+`Nats\Config::fromURI()` takes `[scheme://][user[:password]@]host[:port][,host[:port]...][?options]`. The scheme is `nats://` (`tcp://` is an alias, and it may be omitted),
+`tls://`, `ws://` and `wss://` are rejected as not supported yet. A host without a port connects to `4222`, an IPv6 host goes in brackets (`[::1]:4222`),
+and the credentials are percent-encoded like in any url (`p%40ss` for `p@ss`). The servers of a list are tried in order until one accepts the connection;
+each one may repeat the scheme and the credentials, as in nats.go (`nats://u:p@h1:4222,nats://u:p@h2:4222`): one user is sent to every server, so different credentials are rejected. The options are the snake_case names of the `Nats\Config` parameters,
+e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `jwt`, `nkey`, `client_name`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(Nats\Config::fromURI('nats://user:p%40ss@nats-1:4222,nats-2,[::1]:4223?connection_timeout=2.5&no_responders=true'));
+
+dump($nc->jetStream()->accountInfo());
+```
 
 #### Pub-Sub
 
