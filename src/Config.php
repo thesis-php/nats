@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Internal\Connection\Uri;
 use Thesis\Nats\Internal\Validation\Validate;
 
 /**
@@ -12,9 +13,7 @@ use Thesis\Nats\Internal\Validation\Validate;
 final readonly class Config
 {
     private const string DEFAULT_URL = '127.0.0.1:4222';
-    private const string DEFAULT_HOST = '127.0.0.1';
-    private const int DEFAULT_PORT = 4222;
-    private const int DEFAULT_CONNECTION_TIMEOUT = 10;
+    private const float DEFAULT_CONNECTION_TIMEOUT = 10.0;
     private const int DEFAULT_PING_INTERVAL = 10000;
     private const int DEFAULT_MAX_PINGS = 5;
     private const string DEFAULT_CLIENT_NAME = 'thesis/nats';
@@ -60,6 +59,8 @@ final readonly class Config
         public string $clientName = self::DEFAULT_CLIENT_NAME,
         public ?float $requestTimeout = null,
     ) {
+        Validate::duration($connectionTimeout, 'connection timeout');
+
         if ($requestTimeout !== null) {
             Validate::duration($requestTimeout, 'request timeout');
         }
@@ -78,120 +79,29 @@ final readonly class Config
      */
     public static function fromURI(#[\SensitiveParameter] string $uri): self
     {
-        $components = parse_url($uri);
-
-        if ($components === false) {
-            throw new \InvalidArgumentException("The uri '{$uri}' is invalid.");
-        }
-
-        $query = [];
-        if (isset($components['query']) && $components['query'] !== '') {
-            parse_str($components['query'], $query);
-        }
-
-        $connectionTimeout = self::DEFAULT_CONNECTION_TIMEOUT;
-        if (isset($query['connection_timeout']) && is_numeric($query['connection_timeout']) && (int) $query['connection_timeout'] > 0) {
-            /** @var positive-int $connectionTimeout */
-            $connectionTimeout = (int) $query['connection_timeout'];
-        }
-
-        $tcpNoDelay = true;
-        if (isset($query['tcp_nodelay'])) {
-            $tcpNoDelay = filter_var($query['tcp_nodelay'], FILTER_VALIDATE_BOOL);
-        }
-
-        $verbose = false;
-        if (isset($query['verbose'])) {
-            $verbose = filter_var($query['verbose'], FILTER_VALIDATE_BOOL);
-        }
-
-        $pedantic = false;
-        if (isset($query['pedantic'])) {
-            $pedantic = filter_var($query['pedantic'], FILTER_VALIDATE_BOOL);
-        }
-
-        $noResponders = false;
-        if (isset($query['no_responders'])) {
-            $noResponders = filter_var($query['no_responders'], FILTER_VALIDATE_BOOL);
-        }
-
-        $ping = self::DEFAULT_PING_INTERVAL;
-        if (isset($query['ping']) && is_numeric($query['ping'])) {
-            /** @var ?positive-int $ping */
-            $ping = match ($interval = (int) $query['ping']) {
-                -1 => null,
-                default => $interval < 0 ? self::DEFAULT_PING_INTERVAL : $interval,
-            };
-        }
-
-        $maxPings = self::DEFAULT_MAX_PINGS;
-        if (isset($query['max_pings']) && is_numeric($query['max_pings']) && (int) $query['max_pings'] > 0) {
-            /** @var positive-int $maxPings */
-            $maxPings = (int) $query['max_pings'];
-        }
-
-        $jetStreamDomain = null;
-        if (isset($query['jetstream_domain']) && \is_string($query['jetstream_domain']) && $query['jetstream_domain'] !== '') {
-            $jetStreamDomain = $query['jetstream_domain'];
-        }
-
-        $port = self::DEFAULT_PORT;
-        if (isset($components['port']) && $components['port'] > 0) {
-            $port = $components['port'];
-        }
-
-        $urls = [];
-        foreach (explode(',', $components['host'] ?? '') as $host) {
-            $hostport = explode(':', $host);
-            $urls[] = \sprintf('%s:%d', $hostport[0] === '' ? self::DEFAULT_HOST : $hostport[0], (int) ($hostport[1] ?? $port));
-        }
-
-        $user = null;
-        if (isset($components['user']) && $components['user'] !== '') {
-            $user = $components['user'];
-        }
-
-        $password = null;
-        if (isset($components['pass']) && $components['pass'] !== '') {
-            $password = $components['pass'];
-        }
-
-        $jwt = null;
-        if (isset($query['jwt']) && \is_string($query['jwt']) && $query['jwt'] !== '') {
-            $jwt = $query['jwt'];
-        }
-
-        $nkey = null;
-        if (isset($query['nkey']) && \is_string($query['nkey']) && $query['nkey'] !== '') {
-            $nkey = $query['nkey'];
-        }
-
-        $clientName = self::DEFAULT_CLIENT_NAME;
-        if (isset($query['client_name']) && \is_string($query['client_name']) && $query['client_name'] !== '') {
-            $clientName = $query['client_name'];
-        }
-
-        $requestTimeout = null;
-        if (isset($query['request_timeout']) && is_numeric($query['request_timeout']) && (float) $query['request_timeout'] > 0) {
-            $requestTimeout = (float) $query['request_timeout'];
-        }
+        $parsed = Uri::parse($uri);
+        $query = $parsed->query;
 
         return new self(
-            urls: $urls,
-            verbose: $verbose,
-            pedantic: $pedantic,
-            connectionTimeout: $connectionTimeout,
-            user: $user,
-            password: $password,
-            jwt: $jwt,
-            nkey: $nkey,
-            tcpNoDelay: $tcpNoDelay,
-            noResponders: $noResponders,
-            ping: $ping,
-            maxPings: $maxPings,
-            jetStreamDomain: $jetStreamDomain,
-            clientName: $clientName,
-            requestTimeout: $requestTimeout,
+            urls: $parsed->urls,
+            verbose: $query->verbose ?? false,
+            pedantic: $query->pedantic ?? false,
+            connectionTimeout: $query->connectionTimeout ?? self::DEFAULT_CONNECTION_TIMEOUT,
+            user: $parsed->user,
+            password: $parsed->password,
+            jwt: $query->jwt,
+            nkey: $query->nkey,
+            tcpNoDelay: $query->tcpNoDelay ?? true,
+            noResponders: $query->noResponders ?? false,
+            ping: match (true) {
+                $query->ping === -1 => null,
+                $query->ping !== null && $query->ping > 0 => $query->ping,
+                default => self::DEFAULT_PING_INTERVAL,
+            },
+            maxPings: $query->maxPings ?? self::DEFAULT_MAX_PINGS,
+            jetStreamDomain: $query->jetStreamDomain,
+            clientName: $query->clientName ?? self::DEFAULT_CLIENT_NAME,
+            requestTimeout: $query->requestTimeout,
         );
     }
 
@@ -204,7 +114,7 @@ final readonly class Config
      *     nkey?: non-empty-string,
      *     verbose?: bool,
      *     pedantic?: bool,
-     *     connection_timeout?: positive-int,
+     *     connection_timeout?: float,
      *     tcp_nodelay?: bool,
      *     no_responders?: bool,
      *     ping?: positive-int,
