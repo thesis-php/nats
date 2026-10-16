@@ -63,6 +63,35 @@ final class ServerInfoTest extends TestCase
         self::assertEquals($info, ServerInfo::fromJson($json));
     }
 
+    public function testOnlyVersionIsRequired(): void
+    {
+        self::assertEquals(new ServerInfo(version: '2.1.9'), ServerInfo::fromJson('{"version":"2.1.9"}'));
+    }
+
+    public function testDefaultsOfMissingFields(): void
+    {
+        $info = ServerInfo::fromJson('{"server_id":"NCNITNSOJEGWKBAVPXS5M43GLPANADGR6YOMDAYSTVZDHDR6DLD64ZDA","version":"2.1.9"}');
+
+        self::assertFalse($info->headers);
+        self::assertSame(0, $info->proto);
+        self::assertNull($info->maxPayload);
+        self::assertNull($info->serverName);
+    }
+
+    public function testMissingVersion(): void
+    {
+        self::expectException(\InvalidArgumentException::class);
+        self::expectExceptionMessage("'info' must contain the key 'version'.");
+        ServerInfo::fromJson('{"server_id":"NCNITNSOJEGWKBAVPXS5M43GLPANADGR6YOMDAYSTVZDHDR6DLD64ZDA"}');
+    }
+
+    public function testPresentFieldIsStillChecked(): void
+    {
+        self::expectException(\UnexpectedValueException::class);
+        self::expectExceptionMessage("The 'info' key 'headers' must be a boolean.");
+        ServerInfo::fromJson('{"version":"2.1.9","headers":"yes"}');
+    }
+
     public function testInvalidJson(): void
     {
         self::expectException(\JsonException::class);
