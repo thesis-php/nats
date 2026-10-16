@@ -20,6 +20,16 @@ final readonly class Message implements Frame
         public ?Headers $headers = null,
     ) {}
 
+    /**
+     * The size of the message the server checks against max_payload: the encoded headers and the payload, in bytes.
+     *
+     * @return non-negative-int
+     */
+    public function size(): int
+    {
+        return \strlen($this->payload ?? '') + ($this->headers !== null ? \strlen(encodeHeaders($this->headers)) : 0);
+    }
+
     public function encode(): string
     {
         $buffer = '';

@@ -11,8 +11,11 @@ use Thesis\Nats\NatsException;
  */
 final class MaximumControlLineExceeded extends NatsException
 {
-    public function __construct(int $code = 0, ?\Throwable $previous = null)
+    /**
+     * @param non-empty-string $message the server's error, e.g. "maximum control line exceeded" with the details
+     */
+    public function __construct(string $message = 'Maximum Control Line Exceeded')
     {
-        parent::__construct('Maximum Control Line Exceeded', $code, $previous);
+        parent::__construct($message);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
+use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\CancelledException;
 use Amp\DeferredFuture;
@@ -48,6 +49,13 @@ final class SocketConnection implements Connection
     private ?DeferredFuture $handshake = null;
 
     /**
+     * Completed once the reader stops, with the error the server sent right before closing the connection, if any.
+     *
+     * @var DeferredFuture<?\Throwable>
+     */
+    private readonly DeferredFuture $termination;
+
+    /**
      * @param ?KeyPair $keypair the NKey of the user: the server gets its public key and the nonce signed with the secret one,
      *                          the seed itself never leaves the client
      */
@@ -63,6 +71,10 @@ final class SocketConnection implements Connection
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
         $this->queue = $queue;
+
+        /** @var DeferredFuture<?\Throwable> $termination */
+        $termination = new DeferredFuture();
+        $this->termination = $termination;
     }
 
     /**
@@ -112,6 +124,10 @@ final class SocketConnection implements Connection
             // The deferreds are failed or dropped together with the rest of the queue once the connection is closed.
             foreach ($acks as $ack) {
                 $ack->ignore();
+            }
+
+            if ($e instanceof StreamException) {
+                throw $this->closedWhileWriting($e);
             }
 
             throw $e;
@@ -187,6 +203,24 @@ final class SocketConnection implements Connection
         }
     }
 
+    /**
+     * The server closes the socket right after sending a fatal error, often in the middle of a write: amp shuts
+     * the writing side down only, so the reader still gets the error, and the write fails with the server's reason
+     * rather than a bare stream error.
+     */
+    private function closedWhileWriting(StreamException $e): ConnectionWasClosed
+    {
+        try {
+            $reason = $this->termination->getFuture()->await(new TimeoutCancellation($this->config->connectionTimeout));
+        } catch (CancelledException) {
+            $reason = null;
+        }
+
+        return $reason !== null
+            ? new ConnectionWasClosed("The connection was closed by the server: {$reason->getMessage()}", previous: $reason)
+            : new ConnectionWasClosed("The connection was closed: {$e->getMessage()}", previous: $e);
+    }
+
     public function info(): ConnectionInfo
     {
         return $this->info ?? throw new ConnectionIsNotAvailable();
@@ -210,6 +244,7 @@ final class SocketConnection implements Connection
         $queue = $this->queue;
         $hooks = $this->hooks;
         $socket = $this->socket;
+        $termination = $this->termination;
         $state = &$this->state;
         $handshake = &$this->handshake;
 
@@ -218,14 +253,20 @@ final class SocketConnection implements Connection
             $queue,
             $hooks,
             $socket,
+            $termination,
             &$state,
             &$handshake,
         ): void {
+            // The server sends a fatal error right before closing the connection, so it is the last frame read.
+            $last = null;
+
             while ($state === ConnectionState::Alive) {
                 $error = null;
 
                 try {
                     while (($frame = $framer->readFrame()) !== null) {
+                        $last = $frame;
+
                         if ($frame instanceof Protocol\Ok || $frame instanceof Protocol\Err) {
                             if (!$queue->isEmpty()) {
                                 // Verbose mode: the acknowledgement belongs to the oldest command awaiting one.
@@ -282,6 +323,10 @@ final class SocketConnection implements Connection
                     // The server closed the connection without answering the handshake.
                     $handshake?->error(new ConnectionIsNotAvailable());
                     $handshake = null;
+
+                    if (!$termination->isComplete()) {
+                        $termination->complete($last instanceof Protocol\Err ? $last->toException() : null);
+                    }
                 }
             }
         });

@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
-use Amp\ByteStream\ClosedException;
 use Amp\DeferredFuture;
 use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\TestWith;
 use Thesis\Nats\Exception\AuthorizationViolation;
+use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\MaximumControlLineExceeded;
 use Thesis\Nats\Exception\MaximumPayloadViolation;
 use Thesis\Nats\Exception\PermissionViolated;
 use Thesis\Nats\Internal\Connection\SocketConnection;
 use Thesis\Nats\Internal\Id;
+use function Amp\async;
+use function Amp\Socket\listen;
+use function Thesis\Nats\Internal\Protocol\encodeHeaders;
 
 /**
  * The server errors (-ERR) must be visible to the user in both verbose and non-verbose modes.
@@ -125,11 +129,12 @@ final class ServerErrorsTest extends NatsTestCase
 
     /**
      * The errors other than the permission violations make the server close the connection (nats.go closes it from
-     * the client side too). The payload over max_payload (1 MiB by default) is the easiest way to get one.
+     * the client side too). A payload over the account's limit is the easiest way to get one: the server announces
+     * its own max_payload (1 MiB) in INFO, the lower limit of the account (1 KiB) is known only to the server.
      */
     public function testFatalErrorClosesTheConnectionAndIsReported(): void
     {
-        $client = $this->client();
+        $client = $this->clientWithCredentials('limited', 'Pswd1');
 
         /** @var DeferredFuture<\Throwable> $error */
         $error = new DeferredFuture();
@@ -138,9 +143,10 @@ final class ServerErrorsTest extends NatsTestCase
         $subscription = $client->subscribe('events.*', static fn() => null);
 
         try {
-            $client->publish('events.happens', new Message(str_repeat('x', 1024 * 1024 + 1)));
-        } catch (ClosedException) {
-            // The server closes the socket as soon as it reads the PUB line, usually in the middle of the payload write.
+            $client->publish('events.happens', new Message(str_repeat('x', 2048)));
+        } catch (ConnectionWasClosed $e) {
+            // The server may close the socket before the write completes, then the write fails with the server's reason.
+            self::assertInstanceOf(MaximumPayloadViolation::class, $e->getPrevious());
         }
 
         self::assertInstanceOf(MaximumPayloadViolation::class, $error->getFuture()->await(new TimeoutCancellation(5)));
@@ -156,6 +162,118 @@ final class ServerErrorsTest extends NatsTestCase
 
         // The connection was closed, so the next call establishes a new one.
         $client->publish('events.happens', new Message('ok'));
+        $client->stop();
+    }
+
+    /**
+     * The server closes the connection on a message over its max_payload, failing every subscription of the client,
+     * so the client refuses such a message itself. The limit covers the headers and the payload together.
+     */
+    public function testMessageOverMaxPayloadIsRefusedBeforeSending(): void
+    {
+        $client = $this->client();
+        $id = Id\generateUniqueId();
+
+        /** @var DeferredFuture<\Throwable> $error */
+        $error = new DeferredFuture();
+        $client->onError($error->complete(...));
+
+        /** @var DeferredFuture<Delivery> $deferred */
+        $deferred = new DeferredFuture();
+        $subscription = $client->subscribe("{$id}.*", $deferred->complete(...));
+
+        $headers = new Headers(['X-Id' => [$id]]);
+        $maxPayload = 1024 * 1024;
+        $limit = $maxPayload - \strlen(encodeHeaders($headers));
+
+        try {
+            $client->publish("{$id}.too-large", new Message(str_repeat('x', $limit + 1), $headers));
+            self::fail('The message exceeds the max_payload of the server, publish must fail.');
+        } catch (MaximumPayloadViolation $e) {
+            self::assertStringContainsString((string) ($maxPayload + 1), $e->getMessage());
+            self::assertStringContainsString((string) $maxPayload, $e->getMessage());
+        }
+
+        try {
+            $client->request("{$id}.too-large", new Message(str_repeat('x', $maxPayload + 1)));
+            self::fail('The message exceeds the max_payload of the server, request must fail.');
+        } catch (MaximumPayloadViolation) {
+        }
+
+        // Nothing was sent: the connection and the subscription are alive, a message right at the limit goes through.
+        $client->publish("{$id}.fits", new Message(str_repeat('x', $limit), $headers));
+
+        $delivery = $deferred->getFuture()->await(new TimeoutCancellation(5));
+        self::assertSame("{$id}.fits", $delivery->subject);
+        self::assertSame($limit, \strlen($delivery->message->payload ?? ''));
+        self::assertFalse($subscription->completed());
+        self::assertFalse($error->isComplete());
+
+        $client->stop();
+    }
+
+    public function testControlLineOverServerLimitIsReported(): void
+    {
+        $client = $this->client();
+
+        /** @var DeferredFuture<\Throwable> $error */
+        $error = new DeferredFuture();
+        $client->onError($error->complete(...));
+
+        // The server's max_control_line is 4 KiB by default, the subject alone is longer.
+        $client->publish('events.' . str_repeat('x', 5000), new Message('ok'));
+
+        $e = $error->getFuture()->await(new TimeoutCancellation(5));
+        self::assertInstanceOf(MaximumControlLineExceeded::class, $e);
+        self::assertStringStartsWith('maximum control line exceeded', $e->getMessage());
+
+        $client->stop();
+    }
+
+    /**
+     * The server stops reading, sends the error and closes the socket in the middle of a large write: the write fails
+     * with the server's reason instead of a bare stream error. A fake server makes the timing deterministic.
+     */
+    public function testWriteInterruptedByServerFailsWithItsReason(): void
+    {
+        $server = listen('127.0.0.1:0');
+        $address = $server->getAddress()->toString();
+        \assert($address !== '');
+
+        $future = async(static function () use ($server): void {
+            $socket = $server->accept() ?? throw new \LogicException('The client did not connect.');
+
+            // 64 MiB, so that the client sends a message larger than the socket buffers.
+            $socket->write("INFO {\"version\":\"2.12.1\",\"headers\":true,\"max_payload\":67108864}\r\n");
+
+            $buffer = '';
+
+            while (!str_contains($buffer, "PING\r\n") && ($chunk = $socket->read()) !== null) {
+                $buffer .= $chunk;
+            }
+
+            $socket->write("PONG\r\n");
+
+            while (!str_contains($buffer, 'PUB ') && ($chunk = $socket->read()) !== null) {
+                $buffer .= $chunk;
+            }
+
+            $socket->write("-ERR 'Maximum Payload Violation'\r\n");
+            $socket->close();
+        });
+
+        $client = $this->clientWithUrls([$address]);
+
+        try {
+            $client->publish('events.happens', new Message(str_repeat('x', 16 * 1024 * 1024)));
+            self::fail('The server closed the connection in the middle of the write, publish must fail.');
+        } catch (ConnectionWasClosed $e) {
+            self::assertInstanceOf(MaximumPayloadViolation::class, $e->getPrevious());
+            self::assertStringContainsString('Maximum Payload Violation', $e->getMessage());
+        } finally {
+            $future->await(new TimeoutCancellation(5));
+            $server->close();
+        }
     }
 
     /**

@@ -11,8 +11,27 @@ use Thesis\Nats\NatsException;
  */
 final class MaximumPayloadViolation extends NatsException
 {
-    public function __construct(int $code = 0, ?\Throwable $previous = null)
+    /**
+     * The server received a message larger than its max_payload and closed the connection.
+     */
+    public static function fromServer(): self
     {
-        parent::__construct('Maximum Payload Violation', $code, $previous);
+        return new self('Maximum Payload Violation');
+    }
+
+    /**
+     * The client refused to publish a message larger than the max_payload the server announced, nothing was sent.
+     *
+     * @param positive-int $size
+     * @param positive-int $maxPayload
+     */
+    public static function forMessage(int $size, int $maxPayload): self
+    {
+        return new self("Maximum Payload Violation, the message of {$size} bytes exceeds the server limit of {$maxPayload} bytes");
+    }
+
+    private function __construct(string $message)
+    {
+        parent::__construct($message);
     }
 }
