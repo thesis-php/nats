@@ -17,8 +17,8 @@ use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
-use Thesis\Nats\Internal\Nkey\KeyPair;
 use Thesis\Nats\Internal\Protocol;
+use function Amp\async;
 use function Thesis\Package\version;
 
 /**
@@ -49,6 +49,14 @@ final class SocketConnection implements Connection
     private ?DeferredFuture $handshake = null;
 
     /**
+     * One entry per PING written after the handshake, in the order the server answers them with PONG:
+     * the deferred of a {@see ping()} that waits for its PONG, null for a keep-alive PING nobody waits for.
+     *
+     * @var \SplQueue<?DeferredFuture<void>>
+     */
+    private readonly \SplQueue $pongs;
+
+    /**
      * Completed once the reader stops, with the error the server sent right before closing the connection, if any.
      *
      * @var DeferredFuture<?\Throwable>
@@ -56,13 +64,13 @@ final class SocketConnection implements Connection
     private readonly DeferredFuture $termination;
 
     /**
-     * @param ?KeyPair $keypair the NKey of the user: the server gets its public key and the nonce signed with the secret one,
-     *                          the seed itself never leaves the client
+     * @param Credentials $credentials the JWT and the NKey of the user: the server gets the public key and the nonce
+     *                                 signed with the secret one, the seed itself never leaves the client
      */
     public function __construct(
         private readonly Config $config,
         private readonly Socket $socket,
-        private readonly ?KeyPair $keypair = null,
+        private readonly Credentials $credentials,
     ) {
         $this->framer = new Framer($this->socket);
         $this->hooks = new Hooks\ConcurrentProvider();
@@ -71,6 +79,10 @@ final class SocketConnection implements Connection
         /** @var \SplQueue<DeferredFuture<Protocol\Frame>> $queue */
         $queue = new \SplQueue();
         $this->queue = $queue;
+
+        /** @var \SplQueue<?DeferredFuture<void>> $pongs */
+        $pongs = new \SplQueue();
+        $this->pongs = $pongs;
 
         /** @var DeferredFuture<?\Throwable> $termination */
         $termination = new DeferredFuture();
@@ -106,6 +118,13 @@ final class SocketConnection implements Connection
 
         /** @var list<Future<Protocol\Frame>> $acks */
         $acks = [];
+
+        foreach ($frames as $frame) {
+            if ($frame instanceof Protocol\Ping) {
+                // Its PONG must not be taken for the one a ping() call waits for.
+                $this->pongs->push(null);
+            }
+        }
 
         if ($this->config->verbose) {
             foreach ($frames as $frame) {
@@ -150,6 +169,34 @@ final class SocketConnection implements Connection
         }
     }
 
+    public function ping(?Cancellation $cancellation = null): float
+    {
+        /** @var DeferredFuture<void> $pong */
+        $pong = new DeferredFuture();
+        // A cancelled ping leaves its deferred in the queue for its PONG, which may never come once the connection is closed.
+        $pong->getFuture()->ignore();
+        $this->pongs->push($pong);
+
+        $start = hrtime(true);
+
+        // The write waits for room in the socket buffer, which a stalled peer may never free: it runs on its own,
+        // so that the cancellation bounds it too. A cancelled write still completes in the background,
+        // keeping its PING in line with the deferred above, or fails together with the connection.
+        $framer = $this->framer;
+        $write = async(static fn() => $framer->writeFrame(Protocol\Ping::Frame));
+        $write->ignore();
+
+        try {
+            $write->await($cancellation);
+        } catch (StreamException $e) {
+            throw $this->closedWhileWriting($e);
+        }
+
+        $pong->getFuture()->await($cancellation);
+
+        return (hrtime(true) - $start) / 1e9;
+    }
+
     /**
      * Reads INFO, sends CONNECT and waits for the server to answer the PING that follows it.
      *
@@ -174,6 +221,7 @@ final class SocketConnection implements Connection
         /** @var DeferredFuture<void> $handshake */
         $handshake = new DeferredFuture();
         $this->handshake = $handshake;
+        $keypair = $this->credentials->keypair;
 
         try {
             $this->connect(new Protocol\Connect(
@@ -182,14 +230,15 @@ final class SocketConnection implements Connection
                 tlsRequired: false,
                 name: $this->config->clientName,
                 version: version(self::PACKAGE_NAME),
+                authToken: $this->config->token,
                 user: $this->config->user,
                 pass: $this->config->password,
-                sig: $this->keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $this->keypair->sign($frame->nonce) : null,
-                jwt: $this->config->jwt,
+                sig: $keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $keypair->sign($frame->nonce) : null,
+                jwt: $this->credentials->jwt,
                 // The server rejects no_responders without headers: the no responders status is a header.
                 noResponders: $this->config->noResponders && $this->info->allowHeaders,
                 headers: $this->info->allowHeaders,
-                nkey: $this->keypair?->publicKey,
+                nkey: $keypair?->publicKey,
             ), $cancellation);
 
             // In non-verbose mode the server does not acknowledge CONNECT: it stays silent on success and answers
@@ -235,6 +284,7 @@ final class SocketConnection implements Connection
         $this->state = ConnectionState::GracefulClosed;
         $this->socket->close();
         self::failPending($this->queue, new ConnectionWasClosed());
+        self::failPongs($this->pongs, new ConnectionWasClosed());
         $this->hooks->dispatch(Hooks\ConnectionClosed::Event);
     }
 
@@ -242,6 +292,7 @@ final class SocketConnection implements Connection
     {
         $framer = $this->framer;
         $queue = $this->queue;
+        $pongs = $this->pongs;
         $hooks = $this->hooks;
         $socket = $this->socket;
         $termination = $this->termination;
@@ -251,6 +302,7 @@ final class SocketConnection implements Connection
         EventLoop::queue(static function () use (
             $framer,
             $queue,
+            $pongs,
             $hooks,
             $socket,
             $termination,
@@ -283,9 +335,13 @@ final class SocketConnection implements Connection
                             continue;
                         }
 
-                        if ($frame instanceof Protocol\Pong && $handshake !== null) {
-                            $handshake->complete();
-                            $handshake = null;
+                        if ($frame instanceof Protocol\Pong) {
+                            if ($handshake !== null) {
+                                $handshake->complete();
+                                $handshake = null;
+                            } elseif (!$pongs->isEmpty()) {
+                                $pongs->shift()?->complete();
+                            }
                         }
 
                         $event = match (true) {
@@ -313,6 +369,7 @@ final class SocketConnection implements Connection
                 } finally {
                     // Nothing acknowledges the commands still awaiting +OK any more.
                     self::failPending($queue, $error ?? new ConnectionWasClosed());
+                    self::failPongs($pongs, $error ?? new ConnectionWasClosed());
 
                     if ($state !== ConnectionState::GracefulClosed) { // @phpstan-ignore notIdentical.alwaysTrue
                         $state = ConnectionState::Closed;
@@ -378,6 +435,16 @@ final class SocketConnection implements Connection
     private static function isAcknowledged(Protocol\Frame $frame): bool
     {
         return !$frame instanceof Protocol\Ping && !$frame instanceof Protocol\Pong;
+    }
+
+    /**
+     * @param \SplQueue<?DeferredFuture<void>> $pongs
+     */
+    private static function failPongs(\SplQueue $pongs, \Throwable $e): void
+    {
+        while (!$pongs->isEmpty()) {
+            $pongs->shift()?->error($e);
+        }
     }
 
     /**

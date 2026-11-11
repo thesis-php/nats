@@ -87,6 +87,30 @@ final class Client
     }
 
     /**
+     * Connects to the server unless the client is already connected. Every call that needs the connection
+     * establishes it on demand, so calling this is optional: it makes network and authentication errors
+     * surface at startup rather than from the first publish or subscribe.
+     *
+     * @throws NatsException
+     */
+    public function connect(?Cancellation $cancellation = null): void
+    {
+        $this->connection($cancellation);
+    }
+
+    /**
+     * Sends PING and waits for the server to answer with PONG, connecting first if needed. Once it returns,
+     * the server has processed everything this client sent before, e.g. the subscriptions are active.
+     *
+     * @return float the round-trip time in seconds
+     * @throws NatsException
+     */
+    public function ping(?Cancellation $cancellation = null): float
+    {
+        return $this->connection($cancellation)->ping($cancellation);
+    }
+
+    /**
      * @param ?non-empty-string $domain
      * @throws NatsException
      */

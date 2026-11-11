@@ -11,6 +11,7 @@ use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use Revolt\EventLoop;
+use Thesis\Nats\Exception\AuthorizationViolation;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\RequestHasNoResponders;
@@ -387,6 +388,146 @@ final class ClientTest extends NatsTestCase
             $client->stop();
         } finally {
             $proxy->stop();
+        }
+    }
+
+    public function testConnectEstablishesConnectionWithoutAnyCall(): void
+    {
+        $name = Id\generateUniqueId();
+        $client = $this->clientNamed($name);
+
+        self::assertFalse($this->isConnected($name));
+
+        $client->connect(new TimeoutCancellation(5));
+        self::assertTrue($this->isConnected($name));
+
+        // Connecting again reuses the connection.
+        $client->connect();
+        self::assertTrue($this->isConnected($name));
+    }
+
+    public function testConnectSurfacesAuthenticationErrors(): void
+    {
+        $client = $this->clientWithConfig(new Config(urls: [$this->natsAddress()], user: 'user', password: 'wrong'));
+
+        self::expectException(AuthorizationViolation::class);
+
+        $client->connect(new TimeoutCancellation(5));
+    }
+
+    public function testPingMakesSubscriptionVisibleToOtherClients(): void
+    {
+        $subscriber = $this->client();
+        $publisher = new Client($this->config());
+        $subject = Id\generateUniqueId();
+
+        try {
+            $deliveries = $subscriber->subscribeIterator($subject);
+
+            // SUB is not acknowledged: only the PONG proves the server has processed it.
+            $rtt = $subscriber->ping(new TimeoutCancellation(5));
+            self::assertGreaterThan(0, $rtt);
+
+            $publisher->publish($subject, new Message('ok'));
+
+            foreach ($deliveries as $delivery) {
+                self::assertSame('ok', $delivery->message->payload);
+
+                $deliveries->stop();
+            }
+        } finally {
+            $publisher->stop();
+        }
+    }
+
+    public function testPingCancellationBoundsBlockedWrite(): void
+    {
+        $proxy = PausableProxy::start($this->natsAddress());
+
+        try {
+            $client = $this->clientWithUrls([$proxy->address]);
+            $client->connect(new TimeoutCancellation(5));
+
+            // The proxy stops reading from the client: the socket buffers fill up and the writes queue behind them.
+            $proxy->pause();
+
+            $subject = Id\generateUniqueId();
+            $payload = str_repeat('x', 512 * 1024);
+            $flood = async(static function () use (
+                $client,
+                $subject,
+                $payload,
+            ): void {
+                for ($i = 0; $i < 64; ++$i) {
+                    $client->publish($subject, new Message($payload));
+                }
+            });
+            $flood->ignore();
+            delay(0.1);
+
+            $ping = async(static fn() => $client->ping(new TimeoutCancellation(0.05)));
+            delay(0.3);
+
+            // The PING has not been written yet, the cancellation must still end the wait.
+            self::assertTrue($ping->isComplete());
+
+            self::expectException(CancelledException::class);
+            $ping->await();
+        } finally {
+            $proxy->stop();
+        }
+    }
+
+    public function testPingWaitsForItsOwnPong(): void
+    {
+        $server = listen('127.0.0.1:0');
+        $address = $server->getAddress()->toString();
+        \assert($address !== '');
+
+        $peer = async(static function () use ($server): Socket {
+            $peer = $server->accept() ?? self::fail('The client has not connected.');
+            $peer->write("INFO {\"server_id\":\"fake\",\"version\":\"2.12.0\",\"headers\":true,\"max_payload\":1048576}\r\n");
+
+            // CONNECT and the handshake PING.
+            $buffer = '';
+
+            while (!str_contains($buffer, "PING\r\n")) {
+                $buffer .= $peer->read() ?? self::fail('The client has closed the connection.');
+            }
+
+            $peer->write("PONG\r\n");
+
+            return $peer;
+        });
+
+        $client = $this->clientWithConfig(new Config(urls: [$address], connectionTimeout: 5, ping: 300, maxPings: 100));
+        $client->connect(new TimeoutCancellation(5));
+        $peer = $peer->await(new TimeoutCancellation(1));
+
+        try {
+            // The keep-alive PING is sent and left unanswered.
+            delay(0.4);
+
+            $ping = async($client->ping(...));
+            delay(0.05);
+
+            // This PONG answers the keep-alive PING sent earlier, not the one of ping().
+            $peer->write("PONG\r\n");
+            delay(0.05);
+            self::assertFalse($ping->isComplete());
+
+            $peer->write("PONG\r\n");
+            $ping->await(new TimeoutCancellation(1));
+
+            // A ping waiting for its PONG fails once the connection is gone.
+            $ping = async($client->ping(...));
+            delay(0.05);
+            $peer->close();
+
+            self::expectException(ConnectionWasClosed::class);
+            $ping->await(new TimeoutCancellation(1));
+        } finally {
+            $server->close();
         }
     }
 

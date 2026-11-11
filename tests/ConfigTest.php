@@ -283,6 +283,36 @@ final class ConfigTest extends TestCase
             new Config(urls: ['h1:4222', 'h2:4222'], user: 'user', password: 'p,ass'),
         ],
     )]
+    #[TestWith(
+        [
+            'nats://s3cr%40t@h1:4222,nats://s3cr%40t@h2',
+            new Config(urls: ['h1:4222', 'h2:4222'], token: 's3cr@t'),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://ignored@127.0.0.1:4222?token=s3cr3t',
+            new Config(token: 's3cr3t'),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?credentials_file=%2Fetc%2Fnats%2Fuser.creds',
+            new Config(credentialsFile: '/etc/nats/user.creds'),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?jwt_file=/user.jwt&nkey_file=/user.nk&credentials_file=',
+            new Config(jwtFile: '/user.jwt', nkeyFile: '/user.nk'),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://alice:@h1:4222,nats://alice:@h2',
+            new Config(urls: ['h1:4222', 'h2:4222'], user: 'alice'),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
@@ -311,6 +341,12 @@ final class ConfigTest extends TestCase
     #[TestWith(['nats://[::1'])]
     #[TestWith(['nats://[::1]4222'])]
     #[TestWith(['nats://h1:4222/path'])]
+    #[TestWith(['nats://user:pass@h1:4222?token=s3cr3t'])]
+    #[TestWith(['nats://h1:4222?credentials_file=/user.creds&jwt=x'])]
+    #[TestWith(['nats://h1:4222?credentials_file=/user.creds&nkey_file=/user.nk'])]
+    #[TestWith(['nats://h1:4222?jwt=x&jwt_file=/user.jwt'])]
+    #[TestWith(['nats://h1:4222?nkey=x&nkey_file=/user.nk'])]
+    #[TestWith(['nats://alice@h1:4222,nats://alice:@h2:4222'])]
     public function testFromURIRejectsInvalidUri(string $uri): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -364,6 +400,18 @@ final class ConfigTest extends TestCase
     public function testFromArrayWithRequestTimeout(): void
     {
         self::assertEquals(new Config(requestTimeout: 0.5), Config::fromArray(['request_timeout' => 0.5]));
+    }
+
+    public function testFromArrayWithAuthenticationFiles(): void
+    {
+        self::assertEquals(
+            new Config(token: 's3cr3t', jwtFile: '/user.jwt', nkeyFile: '/user.nk'),
+            Config::fromArray(['token' => 's3cr3t', 'jwt_file' => '/user.jwt', 'nkey_file' => '/user.nk']),
+        );
+        self::assertEquals(
+            new Config(credentialsFile: '/user.creds'),
+            Config::fromArray(['credentials_file' => '/user.creds']),
+        );
     }
 
     #[TestWith([0.0])]

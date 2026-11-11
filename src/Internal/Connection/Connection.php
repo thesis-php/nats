@@ -22,6 +22,14 @@ interface Connection
      */
     public function execute(Protocol\Frame|array $frames, ?Cancellation $cancellation = null): void;
 
+    /**
+     * Sends PING and waits for its PONG: the server has then processed everything written before it.
+     *
+     * @return float the round-trip time in seconds
+     * @throws NatsException
+     */
+    public function ping(?Cancellation $cancellation = null): float;
+
     public Hooks\Provider $hooks { get; }
 
     /**

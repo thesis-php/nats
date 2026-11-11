@@ -7,6 +7,7 @@ namespace Thesis\Nats\Internal\Connection;
 /**
  * Parses `[scheme://][user[:password]@]host[:port][,host[:port]...][/][?query]`.
  * Every host may repeat the scheme and the credentials, as nats.go server lists do (`nats://u:p@a:4222,nats://u:p@b:4222`).
+ * The userinfo without a colon is a token, as in nats.go (`nats://token@host`); `user:@host` is a user with an empty password.
  *
  * @internal
  */
@@ -26,11 +27,13 @@ final readonly class Uri
      * @param non-empty-list<non-empty-string> $urls in the `host:port` form, an IPv6 host in brackets
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
+     * @param ?non-empty-string $token
      */
     private function __construct(
         public array $urls,
         public ?string $user,
         public ?string $password,
+        public ?string $token,
         public Query $query,
     ) {}
 
@@ -92,9 +95,9 @@ final readonly class Uri
             $urls[] = self::server($server);
         }
 
-        [$user, $password] = $credentials ?? [null, null];
+        [$user, $password, $token] = $credentials ?? [null, null, null];
 
-        return new self($urls, $user, $password, $query);
+        return new self($urls, $user, $password, $token, $query);
     }
 
     /**
@@ -122,10 +125,17 @@ final readonly class Uri
     }
 
     /**
-     * @return array{?non-empty-string, ?non-empty-string}
+     * @return array{?non-empty-string, ?non-empty-string, ?non-empty-string} the user, the password and the token
      */
     private static function credentials(#[\SensitiveParameter] string $userinfo): array
     {
+        // Only the presence of the colon tells a token from a user: an empty password decodes to nothing as well.
+        if (!str_contains($userinfo, ':')) {
+            $token = rawurldecode($userinfo);
+
+            return [null, null, $token !== '' ? $token : null];
+        }
+
         [$user, $password] = self::split($userinfo, ':');
         $user = rawurldecode($user);
         $password = rawurldecode($password);
@@ -133,6 +143,7 @@ final readonly class Uri
         return [
             $user !== '' ? $user : null,
             $password !== '' ? $password : null,
+            null,
         ];
     }
 

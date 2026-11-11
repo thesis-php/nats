@@ -36,6 +36,11 @@ final readonly class Config
      * @param ?non-empty-string $jetStreamDomain
      * @param non-empty-string $clientName
      * @param ?float $requestTimeout in seconds, the default timeout of {@see Client::request()} and {@see Client::requestMany()}, null for none
+     * @param ?non-empty-string $token the authorization token, exclusive with a user and a password
+     * @param ?non-empty-string $credentialsFile the path to a user credentials file (`.creds`) holding both the JWT and the NKey seed,
+     *                                           read on every connection attempt; exclusive with the other JWT and NKey options
+     * @param ?non-empty-string $jwtFile the path to a file holding the user JWT, bare or decorated, read on every connection attempt; exclusive with $jwt
+     * @param ?non-empty-string $nkeyFile the path to a file holding the NKey user seed, bare or decorated, read on every connection attempt; exclusive with $nkey
      * @throws \InvalidArgumentException
      */
     public function __construct(
@@ -58,8 +63,30 @@ final readonly class Config
         public ?string $jetStreamDomain = null,
         public string $clientName = self::DEFAULT_CLIENT_NAME,
         public ?float $requestTimeout = null,
+        #[\SensitiveParameter]
+        public ?string $token = null,
+        public ?string $credentialsFile = null,
+        public ?string $jwtFile = null,
+        public ?string $nkeyFile = null,
     ) {
         Validate::duration($connectionTimeout, 'connection timeout');
+
+        // nats-server itself refuses to have a token next to users, so both of them here are a mistake.
+        if ($token !== null && ($user !== null || $password !== null)) {
+            throw new \InvalidArgumentException('A token cannot be combined with a user and a password.');
+        }
+
+        if ($credentialsFile !== null && ($jwt !== null || $jwtFile !== null || $nkey !== null || $nkeyFile !== null)) {
+            throw new \InvalidArgumentException('A credentials file already holds the JWT and the NKey seed: it cannot be combined with the other JWT and NKey options.');
+        }
+
+        if ($jwt !== null && $jwtFile !== null) {
+            throw new \InvalidArgumentException('Only one of the JWT and the JWT file can be set.');
+        }
+
+        if ($nkey !== null && $nkeyFile !== null) {
+            throw new \InvalidArgumentException('Only one of the NKey seed and the NKey file can be set.');
+        }
 
         if ($requestTimeout !== null) {
             Validate::duration($requestTimeout, 'request timeout');
@@ -102,6 +129,11 @@ final readonly class Config
             jetStreamDomain: $query->jetStreamDomain,
             clientName: $query->clientName ?? self::DEFAULT_CLIENT_NAME,
             requestTimeout: $query->requestTimeout,
+            // nats://token@host, as in nats.go; the token option takes precedence.
+            token: $query->token ?? $parsed->token,
+            credentialsFile: $query->credentialsFile,
+            jwtFile: $query->jwtFile,
+            nkeyFile: $query->nkeyFile,
         );
     }
 
@@ -122,6 +154,10 @@ final readonly class Config
      *     jetstream_domain?: non-empty-string,
      *     client_name?: non-empty-string,
      *     request_timeout?: float,
+     *     token?: non-empty-string,
+     *     credentials_file?: non-empty-string,
+     *     jwt_file?: non-empty-string,
+     *     nkey_file?: non-empty-string,
      * } $options
      * @throws \InvalidArgumentException
      */
@@ -143,6 +179,10 @@ final readonly class Config
             jetStreamDomain: $options['jetstream_domain'] ?? null,
             clientName: $options['client_name'] ?? self::DEFAULT_CLIENT_NAME,
             requestTimeout: $options['request_timeout'] ?? null,
+            token: $options['token'] ?? null,
+            credentialsFile: $options['credentials_file'] ?? null,
+            jwtFile: $options['jwt_file'] ?? null,
+            nkeyFile: $options['nkey_file'] ?? null,
         );
     }
 }
