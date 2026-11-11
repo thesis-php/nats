@@ -8,6 +8,8 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Authentication](#authentication)
   - [TLS](#tls)
   - [Connect and ping](#connect-and-ping)
+  - [Connection state and options](#connection-state-and-options)
+  - [Logging](#logging)
   - [Reconnect](#reconnect)
   - [Publish-Subscribe](#pub-sub)
   - [Queues](#queues)
@@ -70,7 +72,7 @@ or `tls://`, which requires TLS (see [TLS](#tls)); `ws://` and `wss://` are reje
 and the credentials are percent-encoded like in any url (`p%40ss` for `p@ss`). The servers of a list are tried in a random order (in the given one with `noRandomize`, `no_randomize=true` in the uri) until one accepts the connection, see [Reconnect](#reconnect);
 each one may repeat the scheme and the credentials, as in nats.go (`nats://u:p@h1:4222,nats://u:p@h2:4222`): one user is sent to every server, so different credentials are rejected. The options are the snake_case names of the `Nats\Config` parameters,
 e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `token`, `jwt`, `nkey`, `credentials_file`, `jwt_file`, `nkey_file`, `client_name`, `allow_reconnect`, `max_reconnects` (negative for no limit), `reconnect_wait`, `reconnect_jitter`, `reconnect_buffer_size`, `no_randomize`,
-and the TLS ones `tls_ca_file`, `tls_cert_file`, `tls_key_file`, `tls_key_passphrase`, `tls_verify`, `tls_server_name`, `tls_handshake_first`.
+`no_echo`, `inbox_prefix`, `drain_timeout`, and the TLS ones `tls_ca_file`, `tls_cert_file`, `tls_key_file`, `tls_key_passphrase`, `tls_verify`, `tls_server_name`, `tls_handshake_first`.
 Userinfo without a colon is a token, as in nats.go (`nats://s3cr3t@host`), while `nats://alice:@host` is the user `alice` with an empty password, see [Authentication](#authentication):
 
 ```php
@@ -173,6 +175,7 @@ so `connect()` fails with `Nats\Exception\ConnectionIsNotAvailable` that says so
 The client connects lazily, on the first call that needs the server. Call `connect()` to establish the connection at startup instead,
 so that an unavailable server or wrong credentials fail right away rather than on the first publish. `ping()` sends `PING` and waits for `PONG`:
 once it returns, the server has processed everything the client sent before (e.g. a subscription is active for the other clients), and it returns the round-trip time in seconds.
+It is what `Flush()` is in nats.go.
 
 ```php
 <?php
@@ -198,6 +201,66 @@ $nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
 
 $rtt = $nc->ping(); // The subscription is active on the server now.
 dump("Round trip: {$rtt}s");
+```
+
+#### Connection state and options
+
+`status()` tells whether the client is `Disconnected` (not yet, or closed), `Connecting`, `Connected`, `Reconnecting` or `Draining`, see `Nats\ConnectionStatus`.
+`serverInfo()` returns the INFO of the server the client is connected to (version, server id and name, cluster, JetStream, `maxPayload`, the client id the server knows this connection by, the lame duck mode, ...),
+the latest one the server has sent, or null when not connected; neither of them connects.
+
+- `noEcho` (`no_echo=true`) keeps the messages the client publishes from its own subscriptions; it needs a server that supports it (`proto` 1, nats-server 1.2.0+), otherwise connecting fails with `Nats\Exception\FeatureIsNotSupported`.
+- `inboxPrefix` (`inbox_prefix`, `_INBOX` by default) is the prefix of the reply subjects of requests and of the inboxes of JetStream, KV and Object Store consumers, e.g. for the accounts that allow the users only their own subjects. `newInbox()` makes a unique subject under it.
+- `drainTimeout` (`drain_timeout`, 30 seconds by default) bounds `drain()`, which waits for the handlers to finish the messages already received: once it passes, the connection is closed anyway and `drain()` throws `Nats\Exception\DrainTimedOut`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+$nc = new Nats\Client(new Nats\Config(
+    urls: ['127.0.0.1:4222'],
+    noEcho: true,
+    inboxPrefix: '_INBOX.orders',
+    drainTimeout: 5,
+));
+
+dump($nc->status()); // Nats\ConnectionStatus::Disconnected, nothing has connected yet
+$nc->connect();
+
+$info = $nc->serverInfo();
+dump("Connected to {$info?->serverName} {$info?->version} as client {$info?->clientId}");
+
+$reply = $nc->newInbox(); // _INBOX.orders.<unique id>
+
+try {
+    $nc->drain();
+} catch (Nats\Exception\DrainTimedOut) {
+    // The handlers did not finish in 5 seconds, the connection is closed anyway.
+}
+```
+
+#### Logging
+
+The client takes a PSR-3 logger (a `Psr\Log\NullLogger` by default) and logs the connection events: connected and reconnected (info), the connection lost (warning),
+every failed reconnect attempt (info), the connection closed (info, error with the reason), the servers of the cluster discovered (info), the lame duck mode (warning),
+and the errors also passed to `onError()`, such as a permission violation or a slow consumer (warning).
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+/** @var Psr\Log\LoggerInterface $logger e.g. Monolog */
+$nc = new Nats\Client(Nats\Config::fromURI('nats://127.0.0.1:4222'), logger: $logger);
 ```
 
 #### Reconnect

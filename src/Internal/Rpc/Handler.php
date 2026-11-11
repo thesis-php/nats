@@ -11,7 +11,6 @@ use Thesis\Nats\Delivery;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Exception\RequestHasNoResponders;
-use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
 
@@ -29,10 +28,12 @@ final class Handler
     /** @var ?\Closure(?Cancellation=): void */
     private ?\Closure $unsubscribe = null;
 
-    public function __construct()
+    /**
+     * @param non-empty-string $inbox the subject the replies come to, a token is appended to it per request
+     */
+    public function __construct(string $inbox)
     {
-        $inboxId = Id\generateInboxId();
-        $this->inboxId = "{$inboxId}.";
+        $this->inboxId = "{$inbox}.";
     }
 
     /**

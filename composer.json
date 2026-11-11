@@ -26,6 +26,7 @@
         "amphp/pipeline": "^1.2",
         "amphp/socket": "^2.4",
         "cuyz/valinor": "^1.15 || ^2.3",
+        "psr/log": "^3.0",
         "revolt/event-loop": "^1.0.8",
         "thesis/package-version": "^0.1.2",
         "thesis/time-span": "^0.2.3"

@@ -17,12 +17,14 @@ use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\FeatureIsNotSupported;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Exception\TlsHandshakeFailed;
 use Thesis\Nats\Exception\TlsIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\ServerInfo;
 use function Amp\async;
 use function Thesis\Package\version;
 
@@ -42,7 +44,7 @@ final class SocketConnection implements Connection
 
     private readonly PingPongHandler $pingpongs;
 
-    private ?ConnectionInfo $info = null;
+    private ?ServerInfo $info = null;
 
     private ConnectionState $state = ConnectionState::Idle;
 
@@ -249,11 +251,16 @@ final class SocketConnection implements Connection
             $this->secure($cancellation);
         }
 
+        // The servers before the echo option (proto 0) would deliver the messages to their publisher anyway.
+        if ($this->config->noEcho && $frame->proto < Protocol\Proto::Cluster->value) {
+            throw FeatureIsNotSupported::forNoEcho($frame->version);
+        }
+
         if ($this->state !== ConnectionState::Alive) {
             $this->run();
         }
 
-        $this->info ??= ConnectionInfo::fromServerInfo($frame);
+        $this->info ??= ServerInfo::fromProtocol($frame);
 
         /** @var DeferredFuture<void> $handshake */
         $handshake = new DeferredFuture();
@@ -264,6 +271,7 @@ final class SocketConnection implements Connection
             $this->connect(new Protocol\Connect(
                 verbose: $this->config->verbose,
                 pedantic: $this->config->pedantic,
+                echo: $this->config->noEcho ? false : null,
                 tlsRequired: $this->socket->getTlsState() === TlsState::Enabled,
                 name: $this->config->clientName,
                 version: version(self::PACKAGE_NAME),
@@ -275,8 +283,8 @@ final class SocketConnection implements Connection
                 sig: $keypair !== null && $frame->nonce !== null && $frame->nonce !== '' ? $keypair->sign($frame->nonce) : null,
                 jwt: $this->credentials->jwt,
                 // The server rejects no_responders without headers: the no responders status is a header.
-                noResponders: $this->config->noResponders && $this->info->allowHeaders,
-                headers: $this->info->allowHeaders,
+                noResponders: $this->config->noResponders && $this->info->headers,
+                headers: $this->info->headers,
                 nkey: $keypair?->publicKey,
             ), $cancellation);
 
@@ -330,7 +338,7 @@ final class SocketConnection implements Connection
             : new ConnectionWasClosed("The connection was closed: {$e->getMessage()}", previous: $e);
     }
 
-    public function info(): ConnectionInfo
+    public function info(): ServerInfo
     {
         return $this->info ?? throw new ConnectionIsNotAvailable();
     }

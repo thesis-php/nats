@@ -8,7 +8,6 @@ use Amp\Cancellation;
 use Amp\Future;
 use Amp\Pipeline;
 use Thesis\Nats\Client;
-use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Timer;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Api\Router;
@@ -65,7 +64,7 @@ final class PullConsumer
         );
 
         $subscription = $this->nats->subscribe(
-            subject: $reply = Id\generateInboxId(),
+            subject: $reply = $this->nats->newInbox(),
             handler: $handler,
             cancellation: $cancellation,
         );
@@ -124,7 +123,7 @@ final class PullConsumer
             throw new \LogicException('Priority group can only be used for priority consumer.');
         }
 
-        $reply = Id\generateInboxId();
+        $reply = $this->nats->newInbox();
 
         $messageHandler = new Internal\PullMessageHandler(
             handler: $handler,

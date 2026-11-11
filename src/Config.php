@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats;
 
+use Thesis\Nats\Exception\InvalidSubject;
 use Thesis\Nats\Internal\Connection\Uri;
 use Thesis\Nats\Internal\Validation\Validate;
 
@@ -21,6 +22,8 @@ final readonly class Config
     private const float DEFAULT_RECONNECT_WAIT = 2.0;
     private const float DEFAULT_RECONNECT_JITTER = 0.1;
     private const int DEFAULT_RECONNECT_BUFFER_SIZE = 8 * 1024 * 1024;
+    private const string DEFAULT_INBOX_PREFIX = '_INBOX';
+    private const float DEFAULT_DRAIN_TIMEOUT = 30.0;
 
     /**
      * @var non-empty-string
@@ -55,6 +58,9 @@ final readonly class Config
      * @param bool $noRandomize whether to try the servers in the given order instead of a random one
      * @param ?TlsConfig $tls the TLS options, with which TLS is required; without them the connection is upgraded to TLS
      *                        only when the server requires it, verifying its certificate against the system authorities
+     * @param bool $noEcho whether the server keeps the messages this client publishes from its own subscriptions
+     * @param non-empty-string $inboxPrefix the prefix of the reply subjects of requests and of the other inboxes, see {@see Client::newInbox()}
+     * @param float $drainTimeout in seconds, the bound of {@see Client::drain()}, after which the connection is closed anyway
      * @throws \InvalidArgumentException
      */
     public function __construct(
@@ -89,6 +95,9 @@ final readonly class Config
         public int $reconnectBufferSize = self::DEFAULT_RECONNECT_BUFFER_SIZE,
         public bool $noRandomize = false,
         public ?TlsConfig $tls = null,
+        public bool $noEcho = false,
+        public string $inboxPrefix = self::DEFAULT_INBOX_PREFIX,
+        public float $drainTimeout = self::DEFAULT_DRAIN_TIMEOUT,
     ) {
         Validate::duration($connectionTimeout, 'connection timeout');
 
@@ -127,6 +136,15 @@ final readonly class Config
 
         if ($requestTimeout !== null) {
             Validate::duration($requestTimeout, 'request timeout');
+        }
+
+        Validate::duration($drainTimeout, 'drain timeout');
+
+        // The tokens of the inbox are appended to it, so it is a literal subject.
+        try {
+            Validate::publishSubject($inboxPrefix);
+        } catch (InvalidSubject $e) {
+            throw new \InvalidArgumentException("The inbox prefix is invalid: {$e->getMessage()}", previous: $e);
         }
 
         $this->version = '0.1.x';
@@ -191,6 +209,9 @@ final readonly class Config
                 serverName: $query->tlsServerName,
                 handshakeFirst: $query->tlsHandshakeFirst ?? false,
             ) : null,
+            noEcho: $query->noEcho ?? false,
+            inboxPrefix: $query->inboxPrefix ?? self::DEFAULT_INBOX_PREFIX,
+            drainTimeout: $query->drainTimeout ?? self::DEFAULT_DRAIN_TIMEOUT,
         );
     }
 
@@ -230,6 +251,9 @@ final readonly class Config
      *         server_name?: non-empty-string,
      *         handshake_first?: bool,
      *     },
+     *     no_echo?: bool,
+     *     inbox_prefix?: non-empty-string,
+     *     drain_timeout?: float,
      * } $options
      * @throws \InvalidArgumentException
      */
@@ -270,6 +294,9 @@ final readonly class Config
                 serverName: $options['tls']['server_name'] ?? null,
                 handshakeFirst: $options['tls']['handshake_first'] ?? false,
             ) : null,
+            noEcho: $options['no_echo'] ?? false,
+            inboxPrefix: $options['inbox_prefix'] ?? self::DEFAULT_INBOX_PREFIX,
+            drainTimeout: $options['drain_timeout'] ?? self::DEFAULT_DRAIN_TIMEOUT,
         );
     }
 }

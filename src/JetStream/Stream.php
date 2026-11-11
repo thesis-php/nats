@@ -11,7 +11,6 @@ use Thesis\Nats\Exception\HeadersIsInvalid;
 use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
-use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\Message;
@@ -137,7 +136,7 @@ final readonly class Stream
      */
     public function getMessages(array $subjects): iterable
     {
-        $reply = Id\generateInboxId();
+        $reply = $this->nc->newInbox();
 
         $deliveries = $this->nc->subscribeIterator($reply);
 

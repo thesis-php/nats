@@ -27,6 +27,14 @@ final class FeatureIsNotSupported extends NatsException
         return new self("JetStream is not supported by this Nats version '{$serverVersion}'.");
     }
 
+    /**
+     * @param non-empty-string $serverVersion
+     */
+    public static function forNoEcho(string $serverVersion): self
+    {
+        return new self("Turning the echo off is not supported by this Nats version '{$serverVersion}'.");
+    }
+
     public static function forLimitMarkerTtl(): self
     {
         return new self('Limit marker ttl for KeyValue is not supported.');
