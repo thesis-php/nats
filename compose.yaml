@@ -25,5 +25,10 @@ services:
     volumes:
       - ./docker/nats/jwt-server.conf:/etc/jwt-server.conf
 
+  # Token authentication: nats-server refuses a token next to the users of accounts, so it runs on its own.
+  nats-token:
+    image: nats
+    command: --name nats-token -p 4222 --auth T0k3n
+
   nats-cli:
     image: bitnamilegacy/natscli:latest

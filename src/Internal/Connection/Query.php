@@ -21,6 +21,10 @@ final readonly class Query
      * @param ?non-empty-string $clientName
      * @param ?non-empty-string $jwt
      * @param ?non-empty-string $nkey
+     * @param ?non-empty-string $token
+     * @param ?non-empty-string $credentialsFile
+     * @param ?non-empty-string $jwtFile
+     * @param ?non-empty-string $nkeyFile
      */
     private function __construct(
         public ?bool $verbose = null,
@@ -37,6 +41,11 @@ final readonly class Query
         public ?string $jwt = null,
         #[\SensitiveParameter]
         public ?string $nkey = null,
+        #[\SensitiveParameter]
+        public ?string $token = null,
+        public ?string $credentialsFile = null,
+        public ?string $jwtFile = null,
+        public ?string $nkeyFile = null,
     ) {}
 
     public static function parse(#[\SensitiveParameter] string $query): self
@@ -56,6 +65,10 @@ final readonly class Query
             clientName: self::string($options, 'client_name'),
             jwt: self::string($options, 'jwt'),
             nkey: self::string($options, 'nkey'),
+            token: self::string($options, 'token'),
+            credentialsFile: self::string($options, 'credentials_file'),
+            jwtFile: self::string($options, 'jwt_file'),
+            nkeyFile: self::string($options, 'nkey_file'),
         );
     }
 
