@@ -49,6 +49,15 @@ final readonly class JetStream
     }
 
     /**
+     * @internal
+     * @return non-empty-string
+     */
+    public function newInbox(): string
+    {
+        return $this->nats->newInbox();
+    }
+
+    /**
      * @param non-empty-string $subject
      * @throws NatsException
      */

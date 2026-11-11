@@ -82,7 +82,7 @@ final readonly class Store
         $sink = new WritableIterableStream($info->size);
 
         $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            deliverSubject: $id = Id\generateInboxId(),
+            deliverSubject: $id = $this->nats->newInbox(),
             filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
         ));
 
@@ -251,7 +251,7 @@ final readonly class Store
             ->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
                 description: 'object store consumer',
                 deliverPolicy: $config->withHistory ? DeliverPolicy::LastPerSubject : DeliverPolicy::New,
-                deliverSubject: Id\generateInboxId(),
+                deliverSubject: $this->nats->newInbox(),
                 filterSubject: "\$O.{$this->name}.M.>",
             ))
             ->push(

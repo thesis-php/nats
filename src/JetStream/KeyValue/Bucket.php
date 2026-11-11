@@ -10,7 +10,6 @@ use Thesis\Nats\Exception\InvalidKey;
 use Thesis\Nats\Exception\WrongLastSequence;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
-use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream;
 use Thesis\Nats\JetStream\Api\AckPolicy;
@@ -334,7 +333,7 @@ final readonly class Bucket
         $consumerConfig = new JetStream\Api\ConsumerConfig(
             description: 'kv watch consumer',
             deliverPolicy: $deliverPolicy,
-            deliverSubject: Id\generateInboxId(),
+            deliverSubject: $this->js->newInbox(),
             startSeq: $startSeq,
             ackPolicy: AckPolicy::None,
             maxDeliver: 1,

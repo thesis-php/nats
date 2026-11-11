@@ -10,9 +10,13 @@ use Amp\CompositeCancellation;
 use Amp\Future;
 use Amp\Pipeline;
 use Amp\TimeoutCancellation;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Revolt\EventLoop;
 use Thesis\Nats\Exception\ConnectionWasClosed;
+use Thesis\Nats\Exception\DrainTimedOut;
 use Thesis\Nats\Exception\RequestTimedOut;
+use Thesis\Nats\Internal\ClientState;
 use Thesis\Nats\Internal\Connection;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Id;
@@ -83,10 +87,17 @@ final class Client
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
 
+    private ClientState $state = ClientState::Running;
+
+    /**
+     * @param LoggerInterface $logger gets the connection events: connected, lost, reconnected, closed, the failed
+     *                                reconnect attempts, the servers discovered, the lame duck mode and the server errors
+     */
     public function __construct(
         private readonly Config $config,
         private readonly Serializer $serializer = new ValinorSerializer(),
         private readonly Encoder $encoder = new NativeEncoder(),
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->connectionFactory = Connection\SocketConnectionFactory::fromConfig($this->config);
         $this->subscriptionIdGenerator = new Id\SubscriptionIdGenerator();
@@ -131,6 +142,51 @@ final class Client
         return $this->connection($cancellation)->ping($cancellation);
     }
 
+    public function status(): ConnectionStatus
+    {
+        if ($this->state === ClientState::Draining) {
+            return ConnectionStatus::Draining;
+        }
+
+        if ($this->connection === null) {
+            return ConnectionStatus::Disconnected;
+        }
+
+        if (!$this->activeConnection instanceof Connection\ReconnectingConnection) {
+            return ConnectionStatus::Connecting;
+        }
+
+        return match ($this->activeConnection->state()) {
+            Connection\ReconnectState::Idle => ConnectionStatus::Connecting,
+            Connection\ReconnectState::Connected => ConnectionStatus::Connected,
+            Connection\ReconnectState::Reconnecting => ConnectionStatus::Reconnecting,
+            Connection\ReconnectState::Closed => ConnectionStatus::Disconnected,
+        };
+    }
+
+    /**
+     * Returns the INFO of the server the client is connected to, null when it is not connected.
+     * While reconnecting, it is the one of the lost server. It does not connect.
+     */
+    public function serverInfo(): ?ServerInfo
+    {
+        $connection = $this->activeConnection;
+
+        return $connection instanceof Connection\ReconnectingConnection && $connection->state() !== Connection\ReconnectState::Closed
+            ? $connection->info()
+            : null;
+    }
+
+    /**
+     * Returns a unique subject under {@see Config::$inboxPrefix}, e.g. the reply subject of a request made by hand.
+     *
+     * @return non-empty-string
+     */
+    public function newInbox(): string
+    {
+        return Id\generateInboxId($this->config->inboxPrefix);
+    }
+
     /**
      * @param ?non-empty-string $domain
      * @throws NatsException
@@ -139,8 +195,8 @@ final class Client
     {
         $info = $this->connection($cancellation)->info();
 
-        if (!$info->supportJetstream) {
-            throw Exception\FeatureIsNotSupported::forJetStream($info->serverVersion);
+        if (!$info->jetStream) {
+            throw Exception\FeatureIsNotSupported::forJetStream($info->version);
         }
 
         return new JetStream(
@@ -189,8 +245,8 @@ final class Client
         $connection = $this->connection($cancellation);
         $info = $connection->info();
 
-        if ($message->headers !== null && \count($message->headers) > 0 && !$info->allowHeaders) {
-            throw Exception\FeatureIsNotSupported::forHeaders($info->serverVersion);
+        if ($message->headers !== null && \count($message->headers) > 0 && !$info->headers) {
+            throw Exception\FeatureIsNotSupported::forHeaders($info->version);
         }
 
         $pub = Internal\Command::pub($subject, $message, $replyTo);
@@ -338,7 +394,7 @@ final class Client
         $handler = new Rpc\RequestManyHandler($queue, $stall, $sentinel);
 
         $subscription = $this->register(
-            subject: $inbox = Id\generateInboxId(),
+            subject: $inbox = $this->newInbox(),
             handler: $handler,
             cancellation: $cancellation,
             max: $maxMessages,
@@ -378,7 +434,7 @@ final class Client
 
         $subscribe = $this->subscribeCallback(...);
         $this->rpc ??= async(function () use ($subscribe): Rpc\Handler {
-            $handler = new Rpc\Handler();
+            $handler = new Rpc\Handler($this->newInbox());
 
             try {
                 // The inbox subscription is shared by all requests, so the caller's cancellation must not interrupt it.
@@ -551,12 +607,43 @@ final class Client
 
     /**
      * Unsubscribes, lets the handlers finish the messages already received and closes the connection. While reconnecting,
-     * unlike nats.go that fails here, it waits for the reconnect to drain over the new connection: pass a cancellation
-     * to bound the wait.
+     * unlike nats.go that fails here, it waits for the reconnect to drain over the new connection. The whole drain is
+     * bounded by {@see Config::$drainTimeout}, after which the connection is closed anyway, and by the cancellation.
+     *
+     * @throws DrainTimedOut
      */
     public function drain(?Cancellation $cancellation = null): void
     {
-        $this->disconnect(static fn(Subscription $subscription) => $subscription->drain($cancellation), $cancellation);
+        $timeout = new TimeoutCancellation($this->config->drainTimeout);
+        $bounded = $cancellation !== null ? new CompositeCancellation($cancellation, $timeout) : $timeout;
+
+        $this->state = ClientState::Draining;
+
+        try {
+            $this->disconnect(static function (Subscription $subscription) use ($bounded): void {
+                $subscription->drain($bounded);
+
+                // The handlers finish the messages already received before the connection is closed, as in nats.go.
+                try {
+                    $subscription->awaitCompletion($bounded);
+                } catch (CancelledException $e) {
+                    throw $e;
+                } catch (\Throwable) {
+                    // The subscription has failed, e.g. its handler has thrown: its owner gets the error, the drain goes on.
+                }
+            }, $bounded);
+        } catch (CancelledException $e) {
+            if ($cancellation?->isRequested() !== true && $timeout->isRequested()) {
+                $error = DrainTimedOut::after($this->config->drainTimeout, $e);
+                $this->logger->warning('The client did not drain in time, the connection is closed.', ['exception' => $error]);
+
+                throw $error;
+            }
+
+            throw $e;
+        } finally {
+            $this->state = ClientState::Running;
+        }
     }
 
     public function __destruct()
@@ -786,6 +873,8 @@ final class Client
 
     private function disconnected(?\Throwable $reason): void
     {
+        $this->logger->warning('The connection to the nats server is lost, reconnecting.', ['exception' => $reason]);
+
         foreach ($this->disconnectCallbacks as $callback) {
             EventLoop::queue($callback, $reason);
         }
@@ -797,6 +886,8 @@ final class Client
 
     private function reconnected(): void
     {
+        $this->logger->info('Reconnected to the nats server.', $this->serverContext());
+
         foreach ($this->reconnectCallbacks as $callback) {
             EventLoop::queue($callback);
         }
@@ -832,6 +923,8 @@ final class Client
 
     private function reportError(\Throwable $e): void
     {
+        $this->logger->warning('Nats error: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
+
         foreach ($this->errorCallbacks as $callback) {
             EventLoop::queue($callback, $e);
         }
@@ -993,6 +1086,7 @@ final class Client
             $connection = new Connection\ReconnectingConnection(
                 config: $this->config,
                 factory: $this->connectionFactory,
+                logger: $this->logger,
                 subscriptions: static fn(): array => $client->get()?->resubscriptions() ?? [],
             );
 
@@ -1014,6 +1108,8 @@ final class Client
                     return;
                 }
 
+                $self->logger->info('Nats servers discovered.', ['servers' => $event->urls]);
+
                 foreach ($self->serversDiscoveredCallbacks as $callback) {
                     EventLoop::queue($callback, $event->urls);
                 }
@@ -1023,6 +1119,8 @@ final class Client
                 if ($self === null) {
                     return;
                 }
+
+                $self->logger->warning('The nats server entered the lame duck mode.', $self->serverContext());
 
                 foreach ($self->lameDuckModeCallbacks as $callback) {
                     EventLoop::queue($callback);
@@ -1034,6 +1132,12 @@ final class Client
             ): void {
                 $self = $client->get();
                 if ($self !== null) {
+                    if ($event->reason === null) {
+                        $self->logger->info('The connection to the nats server is closed.');
+                    } else {
+                        $self->logger->error('The connection to the nats server is closed.', ['exception' => $event->reason]);
+                    }
+
                     foreach ($self->closeCallbacks as $callback) {
                         EventLoop::queue($callback, $event->reason);
                     }
@@ -1052,10 +1156,26 @@ final class Client
             }
 
             $this->activeConnection = $connection;
+            $this->logger->info('Connected to the nats server.', $this->serverContext());
 
             return $connection;
         }));
 
         return $this->connection->await($cancellation);
+    }
+
+    /**
+     * @return array<non-empty-string, mixed>
+     */
+    private function serverContext(): array
+    {
+        $info = $this->serverInfo();
+
+        return $info === null ? [] : [
+            'server_id' => $info->serverId,
+            'server_name' => $info->serverName,
+            'version' => $info->version,
+            'client_id' => $info->clientId,
+        ];
     }
 }

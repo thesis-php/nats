@@ -34,6 +34,8 @@ final readonly class Query
      * @param ?non-empty-string $tlsKeyFile
      * @param ?non-empty-string $tlsKeyPassphrase
      * @param ?non-empty-string $tlsServerName
+     * @param ?non-empty-string $inboxPrefix
+     * @param ?float $drainTimeout positive and finite
      */
     private function __construct(
         public ?bool $verbose = null,
@@ -69,6 +71,9 @@ final readonly class Query
         public ?bool $tlsVerify = null,
         public ?string $tlsServerName = null,
         public ?bool $tlsHandshakeFirst = null,
+        public ?bool $noEcho = null,
+        public ?string $inboxPrefix = null,
+        public ?float $drainTimeout = null,
     ) {}
 
     /**
@@ -119,6 +124,9 @@ final readonly class Query
             tlsVerify: self::bool($options, 'tls_verify'),
             tlsServerName: self::string($options, 'tls_server_name'),
             tlsHandshakeFirst: self::bool($options, 'tls_handshake_first'),
+            noEcho: self::bool($options, 'no_echo'),
+            inboxPrefix: self::string($options, 'inbox_prefix'),
+            drainTimeout: self::duration($options, 'drain_timeout'),
         );
     }
 

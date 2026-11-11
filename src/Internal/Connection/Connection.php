@@ -8,6 +8,7 @@ use Amp\Cancellation;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\ServerInfo;
 
 /**
  * @internal
@@ -35,7 +36,7 @@ interface Connection
     /**
      * @throws NatsException
      */
-    public function info(): ConnectionInfo;
+    public function info(): ServerInfo;
 
     /**
      * @param ?\Throwable $reason why the client closes the connection, e.g. a stale one, null for a regular close

@@ -9,6 +9,8 @@ use Amp\CancelledException;
 use Amp\DeferredCancellation;
 use Amp\DeferredFuture;
 use Amp\TimeoutCancellation;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\AuthorizationViolation;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
@@ -19,6 +21,7 @@ use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\ServerInfo;
 use function Amp\async;
 use function Amp\delay;
 
@@ -37,7 +40,7 @@ final class ReconnectingConnection implements Connection
 
     private ?Connection $current = null;
 
-    private ?ConnectionInfo $info = null;
+    private ?ServerInfo $info = null;
 
     private readonly ServerPool $pool;
 
@@ -63,6 +66,7 @@ final class ReconnectingConnection implements Connection
         private readonly Config $config,
         private readonly ConnectionFactory $factory,
         private readonly \Closure $subscriptions,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->hooks = new Hooks\ConcurrentProvider();
         $this->pool = new ServerPool($config->urls, randomize: !$config->noRandomize, maxReconnects: $config->maxReconnects);
@@ -155,9 +159,14 @@ final class ReconnectingConnection implements Connection
         return $this->connected()->ping($cancellation);
     }
 
-    public function info(): ConnectionInfo
+    public function info(): ServerInfo
     {
         return $this->info ?? throw new ConnectionIsNotAvailable();
+    }
+
+    public function state(): ReconnectState
+    {
+        return $this->state;
     }
 
     public function close(?\Throwable $reason = null): void
@@ -271,6 +280,9 @@ final class ReconnectingConnection implements Connection
             return;
         }
 
+        // The update is a whole INFO, the way nats.go takes it.
+        $this->info = ServerInfo::fromProtocol($info);
+
         if ($this->pool->discover($info->connectUrls ?? [])) {
             $this->discovered();
         }
@@ -358,6 +370,7 @@ final class ReconnectingConnection implements Connection
                 $connection = $this->factory->connect($server);
             } catch (\Throwable $e) {
                 $error = $e;
+                $this->logger->info('Reconnecting to the nats server {server} failed.', ['server' => $server->url, 'exception' => $e]);
 
                 // Credentials rejected twice in a row by the same server are not going to be accepted, as in nats.go.
                 if ($server->failed($e) && $e instanceof AuthorizationViolation) {
@@ -379,6 +392,7 @@ final class ReconnectingConnection implements Connection
                 $this->restore($connection);
             } catch (NatsException $e) {
                 $error = $e;
+                $this->logger->info('Restoring the subscriptions on the nats server {server} failed.', ['server' => $server->url, 'exception' => $e]);
                 $server->failed($e);
                 $this->current = null;
                 $connection->close();

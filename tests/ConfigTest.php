@@ -364,6 +364,18 @@ final class ConfigTest extends TestCase
             new Config(urls: ['h1:4222'], tls: new TlsConfig()),
         ],
     )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?no_echo=true&inbox_prefix=my.inbox&drain_timeout=2.5',
+            new Config(noEcho: true, inboxPrefix: 'my.inbox', drainTimeout: 2.5),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?no_echo=maybe&inbox_prefix=&drain_timeout=-1',
+            new Config(),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
@@ -541,5 +553,37 @@ final class ConfigTest extends TestCase
     {
         $this->expectException(\InvalidArgumentException::class);
         new TlsConfig(keyPassphrase: 'secret');
+    }
+
+    public function testFromArrayWithConnectionOptions(): void
+    {
+        self::assertEquals(
+            new Config(noEcho: true, inboxPrefix: 'my.inbox', drainTimeout: 2.5),
+            Config::fromArray(['no_echo' => true, 'inbox_prefix' => 'my.inbox', 'drain_timeout' => 2.5]),
+        );
+    }
+
+    /**
+     * @param non-empty-string $prefix
+     */
+    #[TestWith(['my.*'])]
+    #[TestWith(['my.>'])]
+    #[TestWith(['my inbox'])]
+    #[TestWith(['my..inbox'])]
+    #[TestWith(['my.inbox.'])]
+    public function testInboxPrefixMustBeLiteralSubject(string $prefix): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Config(inboxPrefix: $prefix);
+    }
+
+    #[TestWith([0.0])]
+    #[TestWith([-1.0])]
+    #[TestWith([INF])]
+    #[TestWith([NAN])]
+    public function testDrainTimeoutMustBePositive(float $timeout): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Config(drainTimeout: $timeout);
     }
 }
