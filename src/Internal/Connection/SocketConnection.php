@@ -230,6 +230,8 @@ final class SocketConnection implements Connection
                 tlsRequired: false,
                 name: $this->config->clientName,
                 version: version(self::PACKAGE_NAME),
+                // Asks the server for the INFO updates: the servers of the cluster and the lame duck mode notification.
+                protocol: Protocol\Proto::Cluster,
                 authToken: $this->config->token,
                 user: $this->config->user,
                 pass: $this->config->password,
@@ -275,7 +277,7 @@ final class SocketConnection implements Connection
         return $this->info ?? throw new ConnectionIsNotAvailable();
     }
 
-    public function close(): void
+    public function close(?\Throwable $reason = null): void
     {
         if ($this->state === ConnectionState::Closed || $this->state === ConnectionState::GracefulClosed) {
             return;
@@ -285,7 +287,7 @@ final class SocketConnection implements Connection
         $this->socket->close();
         self::failPending($this->queue, new ConnectionWasClosed());
         self::failPongs($this->pongs, new ConnectionWasClosed());
-        $this->hooks->dispatch(Hooks\ConnectionClosed::Event);
+        $this->hooks->dispatch(new Hooks\ConnectionClosed($reason));
     }
 
     private function run(): void
@@ -347,6 +349,8 @@ final class SocketConnection implements Connection
                         $event = match (true) {
                             $frame instanceof Protocol\Ping => Hooks\PingReceived::Event,
                             $frame instanceof Protocol\Pong => Hooks\PongReceived::Event,
+                            // The INFO of the handshake is read before the reader starts, so any INFO here is an update.
+                            $frame instanceof Protocol\ServerInfo => new Hooks\InfoReceived($frame),
                             $frame instanceof Protocol\Msg => new Hooks\MessageReceived(
                                 subject: $frame->subject,
                                 sid: $frame->sid,
@@ -374,7 +378,7 @@ final class SocketConnection implements Connection
                     if ($state !== ConnectionState::GracefulClosed) { // @phpstan-ignore notIdentical.alwaysTrue
                         $state = ConnectionState::Closed;
                         $socket->close();
-                        $hooks->dispatch(Hooks\ConnectionClosed::Event);
+                        $hooks->dispatch(new Hooks\ConnectionClosed($error));
                     }
 
                     // The server closed the connection without answering the handshake.

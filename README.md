@@ -7,6 +7,7 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Connection](#connection)
   - [Authentication](#authentication)
   - [Connect and ping](#connect-and-ping)
+  - [Reconnect](#reconnect)
   - [Publish-Subscribe](#pub-sub)
   - [Queues](#queues)
   - [Request-Reply](#request-reply)
@@ -65,9 +66,9 @@ The library implements the full functionality of NATS Core, including pub-sub, q
 
 `Nats\Config::fromURI()` takes `[scheme://][user[:password]@]host[:port][,host[:port]...][?options]`. The scheme is `nats://` (`tcp://` is an alias, and it may be omitted),
 `tls://`, `ws://` and `wss://` are rejected as not supported yet. A host without a port connects to `4222`, an IPv6 host goes in brackets (`[::1]:4222`),
-and the credentials are percent-encoded like in any url (`p%40ss` for `p@ss`). The servers of a list are tried in order until one accepts the connection;
+and the credentials are percent-encoded like in any url (`p%40ss` for `p@ss`). The servers of a list are tried in a random order (in the given one with `noRandomize`, `no_randomize=true` in the uri) until one accepts the connection, see [Reconnect](#reconnect);
 each one may repeat the scheme and the credentials, as in nats.go (`nats://u:p@h1:4222,nats://u:p@h2:4222`): one user is sent to every server, so different credentials are rejected. The options are the snake_case names of the `Nats\Config` parameters,
-e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `token`, `jwt`, `nkey`, `credentials_file`, `jwt_file`, `nkey_file`, `client_name`.
+e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `token`, `jwt`, `nkey`, `credentials_file`, `jwt_file`, `nkey_file`, `client_name`, `allow_reconnect`, `max_reconnects` (negative for no limit), `reconnect_wait`, `reconnect_jitter`, `reconnect_buffer_size`, `no_randomize`.
 Userinfo without a colon is a token, as in nats.go (`nats://s3cr3t@host`), while `nats://alice:@host` is the user `alice` with an empty password, see [Authentication](#authentication):
 
 ```php
@@ -148,6 +149,49 @@ $nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
 
 $rtt = $nc->ping(); // The subscription is active on the server now.
 dump("Round trip: {$rtt}s");
+```
+
+#### Reconnect
+
+The client reconnects once the connection is lost, the way nats.go does it, and the subscriptions do not notice:
+they are restored on the new connection with the same ids (an auto-unsubscribe keeps the rest of its limit),
+the request inbox included, and a JetStream pull consumer pulls again. The publishes made while reconnecting are buffered,
+up to `reconnectBufferSize` bytes (8 MiB by default), and sent after the subscriptions; once the buffer is full, `publish()` throws `Nats\Exception\ReconnectBufferExceeded`.
+In verbose mode a publish waits for the reconnect instead, to get its acknowledgement, and so does `ping()`.
+
+The servers are shuffled (`noRandomize` keeps the given order) and tried one by one, pausing for `reconnectWait` plus a random
+`reconnectJitter` after every round. A server that fails `maxReconnects` attempts in a row (60 by default, null for no limit) is given up.
+Once no server is left, the client is closed: the subscriptions fail with `Nats\Exception\ConnectionWasClosed` and the next call
+establishes a new connection. A server that rejects the credentials twice in a row closes the client at once, with `Nats\Exception\AuthorizationViolation`:
+retrying would not help. The servers of a cluster announced by the server (`connect_urls`)
+join the pool, and a server going to shut down (lame duck mode) makes the client move to another one right away.
+Set `allowReconnect: false` to fail the subscriptions as soon as the connection is lost instead.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use function Amp\trapSignal;
+
+$nc = new Nats\Client(Nats\Config::fromURI('nats://user:Pswd1@nats-1:4222,nats-2:4222?reconnect_wait=1&max_reconnects=-1'));
+
+$nc->onDisconnect(static fn(?\Throwable $reason) => dump('Disconnected: ' . ($reason?->getMessage() ?? 'closed by the server')));
+$nc->onReconnect(static fn() => dump('Reconnected'));
+$nc->onClose(static fn(?\Throwable $reason) => dump('Closed: ' . ($reason?->getMessage() ?? 'by the client')));
+$nc->onServersDiscovered(static fn(array $urls) => dump('Known servers: ' . implode(', ', $urls)));
+$nc->onLameDuckMode(static fn() => dump('The server is going to shut down'));
+
+$nc->subscribe('foo.>', static function (Nats\Delivery $delivery): void {
+    dump($delivery->message->payload); // keeps receiving after a reconnect
+});
+
+trapSignal([\SIGTERM, \SIGINT]);
+
+$nc->drain();
 ```
 
 #### Pub-Sub

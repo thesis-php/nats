@@ -6,7 +6,6 @@ namespace Thesis\Nats\Internal\Connection;
 
 use Amp\Socket\ConnectContext;
 use Amp\Socket\DnsSocketConnector;
-use Amp\Socket\Socket;
 use Amp\Socket\SocketConnector;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
@@ -32,21 +31,23 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
         }
 
         // The default amp connector retries each url with an exponential backoff, which takes seconds
-        // before an unavailable host is reported. The hosts are iterated here instead, so connect only once.
+        // before an unavailable host is reported. The servers are iterated by the server pool instead, so connect only once.
         return new self($config, $context, new DnsSocketConnector());
     }
 
-    public function connect(): Connection
+    public function connect(string $url): Connection
     {
         // The credentials are read and a malformed seed is rejected before the socket is opened:
         // otherwise the server would be left waiting for CONNECT.
         $credentials = Credentials::fromConfig($this->config);
 
-        $connection = new SocketConnection(
-            $this->config,
-            $this->createSocket(),
-            $credentials,
-        );
+        try {
+            $socket = $this->connector->connect($url, $this->context);
+        } catch (\Throwable $e) {
+            throw new ServerIsNotAvailable($e->getMessage(), previous: $e);
+        }
+
+        $connection = new SocketConnection($this->config, $socket, $credentials);
 
         try {
             $connection->startup();
@@ -58,26 +59,5 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
         }
 
         return $connection;
-    }
-
-    private function createSocket(): Socket
-    {
-        $exceptions = [];
-
-        foreach ($this->config->urls as $url) {
-            try {
-                return $this->connector->connect($url, $this->context);
-            } catch (\Throwable $e) {
-                $exceptions[$url] = $e->getMessage();
-            }
-        }
-
-        throw new ServerIsNotAvailable(vsprintf('No available nats host: %s.', [
-            implode('; ', array_map(
-                static fn(string $url, string $exception): string => "{$url}: {$exception}",
-                array_keys($exceptions),
-                array_values($exceptions),
-            )),
-        ]));
     }
 }

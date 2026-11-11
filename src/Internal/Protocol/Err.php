@@ -11,6 +11,16 @@ use Thesis\Nats\Exception;
  */
 final readonly class Err implements Frame
 {
+    /** @var list<non-empty-string> lowercase prefixes, the server is not consistent in the case of its errors */
+    private const array RECONNECTABLE = [
+        'stale connection',
+        'maximum connections exceeded',
+        'maximum account active connections exceeded',
+        'authorization violation',
+        'user authentication expired',
+        'user authentication revoked',
+        'account authentication expired',
+    ];
     private const string SUBSCRIPTION_VIOLATION = '/^Permissions Violation for Subscription to "([^"]+)"(?: using queue "([^"]+)")?/';
 
     /** @var non-empty-string */
@@ -43,6 +53,15 @@ final readonly class Err implements Frame
         }
 
         return [$matches[1], $matches[2] ?? null];
+    }
+
+    /**
+     * Whether the server closes the connection for a reason another attempt may not have, the same errors nats.go
+     * reconnects after: a stale connection, a connection limit, credentials that expired or were revoked.
+     */
+    public function isReconnectable(): bool
+    {
+        return array_any(self::RECONNECTABLE, fn(string $prefix): bool => str_starts_with(strtolower($this->message), $prefix));
     }
 
     public function toException(): \Exception

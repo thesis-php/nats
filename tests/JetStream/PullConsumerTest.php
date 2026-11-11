@@ -8,6 +8,10 @@ use Amp\DeferredFuture;
 use Amp\TimeoutCancellation;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
+use Revolt\EventLoop;
+use Thesis\Nats\Client;
+use Thesis\Nats\Config;
 use Thesis\Nats\Delivery;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\MaxRequestBatchExceeded;
@@ -23,6 +27,7 @@ use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\NatsTestCase;
+use Thesis\Nats\PausableProxy;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
@@ -64,6 +69,205 @@ final class PullConsumerTest extends NatsTestCase
         self::assertSame(0, $consumer->actualInfo()->numRedelivered);
 
         $stream->delete();
+    }
+
+    public function testConsumeContinuesAfterReconnect(): void
+    {
+        $proxy = PausableProxy::start($this->natsAddress());
+        $config = $this->config();
+        // Stopped at the end: the client of the base test case is the publisher's.
+        $nc = new Client(new Config(
+            urls: [$proxy->address],
+            user: $config->user,
+            password: $config->password,
+            reconnectWait: 0.1,
+        ));
+        $js = $nc->jetStream();
+        $publisher = $this->client()->jetStream();
+
+        $disconnected = new DeferredFuture();
+        $nc->onDisconnect(static function () use ($disconnected): void {
+            if (!$disconnected->isComplete()) {
+                $disconnected->complete();
+            }
+        });
+
+        /** @var DeferredFuture<void> $reconnected */
+        $reconnected = new DeferredFuture();
+        $nc->onReconnect(static function () use ($reconnected): void {
+            if (!$reconnected->isComplete()) {
+                $reconnected->complete();
+            }
+        });
+
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        /** @var \ArrayObject<int, string> $received */
+        $received = new \ArrayObject();
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery) use ($received): void {
+            $received[] = (string) $delivery->message->payload;
+            $delivery->ack();
+        });
+
+        try {
+            $publisher->publish("{$subject}.x", new Message('before'));
+            self::waitUntil(static fn(): bool => \count($received) === 1);
+
+            $proxy->kill();
+            $disconnected->getFuture()->await(new TimeoutCancellation(5));
+
+            // Nobody listens to the reply subject of the pull request now: the server drops the request.
+            // Without pulling again, the message would wait for the missed heartbeats (2 x 15 seconds by default).
+            $publisher->publish("{$subject}.x", new Message('while disconnected'));
+
+            $restarted = PausableProxy::start($this->natsAddress(), $proxy->address);
+            $reconnected->getFuture()->await(new TimeoutCancellation(5));
+            self::waitUntil(static fn(): bool => \count($received) === 2);
+
+            self::assertSame(['before', 'while disconnected'], $received->getArrayCopy());
+
+            $subscription->stop();
+            $stream->delete();
+            $restarted->kill();
+        } finally {
+            $nc->stop();
+            $proxy->kill();
+        }
+    }
+
+    /**
+     * @param non-negative-int $reconnectBufferSize without a buffer, a pull request sent while reconnecting fails at once,
+     *                                              with one it would be sent after the reconnect, next to the reconnect's own
+     */
+    #[TestWith([0])]
+    #[TestWith([1024 * 1024])]
+    public function testHandlerFinishingWhileDisconnectedDoesNotPull(int $reconnectBufferSize): void
+    {
+        $proxy = PausableProxy::start($this->natsAddress());
+        $config = $this->config();
+        $nc = new Client(new Config(
+            urls: [$proxy->address],
+            user: $config->user,
+            password: $config->password,
+            reconnectWait: 0.1,
+            reconnectBufferSize: $reconnectBufferSize,
+        ));
+        $js = $nc->jetStream();
+        $publisher = $this->client()->jetStream();
+
+        /** @var DeferredFuture<void> $disconnected */
+        $disconnected = new DeferredFuture();
+        $nc->onDisconnect(static function () use ($disconnected): void {
+            if (!$disconnected->isComplete()) {
+                $disconnected->complete();
+            }
+        });
+
+        /** @var DeferredFuture<void> $reconnected */
+        $reconnected = new DeferredFuture();
+        $nc->onReconnect(static function () use ($reconnected): void {
+            if (!$reconnected->isComplete()) {
+                $reconnected->complete();
+            }
+        });
+
+        /** @var \ArrayObject<int, \Throwable> $loopErrors */
+        $loopErrors = new \ArrayObject();
+        $errorHandler = EventLoop::getErrorHandler();
+        EventLoop::setErrorHandler(static fn(\Throwable $e) => $loopErrors->append($e));
+
+        $subject = generateUniqueId(10);
+        $streamName = generateUniqueId(10);
+        $durable = generateUniqueId(10);
+        $stream = $js->createStream(new StreamConfig(name: $streamName, subjects: ["{$subject}.*"]));
+        $consumer = $stream->createConsumer(new ConsumerConfig(durableName: $durable, ackPolicy: AckPolicy::None));
+
+        // The pull requests reach the subscribers of the API subject as well.
+        $observer = new Client($this->config());
+        $pulls = new \ArrayObject();
+        $observer->subscribe("\$JS.API.CONSUMER.MSG.NEXT.{$streamName}.{$durable}", static fn() => $pulls->append(true));
+        $observer->ping();
+
+        /** @var DeferredFuture<void> $started */
+        $started = new DeferredFuture();
+
+        /** @var DeferredFuture<void> $gate */
+        $gate = new DeferredFuture();
+
+        /** @var \ArrayObject<int, string> $received */
+        $received = new \ArrayObject();
+        $subscription = $consumer->pull(static function (JetStreamDelivery $delivery) use (
+            $received,
+            $started,
+            $gate,
+        ): void {
+            if (!$started->isComplete()) {
+                $started->complete();
+                $gate->getFuture()->await();
+            }
+
+            $received[] = (string) $delivery->message->payload;
+        }, new PullConsumeConfig(maxMessages: 1));
+
+        try {
+            $publisher->publish("{$subject}.x", new Message('first'));
+            $started->getFuture()->await(new TimeoutCancellation(5));
+
+            $proxy->kill();
+            $disconnected->getFuture()->await(new TimeoutCancellation(5));
+
+            // The handler finishes while there is no connection: nothing must be pulled until the reconnect.
+            $gate->complete();
+            delay(0.3);
+            self::assertCount(0, $loopErrors, implode("\n", array_map(static fn(\Throwable $e): string => (string) $e, $loopErrors->getArrayCopy())));
+
+            $restarted = PausableProxy::start($this->natsAddress(), $proxy->address);
+            $reconnected->getFuture()->await(new TimeoutCancellation(5));
+
+            // The first pull and the full batch the reconnect pulls, nothing pulled while disconnected.
+            $observer->ping();
+            delay(0.3);
+            self::assertCount(2, $pulls, 'A pull request was sent while disconnected.');
+
+            $publisher->publish("{$subject}.x", new Message('second'));
+            self::waitUntil(static fn(): bool => \count($received) === 2);
+            self::assertSame(['first', 'second'], $received->getArrayCopy());
+            self::assertFalse($subscription->completed());
+
+            $subscription->stop();
+            $stream->delete();
+            $restarted->kill();
+        } finally {
+            EventLoop::setErrorHandler($errorHandler);
+            $observer->stop();
+            $nc->stop();
+            $proxy->kill();
+        }
+    }
+
+    /**
+     * @param \Closure(): bool $condition
+     */
+    private static function waitUntil(\Closure $condition): void
+    {
+        $deadline = microtime(true) + 5;
+
+        while (!$condition()) {
+            if (microtime(true) > $deadline) {
+                self::fail('The condition was not met in time.');
+            }
+
+            delay(0.01);
+        }
     }
 
     public function testStopFromHandlerDoesNotPullAfterwards(): void

@@ -17,6 +17,10 @@ final readonly class Config
     private const int DEFAULT_PING_INTERVAL = 10000;
     private const int DEFAULT_MAX_PINGS = 5;
     private const string DEFAULT_CLIENT_NAME = 'thesis/nats';
+    private const int DEFAULT_MAX_RECONNECTS = 60;
+    private const float DEFAULT_RECONNECT_WAIT = 2.0;
+    private const float DEFAULT_RECONNECT_JITTER = 0.1;
+    private const int DEFAULT_RECONNECT_BUFFER_SIZE = 8 * 1024 * 1024;
 
     /**
      * @var non-empty-string
@@ -41,6 +45,14 @@ final readonly class Config
      *                                           read on every connection attempt; exclusive with the other JWT and NKey options
      * @param ?non-empty-string $jwtFile the path to a file holding the user JWT, bare or decorated, read on every connection attempt; exclusive with $jwt
      * @param ?non-empty-string $nkeyFile the path to a file holding the NKey user seed, bare or decorated, read on every connection attempt; exclusive with $nkey
+     * @param bool $allowReconnect whether the client reconnects once the connection is lost, restoring the subscriptions;
+     *                             otherwise the subscriptions fail and the next call establishes a new connection
+     * @param ?non-negative-int $maxReconnects the failed reconnects in a row after which a server is given up, null for no limit;
+     *                                         once every server is given up, the client is closed
+     * @param float $reconnectWait in seconds, the pause after every server has been tried
+     * @param float $reconnectJitter in seconds, the upper bound of a random delay added to the pause, so that the clients do not reconnect at once
+     * @param non-negative-int $reconnectBufferSize in bytes, the publishes buffered while reconnecting, 0 to fail them instead
+     * @param bool $noRandomize whether to try the servers in the given order instead of a random one
      * @throws \InvalidArgumentException
      */
     public function __construct(
@@ -68,8 +80,30 @@ final readonly class Config
         public ?string $credentialsFile = null,
         public ?string $jwtFile = null,
         public ?string $nkeyFile = null,
+        public bool $allowReconnect = true,
+        public ?int $maxReconnects = self::DEFAULT_MAX_RECONNECTS,
+        public float $reconnectWait = self::DEFAULT_RECONNECT_WAIT,
+        public float $reconnectJitter = self::DEFAULT_RECONNECT_JITTER,
+        public int $reconnectBufferSize = self::DEFAULT_RECONNECT_BUFFER_SIZE,
+        public bool $noRandomize = false,
     ) {
         Validate::duration($connectionTimeout, 'connection timeout');
+
+        // A negative limit would give up every server at once, while the uri means no limit by it: refused as a mistake,
+        // null is the way to say no limit here.
+        if ($maxReconnects !== null) {
+            Validate::nonNegative($maxReconnects, 'max reconnects');
+        }
+
+        Validate::nonNegative($reconnectBufferSize, 'reconnect buffer size');
+
+        if (!is_finite($reconnectWait) || $reconnectWait < 0) {
+            throw new \InvalidArgumentException('The reconnect wait must be a finite non-negative number of seconds.');
+        }
+
+        if (!is_finite($reconnectJitter) || $reconnectJitter < 0) {
+            throw new \InvalidArgumentException('The reconnect jitter must be a finite non-negative number of seconds.');
+        }
 
         // nats-server itself refuses to have a token next to users, so both of them here are a mistake.
         if ($token !== null && ($user !== null || $password !== null)) {
@@ -134,6 +168,16 @@ final readonly class Config
             credentialsFile: $query->credentialsFile,
             jwtFile: $query->jwtFile,
             nkeyFile: $query->nkeyFile,
+            allowReconnect: $query->allowReconnect ?? true,
+            maxReconnects: match (true) {
+                $query->maxReconnects === null => self::DEFAULT_MAX_RECONNECTS,
+                $query->maxReconnects < 0 => null,
+                default => $query->maxReconnects,
+            },
+            reconnectWait: $query->reconnectWait ?? self::DEFAULT_RECONNECT_WAIT,
+            reconnectJitter: $query->reconnectJitter ?? self::DEFAULT_RECONNECT_JITTER,
+            reconnectBufferSize: $query->reconnectBufferSize ?? self::DEFAULT_RECONNECT_BUFFER_SIZE,
+            noRandomize: $query->noRandomize ?? false,
         );
     }
 
@@ -158,6 +202,12 @@ final readonly class Config
      *     credentials_file?: non-empty-string,
      *     jwt_file?: non-empty-string,
      *     nkey_file?: non-empty-string,
+     *     allow_reconnect?: bool,
+     *     max_reconnects?: ?non-negative-int,
+     *     reconnect_wait?: float,
+     *     reconnect_jitter?: float,
+     *     reconnect_buffer_size?: non-negative-int,
+     *     no_randomize?: bool,
      * } $options
      * @throws \InvalidArgumentException
      */
@@ -183,6 +233,12 @@ final readonly class Config
             credentialsFile: $options['credentials_file'] ?? null,
             jwtFile: $options['jwt_file'] ?? null,
             nkeyFile: $options['nkey_file'] ?? null,
+            allowReconnect: $options['allow_reconnect'] ?? true,
+            maxReconnects: \array_key_exists('max_reconnects', $options) ? $options['max_reconnects'] : self::DEFAULT_MAX_RECONNECTS,
+            reconnectWait: $options['reconnect_wait'] ?? self::DEFAULT_RECONNECT_WAIT,
+            reconnectJitter: $options['reconnect_jitter'] ?? self::DEFAULT_RECONNECT_JITTER,
+            reconnectBufferSize: $options['reconnect_buffer_size'] ?? self::DEFAULT_RECONNECT_BUFFER_SIZE,
+            noRandomize: $options['no_randomize'] ?? false,
         );
     }
 }

@@ -90,16 +90,23 @@ abstract class NatsTestCase extends TestCase
      *
      * @param non-empty-string $name
      */
-    final protected function clientNamed(string $name): Client
-    {
+    final protected function clientNamed(
+        string $name,
+        bool $allowReconnect = true,
+        float $reconnectWait = 0.1,
+        bool $verbose = false,
+    ): Client {
         $config = $this->config();
 
         return $this->clientWithConfig(new Config(
             urls: $config->urls,
+            verbose: $verbose,
             user: $config->user,
             password: $config->password,
             noResponders: $config->noResponders,
             clientName: $name,
+            allowReconnect: $allowReconnect,
+            reconnectWait: $reconnectWait,
         ));
     }
 
@@ -111,11 +118,40 @@ abstract class NatsTestCase extends TestCase
      */
     final protected function kick(string $name): void
     {
+        $this->requestServer('KICK', $name);
+    }
+
+    /**
+     * Sends the client connected under the given name the lame duck mode notification, as if the server were going
+     * to shut down; the server itself keeps running.
+     *
+     * @param non-empty-string $name
+     */
+    final protected function lameDuck(string $name): void
+    {
+        $this->requestServer('LDM', $name);
+    }
+
+    /**
+     * @param non-empty-string $name
+     * @return ?int the server-side id of the connection of the client connected under the given name
+     */
+    final protected function connectionId(string $name): ?int
+    {
+        return $this->connectionNamed($name)['cid'] ?? null;
+    }
+
+    /**
+     * @param non-empty-string $request
+     * @param non-empty-string $name
+     */
+    private function requestServer(string $request, string $name): void
+    {
         $connection = $this->connectionNamed($name) ?? self::fail("The client '{$name}' is not connected.");
 
         self::decodeServerResponse(
             $this->sysClient()->request(
-                "\$SYS.REQ.SERVER.{$connection['server']}.KICK",
+                "\$SYS.REQ.SERVER.{$connection['server']}.{$request}",
                 new Message(json_encode(['cid' => $connection['cid']], JSON_THROW_ON_ERROR)),
                 new TimeoutCancellation(5),
             ),

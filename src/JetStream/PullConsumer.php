@@ -141,8 +141,13 @@ final class PullConsumer
             cancellation: $cancellation,
         );
 
+        $messageHandler->bind($subscription);
+
+        $unwatch = $this->nats->watchConnection($messageHandler->disconnected(...), $messageHandler->reconnected(...));
+
         $this->subscriptions[] = $subscription->onComplete(
             $messageHandler->stop(...),
+            $unwatch,
         );
 
         return $subscription;

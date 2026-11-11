@@ -62,6 +62,20 @@ final class Validate
     }
 
     /**
+     * A limit or a size, which the phpdoc types promise to be non-negative: checked anyway, since a negative one
+     * would not fail but silently misbehave, e.g. give up every server at once.
+     *
+     * @param non-empty-string $what
+     * @throws \InvalidArgumentException
+     */
+    public static function nonNegative(int $value, string $what): void
+    {
+        if ($value < 0) {
+            throw new \InvalidArgumentException("The {$what} must be non-negative, {$value} given.");
+        }
+    }
+
+    /**
      * A literal subject, e.g. of publish, request or reply-to: wildcards are not allowed.
      *
      * @throws InvalidSubject
