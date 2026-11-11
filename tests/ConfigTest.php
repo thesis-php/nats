@@ -313,6 +313,18 @@ final class ConfigTest extends TestCase
             new Config(urls: ['h1:4222', 'h2:4222'], user: 'alice'),
         ],
     )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?allow_reconnect=false&max_reconnects=5&reconnect_wait=0.5&reconnect_jitter=0&reconnect_buffer_size=1024&no_randomize=true',
+            new Config(allowReconnect: false, maxReconnects: 5, reconnectWait: 0.5, reconnectJitter: 0.0, reconnectBufferSize: 1024, noRandomize: true),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://127.0.0.1:4222?max_reconnects=-1&reconnect_wait=-1&reconnect_buffer_size=-5',
+            new Config(maxReconnects: null),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
@@ -400,6 +412,43 @@ final class ConfigTest extends TestCase
     public function testFromArrayWithRequestTimeout(): void
     {
         self::assertEquals(new Config(requestTimeout: 0.5), Config::fromArray(['request_timeout' => 0.5]));
+    }
+
+    public function testFromArrayWithReconnectOptions(): void
+    {
+        self::assertEquals(
+            new Config(allowReconnect: false, maxReconnects: null, reconnectWait: 0.0, reconnectJitter: 0.5, reconnectBufferSize: 0, noRandomize: true),
+            Config::fromArray([
+                'allow_reconnect' => false,
+                'max_reconnects' => null,
+                'reconnect_wait' => 0.0,
+                'reconnect_jitter' => 0.5,
+                'reconnect_buffer_size' => 0,
+                'no_randomize' => true,
+            ]),
+        );
+    }
+
+    public function testMaxReconnectsMustBeNonNegative(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Config::fromArray(['max_reconnects' => -1]); // @phpstan-ignore argument.type
+    }
+
+    public function testReconnectBufferSizeMustBeNonNegative(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Config(reconnectBufferSize: -1); // @phpstan-ignore argument.type
+    }
+
+    #[TestWith([-1.0, 0.1])]
+    #[TestWith([INF, 0.1])]
+    #[TestWith([1.0, -0.1])]
+    #[TestWith([1.0, NAN])]
+    public function testReconnectWaitAndJitterMustBeNonNegative(float $wait, float $jitter): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Config(reconnectWait: $wait, reconnectJitter: $jitter);
     }
 
     public function testFromArrayWithAuthenticationFiles(): void

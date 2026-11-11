@@ -37,5 +37,8 @@ interface Connection
      */
     public function info(): ConnectionInfo;
 
-    public function close(): void;
+    /**
+     * @param ?\Throwable $reason why the client closes the connection, e.g. a stale one, null for a regular close
+     */
+    public function close(?\Throwable $reason = null): void;
 }

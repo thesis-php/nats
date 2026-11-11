@@ -30,5 +30,14 @@ services:
     image: nats
     command: --name nats-token -p 4222 --auth T0k3n
 
+  # A cluster of two servers: each one announces both in INFO (connect_urls), for the tests of the discovered servers.
+  nats-cluster-1:
+    image: nats
+    command: --name nats-cluster-1 -p 4222 --cluster_name test --cluster nats://0.0.0.0:6222 --routes nats://nats-cluster-2:6222
+
+  nats-cluster-2:
+    image: nats
+    command: --name nats-cluster-2 -p 4222 --cluster_name test --cluster nats://0.0.0.0:6222 --routes nats://nats-cluster-1:6222
+
   nats-cli:
     image: bitnamilegacy/natscli:latest

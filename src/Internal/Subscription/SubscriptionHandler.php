@@ -34,7 +34,7 @@ final class SubscriptionHandler
      * @param \Closure(): void $unsubscribe
      * @param callable(Delivery, Subscription): void $handler
      * @param \Closure(SlowConsumer): void $onSlowConsumer
-     * @param ?positive-int $remaining the number of messages after which the server removes the subscription
+     * @param ?non-negative-int $remaining the number of messages after which the server removes the subscription
      * @param ?\Closure(): void $onReceive called once a message arrives, before it waits for the handler
      */
     public function __construct(
@@ -214,22 +214,24 @@ final class SubscriptionHandler
     }
 
     /**
+     * @return ?non-negative-int the messages the server is still to deliver before it removes the subscription, null for no limit
+     */
+    public function remaining(): ?int
+    {
+        return $this->remaining;
+    }
+
+    /**
      * @return bool whether it is the last message the server delivers to the subscription
      */
     private function countDown(): bool
     {
-        if ($this->remaining === null) {
+        if ($this->remaining === null || $this->remaining === 0) {
             return false;
         }
 
-        if ($this->remaining > 1) {
-            --$this->remaining;
+        --$this->remaining;
 
-            return false;
-        }
-
-        $this->remaining = null;
-
-        return true;
+        return $this->remaining === 0;
     }
 }

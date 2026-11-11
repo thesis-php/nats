@@ -10,11 +10,15 @@ use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\BadRequestSent;
+use Thesis\Nats\Exception\ConnectionIsNotAvailable;
+use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\ConsumerDeleted;
 use Thesis\Nats\Exception\ConsumerIsPushBased;
 use Thesis\Nats\Exception\MaxRequestBatchExceeded;
 use Thesis\Nats\Exception\MaxRequestExpiresExceeded;
 use Thesis\Nats\Exception\MaxRequestMaxBytesExceeded;
+use Thesis\Nats\Exception\ReconnectBufferExceeded;
+use Thesis\Nats\Exception\ServerIsNotAvailable;
 use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
@@ -24,6 +28,7 @@ use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
+use function Amp\async;
 
 /**
  * @internal
@@ -41,6 +46,14 @@ final class PullMessageHandler
     private ?string $pinId = null;
 
     private readonly Heartbeat\Watchdog $watchdog;
+
+    /** Nothing is pulled while reconnecting: the pull requests cannot reach the server, the reconnect pulls again. */
+    private bool $connected = true;
+
+    private ?Subscription $subscription = null;
+
+    /** The failure of a pull request that came before the subscription was bound, see bind(). */
+    private ?\Throwable $failure = null;
 
     /** @var Pipeline\Queue<PullRequest> */
     private readonly Pipeline\Queue $pulls;
@@ -87,10 +100,61 @@ final class PullMessageHandler
 
         // The handler may stop the subscription itself: stop() then runs before the subscription is marked completed,
         // and rescheduling the watchdog would pull into the completed queue later.
-        if (!$subscription->completed() && !$this->pulls->isComplete()) {
+        if (!$subscription->completed() && !$this->pulls->isComplete() && $this->connected) {
             $this->watchdog->reset();
             $this->replenish();
         }
+    }
+
+    /**
+     * The subscription the pulled messages are delivered to: it fails if a pull request cannot be sent.
+     */
+    public function bind(Subscription $subscription): void
+    {
+        $this->subscription = $subscription;
+
+        if ($this->failure !== null) {
+            $this->fail($this->failure);
+        }
+    }
+
+    /**
+     * The heartbeats cannot come while reconnecting: the watchdog would pull into the void.
+     */
+    public function disconnected(): void
+    {
+        $this->connected = false;
+        $this->watchdog->stop();
+    }
+
+    /**
+     * The pull requests were bound to the lost connection, the server forgets them: pull a full batch again, as nats.go does.
+     */
+    public function reconnected(): void
+    {
+        $this->connected = true;
+
+        if ($this->pulls->isComplete()) {
+            return;
+        }
+
+        $this->reset();
+        $this->pull();
+        $this->watchdog->reset();
+    }
+
+    private function fail(\Throwable $e): void
+    {
+        $this->stop();
+
+        if ($this->subscription === null) {
+            $this->failure = $e;
+
+            return;
+        }
+
+        $future = async($this->subscription->error(...), $e);
+        $future->ignore();
     }
 
     public function stop(): void
@@ -221,19 +285,32 @@ final class PullMessageHandler
         Encoder $json,
         Client $nc,
     ): void {
+        $fail = $this->fail(...);
+
         EventLoop::queue(static function () use (
             $queue,
             $subject,
             $reply,
             $json,
             $nc,
+            $fail,
         ): void {
             foreach ($queue->iterate() as $pull) {
-                $nc->publish(
-                    subject: $subject,
-                    message: new Message($json->encode($pull)),
-                    replyTo: $reply,
-                );
+                try {
+                    $nc->publish(
+                        subject: $subject,
+                        message: new Message($json->encode($pull)),
+                        replyTo: $reply,
+                    );
+                } catch (ConnectionWasClosed|ConnectionIsNotAvailable|ServerIsNotAvailable|ReconnectBufferExceeded) {
+                    // The connection is lost: the reconnect pulls again, and a client that gives up fails the subscription itself.
+                    continue;
+                } catch (\Throwable $e) {
+                    // Nothing in the event loop would catch it: the subscription is the one to know.
+                    $fail($e);
+
+                    return;
+                }
             }
         });
 

@@ -201,10 +201,10 @@ final class ClientTest extends NatsTestCase
         $subscription->awaitCompletion();
     }
 
-    public function testSubscriptionsAndRequestsFailWhenServerClosesConnection(): void
+    public function testSubscriptionsAndRequestsFailWhenServerClosesConnectionWithoutReconnect(): void
     {
         $name = Id\generateUniqueId();
-        $client = $this->clientNamed($name);
+        $client = $this->clientNamed($name, allowReconnect: false);
 
         // The teardown runs in the event loop, where an escaped exception has no one to catch it.
         $loopErrors = [];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
+use Thesis\Nats\Exception\StaleConnection;
 use Thesis\Nats\Internal\Protocol;
 use Thesis\Nats\Internal\Timer;
 
@@ -58,6 +59,7 @@ final class PingPongHandler
     private function forceStop(): void
     {
         $this->stop();
-        $this->connection->close();
+        // The server has stopped answering: the reason the client reconnects, the same nats.go reports.
+        $this->connection->close(new StaleConnection());
     }
 }

@@ -43,7 +43,7 @@ final class Client
 
     private readonly Connection\ConnectionFactory $connectionFactory;
 
-    /** @var ?Future<Connection\Connection> */
+    /** @var ?Future<Connection\ReconnectingConnection> */
     private ?Future $connection = null;
 
     /**
@@ -60,6 +60,26 @@ final class Client
 
     /** @var list<\Closure(\Throwable): void> */
     private array $errorCallbacks = [];
+
+    /** @var list<\Closure(?\Throwable): void> */
+    private array $disconnectCallbacks = [];
+
+    /** @var list<\Closure(): void> */
+    private array $reconnectCallbacks = [];
+
+    /** @var list<\Closure(?\Throwable): void> */
+    private array $closeCallbacks = [];
+
+    /** @var list<\Closure(non-empty-list<non-empty-string>): void> */
+    private array $serversDiscoveredCallbacks = [];
+
+    /** @var list<\Closure(): void> */
+    private array $lameDuckModeCallbacks = [];
+
+    /** @var array<int, array{\Closure(): void, \Closure(): void}> the internal listeners of the disconnects and reconnects */
+    private array $connectionWatchers = [];
+
+    private int $nextWatcherId = 0;
 
     private readonly Id\SubscriptionIdGenerator $subscriptionIdGenerator;
 
@@ -87,15 +107,16 @@ final class Client
     }
 
     /**
-     * Connects to the server unless the client is already connected. Every call that needs the connection
-     * establishes it on demand, so calling this is optional: it makes network and authentication errors
-     * surface at startup rather than from the first publish or subscribe.
+     * Connects to the server unless the client is already connected, and waits for the reconnect in progress if any.
+     * Every call that needs the connection establishes it on demand, so calling this is optional: it makes network
+     * and authentication errors surface at startup rather than from the first publish or subscribe.
      *
      * @throws NatsException
      */
     public function connect(?Cancellation $cancellation = null): void
     {
-        $this->connection($cancellation);
+        // The connection object outlives a lost connection: while reconnecting, wait for the reconnect.
+        $this->connection($cancellation)->awaitConnected($cancellation);
     }
 
     /**
@@ -409,6 +430,88 @@ final class Client
         $this->errorCallbacks[] = $callback(...);
     }
 
+    /**
+     * Registers a callback for a lost connection: the client is reconnecting, the subscriptions are kept and the publishes
+     * are buffered meanwhile, see {@see Config::$allowReconnect}. The callback gets the server error or the failure
+     * that broke the connection, null if the server just closed it.
+     *
+     * @param callable(?\Throwable): void $callback
+     */
+    public function onDisconnect(callable $callback): void
+    {
+        $this->disconnectCallbacks[] = $callback(...);
+    }
+
+    /**
+     * Registers a callback for a restored connection: the subscriptions are active again and the buffered publishes are sent.
+     *
+     * @param callable(): void $callback
+     */
+    public function onReconnect(callable $callback): void
+    {
+        $this->reconnectCallbacks[] = $callback(...);
+    }
+
+    /**
+     * Registers a callback for the connection closed for good: by {@see stop()} or {@see drain()}, by a fatal server error,
+     * or once no server is left to reconnect to. The callback gets the reason, null for a regular close.
+     * The next call establishes a new connection.
+     *
+     * @param callable(?\Throwable): void $callback
+     */
+    public function onClose(callable $callback): void
+    {
+        $this->closeCallbacks[] = $callback(...);
+    }
+
+    /**
+     * Registers a callback for the servers of the cluster announced after the client has connected,
+     * the client reconnects to them as well. The callback gets the `host:port` of every known server.
+     *
+     * @param callable(non-empty-list<non-empty-string>): void $callback
+     */
+    public function onServersDiscovered(callable $callback): void
+    {
+        $this->serversDiscoveredCallbacks[] = $callback(...);
+    }
+
+    /**
+     * Registers a callback for the server going to shut down (lame duck mode). If the client knows another server,
+     * it moves there right away, otherwise it reconnects once the server closes the connection.
+     *
+     * @param callable(): void $callback
+     */
+    public function onLameDuckMode(callable $callback): void
+    {
+        $this->lameDuckModeCallbacks[] = $callback(...);
+    }
+
+    /**
+     * Listens to the disconnects and reconnects, e.g. for a JetStream consumer to pull again once reconnected.
+     *
+     * @internal
+     * @param \Closure(): void $onDisconnect
+     * @param \Closure(): void $onReconnect
+     * @return \Closure(): void stops listening
+     */
+    public function watchConnection(\Closure $onDisconnect, \Closure $onReconnect): \Closure
+    {
+        $id = $this->nextWatcherId++;
+        $this->connectionWatchers[$id] = [$onDisconnect, $onReconnect];
+
+        $client = \WeakReference::create($this);
+
+        return static function () use (
+            $client,
+            $id,
+        ): void {
+            $self = $client->get();
+            if ($self !== null) {
+                unset($self->connectionWatchers[$id]);
+            }
+        };
+    }
+
     public function createService(Micro\ServiceConfig $config): Micro\Service
     {
         $identity = new Micro\ServiceIdentity(
@@ -446,6 +549,11 @@ final class Client
         $this->disconnect(static fn(Subscription $subscription) => $subscription->stop($cancellation), $cancellation);
     }
 
+    /**
+     * Unsubscribes, lets the handlers finish the messages already received and closes the connection. While reconnecting,
+     * unlike nats.go that fails here, it waits for the reconnect to drain over the new connection: pass a cancellation
+     * to bound the wait.
+     */
     public function drain(?Cancellation $cancellation = null): void
     {
         $this->disconnect(static fn(Subscription $subscription) => $subscription->drain($cancellation), $cancellation);
@@ -506,6 +614,7 @@ final class Client
             queueGroup: $queueGroup,
             push: $handler->push(...),
             subscription: $subscription = $handler->subscription,
+            remaining: $handler->remaining(...),
         );
 
         try {
@@ -634,28 +743,67 @@ final class Client
     }
 
     /**
-     * Routes a server error that was not an acknowledgement of a command, the same way nats.go does:
-     * a subscription permission violation fails that subscription only, a publish permission violation
-     * is reported to the error callbacks, anything else is fatal and the connection is closed.
-     * A fatal error is reported once the connection is torn down, see onClose in connection().
-     *
-     * @return ?\Throwable the error the connection is closed with
+     * Routes a permission violation, the only server error the connection passes on, the same way nats.go does:
+     * a subscription permission violation fails that subscription only, a publish one is reported to the error callbacks.
+     * The connection deals with the others itself: it reconnects or closes, see {@see closed()}.
      */
-    private function handleError(Hooks\ErrorReceived $event, Connection\Connection $connection): ?\Throwable
+    private function handleError(Hooks\ErrorReceived $event): void
     {
         $e = $event->error->toException();
 
-        if ($e instanceof Exception\PermissionViolated) {
-            if (!$this->failSubscriptions($event->error, $e)) {
-                $this->reportError($e);
+        if (!$e instanceof Exception\PermissionViolated || !$this->failSubscriptions($event->error, $e)) {
+            $this->reportError($e);
+        }
+    }
+
+    /**
+     * @return list<Protocol\Frame> the commands that restore the subscriptions on a new connection, with the same sids,
+     *                              and with the rest of the limit of an auto-unsubscribe
+     */
+    private function resubscriptions(): array
+    {
+        $frames = [];
+
+        foreach ($this->subscribers as $sid => $subscriber) {
+            // A numeric sid becomes an integer key of the array, which the type of the property does not tell.
+            $sid = (string) $sid; // @phpstan-ignore cast.useless
+            $remaining = $subscriber->remaining !== null ? ($subscriber->remaining)() : null;
+
+            if ($remaining === 0) {
+                // The server has already removed it, the handler is finishing the received messages.
+                continue;
             }
 
-            return null;
+            $frames[] = Internal\Command::sub($subscriber->subject, $sid, $subscriber->queueGroup);
+
+            if ($remaining !== null) {
+                $frames[] = Internal\Command::unsub($sid, $remaining);
+            }
         }
 
-        $connection->close();
+        return $frames;
+    }
 
-        return $e;
+    private function disconnected(?\Throwable $reason): void
+    {
+        foreach ($this->disconnectCallbacks as $callback) {
+            EventLoop::queue($callback, $reason);
+        }
+
+        foreach ($this->connectionWatchers as [$onDisconnect]) {
+            EventLoop::queue($onDisconnect);
+        }
+    }
+
+    private function reconnected(): void
+    {
+        foreach ($this->reconnectCallbacks as $callback) {
+            EventLoop::queue($callback);
+        }
+
+        foreach ($this->connectionWatchers as [, $onReconnect]) {
+            EventLoop::queue($onReconnect);
+        }
     }
 
     /**
@@ -728,8 +876,8 @@ final class Client
     }
 
     /**
-     * Tears the client down once the connection has been closed from the outside: by the server (e.g. a kick
-     * or a restart) or because of a fatal server error. Nothing is sent over the connection, it is gone and so
+     * Tears the client down once the connection has been closed from the outside: the client has given up reconnecting
+     * (or reconnecting is off and the server has closed the connection), or a fatal server error has closed it. Nothing is sent over the connection, it is gone and so
      * are the server-side subscriptions: the subscriptions and the pending requests are only failed locally.
      *
      * @param ?\Throwable $error the fatal server error that closed the connection, if any
@@ -772,9 +920,10 @@ final class Client
             // and nothing may escape to the event loop, which has no one to catch it.
             Future\awaitAll($completes);
         } finally {
-            if ($error !== null) {
-                // Reported after the teardown, so that the callback observes the subscriptions already failed
-                // and the next call establishing a new connection.
+            // Reported after the teardown, so that the callback observes the subscriptions already failed
+            // and the next call establishing a new connection. Running out of servers is not a server error,
+            // it is reported to the close callbacks only.
+            if ($error !== null && !$error instanceof ConnectionWasClosed) {
                 $this->reportError($error);
             }
         }
@@ -833,11 +982,68 @@ final class Client
         }
     }
 
-    private function connection(?Cancellation $cancellation = null): Connection\Connection
+    private function connection(?Cancellation $cancellation = null): Connection\ReconnectingConnection
     {
-        $this->connection ??= async(weakClosure(function (): Connection\Connection {
+        $this->connection ??= async(weakClosure(function (): Connection\ReconnectingConnection {
+            // The connection's reader runs in the event loop: strong references from its hooks would keep the client
+            // alive for as long as the socket is open, so the destructor that closes the socket would never run.
+            // Once the client is gone, its hooks do nothing: e.g. the close event of the connection it closed itself.
+            $client = \WeakReference::create($this);
+
+            $connection = new Connection\ReconnectingConnection(
+                config: $this->config,
+                factory: $this->connectionFactory,
+                subscriptions: static fn(): array => $client->get()?->resubscriptions() ?? [],
+            );
+
+            $connection->hooks->onMessage(static function (Hooks\MessageReceived $event) use ($client): void {
+                $client->get()?->invokeSubscriber($event);
+            });
+            $connection->hooks->onError(static function (Hooks\ErrorReceived $event) use ($client): void {
+                $client->get()?->handleError($event);
+            });
+            $connection->hooks->onDisconnect(static function (Hooks\Disconnected $event) use ($client): void {
+                $client->get()?->disconnected($event->reason);
+            });
+            $connection->hooks->onReconnect(static function () use ($client): void {
+                $client->get()?->reconnected();
+            });
+            $connection->hooks->onServersDiscovered(static function (Hooks\ServersDiscovered $event) use ($client): void {
+                $self = $client->get();
+                if ($self === null) {
+                    return;
+                }
+
+                foreach ($self->serversDiscoveredCallbacks as $callback) {
+                    EventLoop::queue($callback, $event->urls);
+                }
+            });
+            $connection->hooks->onLameDuckMode(static function () use ($client): void {
+                $self = $client->get();
+                if ($self === null) {
+                    return;
+                }
+
+                foreach ($self->lameDuckModeCallbacks as $callback) {
+                    EventLoop::queue($callback);
+                }
+            });
+            $connection->hooks->onClose(static function (Hooks\ConnectionClosed $event) use (
+                $client,
+                $connection,
+            ): void {
+                $self = $client->get();
+                if ($self !== null) {
+                    foreach ($self->closeCallbacks as $callback) {
+                        EventLoop::queue($callback, $event->reason);
+                    }
+
+                    $self->closed($connection, $event->reason);
+                }
+            });
+
             try {
-                $connection = $this->connectionFactory->connect();
+                $connection->start();
             } catch (\Throwable $e) {
                 // Forget the failed attempt so that the next call tries to connect again.
                 $this->connection = null;
@@ -846,35 +1052,6 @@ final class Client
             }
 
             $this->activeConnection = $connection;
-
-            /** @var ?\Throwable $reason the fatal server error that closed the connection */
-            $reason = null;
-
-            // The connection's reader runs in the event loop: strong references from its hooks would keep the client
-            // alive for as long as the socket is open, so the destructor that closes the socket would never run.
-            // Once the client is gone, its hooks do nothing: e.g. the close event of the connection it closed itself.
-            $client = \WeakReference::create($this);
-
-            $connection->hooks->onMessage(static function (Hooks\MessageReceived $event) use ($client): void {
-                $client->get()?->invokeSubscriber($event);
-            });
-            $connection->hooks->onError(static function (Hooks\ErrorReceived $event) use (
-                $client,
-                $connection,
-                &$reason,
-            ): void {
-                $self = $client->get();
-                if ($self !== null) {
-                    $reason ??= $self->handleError($event, $connection);
-                }
-            });
-            $connection->hooks->onClose(static function () use (
-                $client,
-                $connection,
-                &$reason,
-            ): void {
-                $client->get()?->closed($connection, $reason);
-            });
 
             return $connection;
         }));

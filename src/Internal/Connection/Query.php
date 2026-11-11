@@ -25,6 +25,10 @@ final readonly class Query
      * @param ?non-empty-string $credentialsFile
      * @param ?non-empty-string $jwtFile
      * @param ?non-empty-string $nkeyFile
+     * @param ?int $maxReconnects any integer, the config decides what a negative one means
+     * @param ?float $reconnectWait non-negative and finite
+     * @param ?float $reconnectJitter non-negative and finite
+     * @param ?non-negative-int $reconnectBufferSize
      */
     private function __construct(
         public ?bool $verbose = null,
@@ -46,6 +50,12 @@ final readonly class Query
         public ?string $credentialsFile = null,
         public ?string $jwtFile = null,
         public ?string $nkeyFile = null,
+        public ?bool $allowReconnect = null,
+        public ?int $maxReconnects = null,
+        public ?float $reconnectWait = null,
+        public ?float $reconnectJitter = null,
+        public ?int $reconnectBufferSize = null,
+        public ?bool $noRandomize = null,
     ) {}
 
     public static function parse(#[\SensitiveParameter] string $query): self
@@ -69,6 +79,12 @@ final readonly class Query
             credentialsFile: self::string($options, 'credentials_file'),
             jwtFile: self::string($options, 'jwt_file'),
             nkeyFile: self::string($options, 'nkey_file'),
+            allowReconnect: self::bool($options, 'allow_reconnect'),
+            maxReconnects: self::int($options, 'max_reconnects'),
+            reconnectWait: self::nonNegativeFloat($options, 'reconnect_wait'),
+            reconnectJitter: self::nonNegativeFloat($options, 'reconnect_jitter'),
+            reconnectBufferSize: self::nonNegativeInt($options, 'reconnect_buffer_size'),
+            noRandomize: self::bool($options, 'no_randomize'),
         );
     }
 
@@ -107,6 +123,31 @@ final readonly class Query
         $value = self::int($options, $name);
 
         return $value !== null && $value > 0 ? $value : null;
+    }
+
+    /**
+     * @param array<array-key, mixed> $options
+     * @return ?non-negative-int
+     */
+    private static function nonNegativeInt(array $options, string $name): ?int
+    {
+        $value = self::int($options, $name);
+
+        return $value !== null && $value >= 0 ? $value : null;
+    }
+
+    /**
+     * @param array<array-key, mixed> $options
+     */
+    private static function nonNegativeFloat(array $options, string $name): ?float
+    {
+        if (!isset($options[$name])) {
+            return null;
+        }
+
+        $value = filter_var($options[$name], FILTER_VALIDATE_FLOAT);
+
+        return $value !== false && is_finite($value) && $value >= 0 ? $value : null;
     }
 
     /**

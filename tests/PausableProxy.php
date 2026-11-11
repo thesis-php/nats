@@ -26,6 +26,9 @@ final class PausableProxy
     /** @var ?array{non-empty-string, DeferredFuture<void>} */
     private ?array $pauseBefore = null;
 
+    /** @var list<Socket> */
+    private array $sockets = [];
+
     /**
      * @param non-empty-string $address
      */
@@ -36,10 +39,11 @@ final class PausableProxy
 
     /**
      * @param non-empty-string $upstream
+     * @param non-empty-string $listen
      */
-    public static function start(string $upstream): self
+    public static function start(string $upstream, string $listen = '127.0.0.1:0'): self
     {
-        $server = listen('127.0.0.1:0');
+        $server = listen($listen);
         $address = $server->getAddress()->toString();
         \assert($address !== '');
 
@@ -52,6 +56,8 @@ final class PausableProxy
         ): void {
             while (($client = $server->accept()) !== null) {
                 $nats = connect($upstream);
+                $proxy->sockets[] = $client;
+                $proxy->sockets[] = $nats;
 
                 $future = async(static fn() => $proxy->forward($client, $nats, pausable: true));
                 $future->ignore();
@@ -93,6 +99,27 @@ final class PausableProxy
     {
         [$paused, $this->paused] = [$this->paused, null];
         $paused?->complete();
+    }
+
+    /**
+     * Closes the connections passing through the proxy, as if the server went away; new ones are still accepted.
+     */
+    public function disconnect(): void
+    {
+        [$sockets, $this->sockets] = [$this->sockets, []];
+
+        foreach ($sockets as $socket) {
+            $socket->close();
+        }
+    }
+
+    /**
+     * Stops accepting and closes the connections: the server is down until a proxy is started on the same address again.
+     */
+    public function kill(): void
+    {
+        $this->server->close();
+        $this->disconnect();
     }
 
     public function stop(): void
