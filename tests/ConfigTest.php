@@ -13,6 +13,7 @@ use Thesis\Nats\Internal\Connection\Uri;
 #[CoversClass(Config::class)]
 #[CoversClass(Uri::class)]
 #[CoversClass(Query::class)]
+#[CoversClass(TlsConfig::class)]
 final class ConfigTest extends TestCase
 {
     /**
@@ -325,6 +326,44 @@ final class ConfigTest extends TestCase
             new Config(maxReconnects: null),
         ],
     )]
+    #[TestWith(
+        [
+            'tls://h1:4222,tls://h2',
+            new Config(urls: ['h1:4222', 'h2:4222'], tls: new TlsConfig()),
+        ],
+    )]
+    #[TestWith(
+        [
+            'TLS://user:pass@h1,h2:4223',
+            new Config(urls: ['h1:4222', 'h2:4223'], user: 'user', password: 'pass', tls: new TlsConfig()),
+        ],
+    )]
+    #[TestWith(
+        [
+            'tls://h1:4222?tls_ca_file=/ca.pem&tls_cert_file=/client.pem&tls_key_file=/client.key&tls_key_passphrase=secret&tls_verify=false&tls_server_name=nats.local&tls_handshake_first=true',
+            new Config(urls: ['h1:4222'], tls: new TlsConfig(
+                caFile: '/ca.pem',
+                certFile: '/client.pem',
+                keyFile: '/client.key',
+                keyPassphrase: 'secret',
+                verifyPeer: false,
+                serverName: 'nats.local',
+                handshakeFirst: true,
+            )),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://h1:4222?tls_ca_file=/ca.pem',
+            new Config(urls: ['h1:4222'], tls: new TlsConfig(caFile: '/ca.pem')),
+        ],
+    )]
+    #[TestWith(
+        [
+            'nats://h1:4222?tls_verify=yes&tls_ca_file=',
+            new Config(urls: ['h1:4222'], tls: new TlsConfig()),
+        ],
+    )]
     public function testFromURI(string $uri, Config $config): void
     {
         self::assertEquals($config, Config::fromURI($uri));
@@ -333,7 +372,6 @@ final class ConfigTest extends TestCase
     /**
      * @param non-empty-string $uri
      */
-    #[TestWith(['tls://127.0.0.1:4222'])]
     #[TestWith(['ws://127.0.0.1:4222'])]
     #[TestWith(['wss://127.0.0.1:4222'])]
     #[TestWith(['http://127.0.0.1:4222'])]
@@ -359,6 +397,8 @@ final class ConfigTest extends TestCase
     #[TestWith(['nats://h1:4222?jwt=x&jwt_file=/user.jwt'])]
     #[TestWith(['nats://h1:4222?nkey=x&nkey_file=/user.nk'])]
     #[TestWith(['nats://alice@h1:4222,nats://alice:@h2:4222'])]
+    #[TestWith(['tls://h1:4222?tls_key_file=/client.key'])]
+    #[TestWith(['tls://h1:4222?tls_key_passphrase=secret'])]
     public function testFromURIRejectsInvalidUri(string $uri): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -471,5 +511,35 @@ final class ConfigTest extends TestCase
     {
         $this->expectException(\InvalidArgumentException::class);
         new Config(requestTimeout: $timeout);
+    }
+
+    public function testFromArrayWithTls(): void
+    {
+        self::assertEquals(
+            new Config(tls: new TlsConfig(caFile: '/ca.pem', certFile: '/client.pem', keyFile: '/client.key', keyPassphrase: 'secret', verifyPeer: false, serverName: 'nats.local', handshakeFirst: true)),
+            Config::fromArray(['tls' => [
+                'ca_file' => '/ca.pem',
+                'cert_file' => '/client.pem',
+                'key_file' => '/client.key',
+                'key_passphrase' => 'secret',
+                'verify_peer' => false,
+                'server_name' => 'nats.local',
+                'handshake_first' => true,
+            ]]),
+        );
+        self::assertEquals(new Config(tls: new TlsConfig()), Config::fromArray(['tls' => []]));
+        self::assertNull(Config::fromArray([])->tls);
+    }
+
+    public function testTlsKeyRequiresCertificate(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new TlsConfig(keyFile: '/client.key');
+    }
+
+    public function testTlsKeyPassphraseRequiresCertificate(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new TlsConfig(keyPassphrase: 'secret');
     }
 }

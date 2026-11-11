@@ -6,6 +6,7 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
 - [NATS Core](https://docs.nats.io/nats-concepts/core-nats) 
   - [Connection](#connection)
   - [Authentication](#authentication)
+  - [TLS](#tls)
   - [Connect and ping](#connect-and-ping)
   - [Reconnect](#reconnect)
   - [Publish-Subscribe](#pub-sub)
@@ -64,11 +65,12 @@ The library implements the full functionality of NATS Core, including pub-sub, q
 
 #### Connection
 
-`Nats\Config::fromURI()` takes `[scheme://][user[:password]@]host[:port][,host[:port]...][?options]`. The scheme is `nats://` (`tcp://` is an alias, and it may be omitted),
-`tls://`, `ws://` and `wss://` are rejected as not supported yet. A host without a port connects to `4222`, an IPv6 host goes in brackets (`[::1]:4222`),
+`Nats\Config::fromURI()` takes `[scheme://][user[:password]@]host[:port][,host[:port]...][?options]`. The scheme is `nats://` (`tcp://` is an alias, and it may be omitted)
+or `tls://`, which requires TLS (see [TLS](#tls)); `ws://` and `wss://` are rejected as not supported yet. A host without a port connects to `4222`, an IPv6 host goes in brackets (`[::1]:4222`),
 and the credentials are percent-encoded like in any url (`p%40ss` for `p@ss`). The servers of a list are tried in a random order (in the given one with `noRandomize`, `no_randomize=true` in the uri) until one accepts the connection, see [Reconnect](#reconnect);
 each one may repeat the scheme and the credentials, as in nats.go (`nats://u:p@h1:4222,nats://u:p@h2:4222`): one user is sent to every server, so different credentials are rejected. The options are the snake_case names of the `Nats\Config` parameters,
-e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `token`, `jwt`, `nkey`, `credentials_file`, `jwt_file`, `nkey_file`, `client_name`, `allow_reconnect`, `max_reconnects` (negative for no limit), `reconnect_wait`, `reconnect_jitter`, `reconnect_buffer_size`, `no_randomize`.
+e.g. `connection_timeout` (seconds, fractions allowed), `request_timeout`, `verbose`, `no_responders`, `ping`, `token`, `jwt`, `nkey`, `credentials_file`, `jwt_file`, `nkey_file`, `client_name`, `allow_reconnect`, `max_reconnects` (negative for no limit), `reconnect_wait`, `reconnect_jitter`, `reconnect_buffer_size`, `no_randomize`,
+and the TLS ones `tls_ca_file`, `tls_cert_file`, `tls_key_file`, `tls_key_passphrase`, `tls_verify`, `tls_server_name`, `tls_handshake_first`.
 Userinfo without a colon is a token, as in nats.go (`nats://s3cr3t@host`), while `nats://alice:@host` is the user `alice` with an empty password, see [Authentication](#authentication):
 
 ```php
@@ -87,8 +89,8 @@ dump($nc->jetStream()->accountInfo());
 
 #### Authentication
 
-The client supports every authentication method of nats-server except TLS certificates: a user and a password, a token,
-an NKey seed, and a JWT signed with the NKey of the user. Only one way to pass each of them may be set, e.g. `jwt` or `jwtFile`, and a token cannot be combined with a user.
+The client supports every authentication method of nats-server: a user and a password, a token,
+an NKey seed, a JWT signed with the NKey of the user, and a TLS client certificate (see [TLS](#tls)). Only one way to pass each of them may be set, e.g. `jwt` or `jwtFile`, and a token cannot be combined with a user.
 
 ```php
 <?php
@@ -118,6 +120,53 @@ $nc = new Nats\Client(Nats\Config::fromURI('nats://127.0.0.1:4222?jwt_file=/etc/
 The files are read on every connection attempt, so rotated credentials are picked up by the next connection. A file that cannot be read
 or holds no credentials throws `Nats\Exception\InvalidCredentials` before anything is sent to the server, a malformed seed throws `Nats\Exception\InvalidNKey`.
 NKey authentication requires `ext-sodium`.
+
+#### TLS
+
+Without TLS options the client still upgrades the connection to TLS when the server requires it, verifying the server certificate against the system authorities, as nats.go does.
+`Nats\TlsConfig` (or the `tls://` scheme, or any `tls_*` uri option) requires TLS: a server that does not offer it fails with `Nats\Exception\TlsIsNotAvailable`.
+It sets the authorities to trust (`caFile`), the client certificate for the servers that verify the clients (`certFile`, `keyFile`, `keyPassphrase` for an encrypted key),
+the name the server certificate is checked against and sent in SNI (`serverName`, the host of the server by default; a server the cluster announces by its IP address is checked against the name of the one that announced it, or against its own address if that one is an address too),
+and `handshakeFirst` for the servers configured with `handshake_first`, which expect the TLS handshake before they send INFO. A certificate that does not verify fails with `Nats\Exception\TlsHandshakeFailed`.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+
+// A server certificate signed by a private authority.
+$nc = new Nats\Client(Nats\Config::fromURI('tls://nats.internal:4222?tls_ca_file=/etc/nats/ca.pem'));
+
+// A server that verifies the clients (mutual TLS).
+$nc = new Nats\Client(new Nats\Config(
+    urls: ['nats.internal:4222'],
+    tls: new Nats\TlsConfig(
+        caFile: '/etc/nats/ca.pem',
+        certFile: '/etc/nats/client-cert.pem',
+        keyFile: '/etc/nats/client-key.pem',
+    ),
+));
+
+// A server with handshake_first, reached by its address.
+$nc = new Nats\Client(new Nats\Config(
+    urls: ['10.0.0.5:4222'],
+    tls: new Nats\TlsConfig(caFile: '/etc/nats/ca.pem', serverName: 'nats.internal', handshakeFirst: true),
+));
+
+try {
+    $nc->connect();
+} catch (Nats\Exception\TlsHandshakeFailed $e) {
+    exit('The server certificate is not trusted: ' . $e->getMessage());
+}
+```
+
+`verifyPeer: false` (`tls_verify=false`) skips the verification of the server certificate and is meant for testing only.
+A server that refuses the client certificate, or its absence, closes the connection after the handshake: PHP does not report its TLS alert,
+so `connect()` fails with `Nats\Exception\ConnectionIsNotAvailable` that says so.
 
 #### Connect and ping
 

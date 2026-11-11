@@ -10,14 +10,19 @@ use Amp\CancelledException;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Socket\Socket;
+use Amp\Socket\SocketException;
+use Amp\Socket\TlsState;
 use Amp\TimeoutCancellation;
 use Revolt\EventLoop;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ConnectionIsNotAvailable;
 use Thesis\Nats\Exception\ConnectionWasClosed;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
+use Thesis\Nats\Exception\TlsHandshakeFailed;
+use Thesis\Nats\Exception\TlsIsNotAvailable;
 use Thesis\Nats\Internal\Hooks;
 use Thesis\Nats\Internal\Protocol;
+use Thesis\Nats\NatsException;
 use function Amp\async;
 use function Thesis\Package\version;
 
@@ -105,6 +110,16 @@ final class SocketConnection implements Connection
                 \sprintf('The nats server did not complete the handshake within %s seconds.', $timeout),
                 previous: $e,
             );
+        } catch (ConnectionIsNotAvailable $e) {
+            // The TLS alert the server sends before closing is not reported by PHP: the client sees a bare close.
+            if ($this->socket->getTlsState() === TlsState::Enabled) {
+                throw new ConnectionIsNotAvailable(
+                    'The nats server closed the TLS connection during the handshake: it may not accept the client certificate, or its absence.',
+                    previous: $e,
+                );
+            }
+
+            throw $e;
         }
 
         if (($interval = $this->config->ping) !== null) {
@@ -204,12 +219,34 @@ final class SocketConnection implements Connection
      */
     private function handshake(Cancellation $cancellation): void
     {
-        $frame = $this->framer->readFrame($cancellation) ?? throw new ConnectionIsNotAvailable();
+        $tls = $this->config->tls;
+
+        if ($tls?->handshakeFirst === true) {
+            $this->secure($cancellation);
+        }
+
+        $frame = $this->framer->readStartupFrame($cancellation) ?? throw new ConnectionIsNotAvailable();
 
         if (!$frame instanceof Protocol\ServerInfo) {
             throw new \UnexpectedValueException(
                 \sprintf('An unexpected "%s" startup frame received.', $frame::class),
             );
+        }
+
+        if ($tls !== null && !$tls->handshakeFirst && $frame->tlsRequired !== true && $frame->tlsAvailable !== true) {
+            throw new TlsIsNotAvailable('The client requires TLS, but the nats server does not offer it.');
+        }
+
+        // The server that requires TLS gets it without the TLS options too, as nats.go does. Nothing reads the socket
+        // until the reader starts, so the upgrade does not race with it.
+        if ($this->socket->getTlsState() === TlsState::Disabled && ($tls !== null || $frame->tlsRequired === true)) {
+            // The server says nothing else before the handshake: plain bytes past INFO would be taken
+            // for the encrypted ones (e.g. an injected PONG for the answer to CONNECT).
+            if ($this->framer->hasUnread()) {
+                throw new TlsHandshakeFailed('The nats server sent unexpected plain data before the TLS handshake.');
+            }
+
+            $this->secure($cancellation);
         }
 
         if ($this->state !== ConnectionState::Alive) {
@@ -227,7 +264,7 @@ final class SocketConnection implements Connection
             $this->connect(new Protocol\Connect(
                 verbose: $this->config->verbose,
                 pedantic: $this->config->pedantic,
-                tlsRequired: false,
+                tlsRequired: $this->socket->getTlsState() === TlsState::Enabled,
                 name: $this->config->clientName,
                 version: version(self::PACKAGE_NAME),
                 // Asks the server for the INFO updates: the servers of the cluster and the lame duck mode notification.
@@ -246,11 +283,32 @@ final class SocketConnection implements Connection
             // In non-verbose mode the server does not acknowledge CONNECT: it stays silent on success and answers
             // with -ERR (e.g. Authorization Violation) before closing the socket on failure. A PING forces a reply
             // (PONG or -ERR), so that the errors surface from here instead of being lost, the same way nats.go does it.
-            $this->framer->writeFrame(Protocol\Ping::Frame);
+            try {
+                $this->framer->writeFrame(Protocol\Ping::Frame);
+            } catch (StreamException $e) {
+                // The server's own error (e.g. Authorization Violation) wins, as when the write gets through.
+                $closed = $this->closedWhileWriting($e);
+
+                throw $closed->getPrevious() instanceof NatsException ? $closed->getPrevious() : new ConnectionIsNotAvailable(previous: $closed);
+            }
+
             $handshake->getFuture()->await($cancellation);
         } finally {
             $this->handshake = null;
             $handshake->getFuture()->ignore();
+        }
+    }
+
+    /**
+     * @throws TlsHandshakeFailed
+     */
+    private function secure(Cancellation $cancellation): void
+    {
+        // A cancelled handshake is let through: it is the connection timeout, not a TLS failure.
+        try {
+            $this->socket->setupTls($cancellation);
+        } catch (SocketException|StreamException $e) {
+            throw new TlsHandshakeFailed("The TLS handshake with the nats server failed: {$e->getMessage()}", previous: $e);
         }
     }
 

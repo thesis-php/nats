@@ -16,18 +16,20 @@ final readonly class Uri
     private const string DEFAULT_SCHEME = 'nats';
     private const string DEFAULT_HOST = '127.0.0.1';
     private const int DEFAULT_PORT = 4222;
+    private const string TLS_SCHEME = 'tls';
 
     /** @var list<non-empty-string> */
-    private const array SCHEMES = ['nats', 'tcp'];
+    private const array SCHEMES = ['nats', 'tcp', self::TLS_SCHEME];
 
     /** @var list<non-empty-string> */
-    private const array UNSUPPORTED_SCHEMES = ['tls', 'ws', 'wss'];
+    private const array UNSUPPORTED_SCHEMES = ['ws', 'wss'];
 
     /**
      * @param non-empty-list<non-empty-string> $urls in the `host:port` form, an IPv6 host in brackets
      * @param ?non-empty-string $user
      * @param ?non-empty-string $password
      * @param ?non-empty-string $token
+     * @param bool $tls whether the scheme is `tls`
      */
     private function __construct(
         public array $urls,
@@ -35,6 +37,7 @@ final readonly class Uri
         public ?string $password,
         public ?string $token,
         public Query $query,
+        public bool $tls,
     ) {}
 
     /**
@@ -97,7 +100,7 @@ final readonly class Uri
 
         [$user, $password, $token] = $credentials ?? [null, null, null];
 
-        return new self($urls, $user, $password, $token, $query);
+        return new self($urls, $user, $password, $token, $query, $scheme === self::TLS_SCHEME);
     }
 
     /**

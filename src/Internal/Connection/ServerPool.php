@@ -33,7 +33,7 @@ final class ServerPool
         private readonly ?int $maxReconnects,
     ) {
         foreach ($urls as $url) {
-            $this->add($url, implicit: false);
+            $this->add(new Server($url, implicit: false));
         }
 
         if ($this->randomize) {
@@ -112,7 +112,14 @@ final class ServerPool
 
         foreach (array_keys($announced) as $url) {
             $new = $new || !isset($this->known[$url]);
-            $this->add($url, implicit: true);
+            $server = new Server($url, implicit: true);
+
+            // A certificate is issued for a name rather than for the address the cluster announces, as nats.go assumes:
+            // the server is verified against the name the announcing one is known by. Without such a name
+            // (the current server is an address itself) every server is verified against its own address.
+            $this->add($current !== null && $server->hasIpAddress() && ($current->tlsName !== null || !$current->hasIpAddress())
+                ? new Server($url, implicit: true, tlsName: $current->tlsName())
+                : $server);
         }
 
         if ($new && $this->randomize) {
@@ -131,13 +138,10 @@ final class ServerPool
         return array_map(static fn(Server $server): string => $server->url, $this->servers);
     }
 
-    /**
-     * @param non-empty-string $url
-     */
-    private function add(string $url, bool $implicit): void
+    private function add(Server $server): void
     {
-        $this->servers[] = new Server($url, $implicit);
-        $this->known[$url] = true;
+        $this->servers[] = $server;
+        $this->known[$server->url] = true;
     }
 
     /**

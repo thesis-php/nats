@@ -16,6 +16,7 @@ use Thesis\Nats\Internal\Protocol\Ok;
 use Thesis\Nats\Internal\Protocol\Ping;
 use Thesis\Nats\Internal\Protocol\Pong;
 use Thesis\Nats\Internal\Protocol\Pub;
+use Thesis\Nats\Internal\Protocol\ServerInfo;
 use Thesis\Nats\Internal\Protocol\Sub;
 
 #[CoversClass(Framer::class)]
@@ -59,6 +60,52 @@ final class FramerTest extends TestCase
         for ($i = 0; $i < \count($frames); ++$i) {
             self::assertEquals($frames[$i], $framer->readFrame());
         }
+
+        self::assertNull($framer->readFrame());
+        self::assertNull($framer->readFrame());
+    }
+
+    public function testStartupFrameLeavesWhatCameAlongUnparsed(): void
+    {
+        $socket = $this->createMock(Socket::class);
+        $socket
+            ->expects(self::exactly(2))
+            ->method('read')
+            ->willReturnOnConsecutiveCalls('INFO {"version":', "\"2.12.0\"}\r\nPONG\r\nPI");
+
+        $framer = new Framer($socket);
+
+        self::assertInstanceOf(ServerInfo::class, $framer->readStartupFrame());
+        self::assertTrue($framer->hasUnread());
+        self::assertSame(Pong::Frame, $framer->readFrame());
+    }
+
+    public function testStartupFrameAloneLeavesNothingUnread(): void
+    {
+        $socket = $this->createMock(Socket::class);
+        $socket
+            ->expects(self::once())
+            ->method('read')
+            ->willReturn("INFO {\"version\":\"2.12.0\"}\r\n");
+
+        $framer = new Framer($socket);
+
+        self::assertInstanceOf(ServerInfo::class, $framer->readStartupFrame());
+        self::assertFalse($framer->hasUnread());
+    }
+
+    public function testReadsTheSocketOnlyForTheAskedFrame(): void
+    {
+        $socket = $this->createMock(Socket::class);
+        $socket
+            ->expects(self::once())
+            ->method('read')
+            ->willReturn("INFO {\"version\":\"2.12.0\"}\r\n");
+
+        $framer = new Framer($socket);
+
+        // Nothing reads the socket after the frame, so it can be upgraded to TLS.
+        self::assertInstanceOf(ServerInfo::class, $framer->readFrame());
     }
 
     public function testWriteFrame(): void

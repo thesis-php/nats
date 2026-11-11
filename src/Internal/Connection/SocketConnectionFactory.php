@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\Internal\Connection;
 
+use Amp\Socket\Certificate;
+use Amp\Socket\ClientTlsContext;
 use Amp\Socket\ConnectContext;
 use Amp\Socket\DnsSocketConnector;
 use Amp\Socket\SocketConnector;
 use Thesis\Nats\Config;
 use Thesis\Nats\Exception\ServerIsNotAvailable;
+use Thesis\Nats\TlsConfig;
 
 /**
  * @internal
@@ -35,14 +38,18 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
         return new self($config, $context, new DnsSocketConnector());
     }
 
-    public function connect(string $url): Connection
+    public function connect(Server $server): Connection
     {
         // The credentials are read and a malformed seed is rejected before the socket is opened:
         // otherwise the server would be left waiting for CONNECT.
         $credentials = Credentials::fromConfig($this->config);
 
+        // The socket starts unencrypted: the context is applied once the connection is upgraded to TLS,
+        // which happens without TLS options too when the server requires it.
+        $context = $this->context->withTlsContext(self::tlsContext($this->config->tls ?? new TlsConfig(), $server));
+
         try {
-            $socket = $this->connector->connect($url, $this->context);
+            $socket = $this->connector->connect($server->url, $context);
         } catch (\Throwable $e) {
             throw new ServerIsNotAvailable($e->getMessage(), previous: $e);
         }
@@ -59,5 +66,23 @@ final readonly class SocketConnectionFactory implements ConnectionFactory
         }
 
         return $connection;
+    }
+
+    private static function tlsContext(TlsConfig $config, Server $server): ClientTlsContext
+    {
+        $context = new ClientTlsContext($config->serverName ?? $server->tlsName())
+            ->withCaFile($config->caFile);
+
+        if (!$config->verifyPeer) {
+            $context = $context
+                ->withoutPeerVerification()
+                ->withoutPeerNameVerification();
+        }
+
+        if ($config->certFile !== null) {
+            $context = $context->withCertificate(new Certificate($config->certFile, $config->keyFile, $config->keyPassphrase));
+        }
+
+        return $context;
     }
 }

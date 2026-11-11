@@ -90,4 +90,49 @@ final class ServerPoolTest extends TestCase
 
         self::assertSame($expected, $shuffled);
     }
+
+    public function testServerAnnouncedByAddressIsVerifiedAgainstTheNameOfTheAnnouncingOne(): void
+    {
+        $pool = new ServerPool(['nats.example.com:4222'], randomize: false, maxReconnects: null);
+        $pool->discover(['10.0.0.2:4222', '[fd00::3]:4222', 'nats-2.example.com:4222']);
+
+        self::assertSame(
+            ['nats.example.com', 'nats.example.com', 'nats.example.com', 'nats-2.example.com'],
+            array_map(static fn(Server $server): string => $server->tlsName(), $pool->servers()),
+        );
+    }
+
+    public function testServerAnnouncedByAddressIsVerifiedAgainstItsOwnAddressWithoutAName(): void
+    {
+        $pool = new ServerPool(['127.0.0.2:4222'], randomize: false, maxReconnects: null);
+        $pool->discover(['127.0.0.1:4222']);
+
+        self::assertSame(
+            ['127.0.0.2', '127.0.0.1'],
+            array_map(static fn(Server $server): string => $server->tlsName(), $pool->servers()),
+        );
+    }
+
+    public function testInheritedNameIsPassedOnByTheServerKnownByAddress(): void
+    {
+        $pool = new ServerPool(['nats.example.com:4222'], randomize: false, maxReconnects: null);
+        $pool->discover(['10.0.0.2:4222']);
+
+        // The client moves to the server known by address, which announces another one.
+        $pool->use($pool->servers()[1] ?? self::fail('The server is not discovered.'));
+        $pool->discover(['10.0.0.3:4222']);
+
+        self::assertSame(
+            ['10.0.0.2:4222' => 'nats.example.com', 'nats.example.com:4222' => 'nats.example.com', '10.0.0.3:4222' => 'nats.example.com'],
+            array_combine($pool->urls(), array_map(static fn(Server $server): string => $server->tlsName(), $pool->servers())),
+        );
+    }
+
+    public function testServerHost(): void
+    {
+        self::assertSame('nats.example.com', new Server('nats.example.com:4222', implicit: false)->host());
+        self::assertSame('::1', new Server('[::1]:4222', implicit: false)->host());
+        self::assertTrue(new Server('[::1]:4222', implicit: false)->hasIpAddress());
+        self::assertFalse(new Server('nats.example.com:4222', implicit: false)->hasIpAddress());
+    }
 }
