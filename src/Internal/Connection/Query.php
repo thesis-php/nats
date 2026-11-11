@@ -29,6 +29,11 @@ final readonly class Query
      * @param ?float $reconnectWait non-negative and finite
      * @param ?float $reconnectJitter non-negative and finite
      * @param ?non-negative-int $reconnectBufferSize
+     * @param ?non-empty-string $tlsCaFile
+     * @param ?non-empty-string $tlsCertFile
+     * @param ?non-empty-string $tlsKeyFile
+     * @param ?non-empty-string $tlsKeyPassphrase
+     * @param ?non-empty-string $tlsServerName
      */
     private function __construct(
         public ?bool $verbose = null,
@@ -56,7 +61,29 @@ final readonly class Query
         public ?float $reconnectJitter = null,
         public ?int $reconnectBufferSize = null,
         public ?bool $noRandomize = null,
+        public ?string $tlsCaFile = null,
+        public ?string $tlsCertFile = null,
+        public ?string $tlsKeyFile = null,
+        #[\SensitiveParameter]
+        public ?string $tlsKeyPassphrase = null,
+        public ?bool $tlsVerify = null,
+        public ?string $tlsServerName = null,
+        public ?bool $tlsHandshakeFirst = null,
     ) {}
+
+    /**
+     * Whether any of the TLS options is given.
+     */
+    public function hasTls(): bool
+    {
+        return $this->tlsCaFile !== null
+            || $this->tlsCertFile !== null
+            || $this->tlsKeyFile !== null
+            || $this->tlsKeyPassphrase !== null
+            || $this->tlsVerify !== null
+            || $this->tlsServerName !== null
+            || $this->tlsHandshakeFirst !== null;
+    }
 
     public static function parse(#[\SensitiveParameter] string $query): self
     {
@@ -85,6 +112,13 @@ final readonly class Query
             reconnectJitter: self::nonNegativeFloat($options, 'reconnect_jitter'),
             reconnectBufferSize: self::nonNegativeInt($options, 'reconnect_buffer_size'),
             noRandomize: self::bool($options, 'no_randomize'),
+            tlsCaFile: self::string($options, 'tls_ca_file'),
+            tlsCertFile: self::string($options, 'tls_cert_file'),
+            tlsKeyFile: self::string($options, 'tls_key_file'),
+            tlsKeyPassphrase: self::string($options, 'tls_key_passphrase'),
+            tlsVerify: self::bool($options, 'tls_verify'),
+            tlsServerName: self::string($options, 'tls_server_name'),
+            tlsHandshakeFirst: self::bool($options, 'tls_handshake_first'),
         );
     }
 

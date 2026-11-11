@@ -39,5 +39,28 @@ services:
     image: nats
     command: --name nats-cluster-2 -p 4222 --cluster_name test --cluster nats://0.0.0.0:6222 --routes nats://nats-cluster-1:6222
 
+  # TLS with the self-signed certificates of docker/nats/tls: offered (with the monitoring to tell the TLS connections),
+  # verifying the clients, and with the handshake before INFO.
+  nats-tls:
+    image: nats
+    command: -c /etc/nats/tls-server.conf --name nats-tls -p 4222 -m 8222
+    volumes:
+      - ./docker/nats/tls-server.conf:/etc/nats/tls-server.conf
+      - ./docker/nats/tls:/etc/nats/tls
+
+  nats-mtls:
+    image: nats
+    command: -c /etc/nats/mtls-server.conf --name nats-mtls -p 4222
+    volumes:
+      - ./docker/nats/mtls-server.conf:/etc/nats/mtls-server.conf
+      - ./docker/nats/tls:/etc/nats/tls
+
+  nats-tls-first:
+    image: nats
+    command: -c /etc/nats/tls-first-server.conf --name nats-tls-first -p 4222
+    volumes:
+      - ./docker/nats/tls-first-server.conf:/etc/nats/tls-first-server.conf
+      - ./docker/nats/tls:/etc/nats/tls
+
   nats-cli:
     image: bitnamilegacy/natscli:latest

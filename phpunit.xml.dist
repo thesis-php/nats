@@ -14,6 +14,10 @@
     <php>
         <env name="THESIS_NATS_DSN" value="tcp://user:Pswd1@nats:4222?no_responders=true" />
         <env name="THESIS_NATS_CLUSTER_DSN" value="nats://nats-cluster-1:4222,nats://nats-cluster-2:4222" />
+        <env name="THESIS_NATS_TLS_DSN" value="tls://nats-tls:4222" />
+        <env name="THESIS_NATS_TLS_MONITORING_URL" value="http://nats-tls:8222" />
+        <env name="THESIS_NATS_MTLS_DSN" value="tls://nats-mtls:4222" />
+        <env name="THESIS_NATS_TLS_FIRST_DSN" value="tls://nats-tls-first:4222" />
         <env name="THESIS_NATS_TOKEN_DSN" value="nats://T0k3n@nats-token:4222" />
         <env name="THESIS_NATS_JWT_DSN" value="tcp://nats-jwt:4222?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJlZDI1NTE5LW5rZXkifQ.eyJqdGkiOiJVT1VSVldRTkpBSUgzSUhBSFRKQ1hOSEFFWTc2RzdXNEtBVlNQRUpZUDNQTTIyWEFDTTJBIiwiaWF0IjoxNzYxMjI0MDE4LCJpc3MiOiJBQlg1TVlTUUpCMlNWUUlXREo2SEZSWkxOM1ZMVzJQRkpOVDNHUDRDTUZHN0xRQ1M1SjM0RUdKSiIsIm5hbWUiOiJ1c2VyX25rZXkiLCJzdWIiOiJVRFBCNlRYV1VRMzNQUkhURjJGSlRQRVJISE43NldIS0VVWURNTEtRWlgyTTZIWUFHUkYySkpTWSIsIm5hdHMiOnsicHViIjp7fSwic3ViIjp7fSwic3VicyI6LTEsImRhdGEiOi0xLCJwYXlsb2FkIjotMSwidHlwZSI6InVzZXIiLCJ2ZXJzaW9uIjoyfX0.4D2PgQMgWzuIhy0LvE0Fy-w84I1AfEdXIb94nrVAkb_s_AdPOoCrQUANsGODLnXb_hel24vo7bATiCUeco1xDQ&amp;nkey=SUADBUTF4FNCHZ7O4BXK35KYAMMDRZFL2DOXCNRGHLQOC5HPJB6TOCTDCQ" />
     </php>

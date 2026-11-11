@@ -82,7 +82,7 @@ final class ReconnectingConnection implements Connection
 
         foreach ($this->pool->servers() as $server) {
             try {
-                $connection = $this->factory->connect($server->url);
+                $connection = $this->factory->connect($server);
             } catch (ServerIsNotAvailable $e) {
                 $errors[$server->url] = $e;
 
@@ -355,7 +355,7 @@ final class ReconnectingConnection implements Connection
             }
 
             try {
-                $connection = $this->factory->connect($server->url);
+                $connection = $this->factory->connect($server);
             } catch (\Throwable $e) {
                 $error = $e;
 

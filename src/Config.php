@@ -53,6 +53,8 @@ final readonly class Config
      * @param float $reconnectJitter in seconds, the upper bound of a random delay added to the pause, so that the clients do not reconnect at once
      * @param non-negative-int $reconnectBufferSize in bytes, the publishes buffered while reconnecting, 0 to fail them instead
      * @param bool $noRandomize whether to try the servers in the given order instead of a random one
+     * @param ?TlsConfig $tls the TLS options, with which TLS is required; without them the connection is upgraded to TLS
+     *                        only when the server requires it, verifying its certificate against the system authorities
      * @throws \InvalidArgumentException
      */
     public function __construct(
@@ -86,6 +88,7 @@ final readonly class Config
         public float $reconnectJitter = self::DEFAULT_RECONNECT_JITTER,
         public int $reconnectBufferSize = self::DEFAULT_RECONNECT_BUFFER_SIZE,
         public bool $noRandomize = false,
+        public ?TlsConfig $tls = null,
     ) {
         Validate::duration($connectionTimeout, 'connection timeout');
 
@@ -178,6 +181,16 @@ final readonly class Config
             reconnectJitter: $query->reconnectJitter ?? self::DEFAULT_RECONNECT_JITTER,
             reconnectBufferSize: $query->reconnectBufferSize ?? self::DEFAULT_RECONNECT_BUFFER_SIZE,
             noRandomize: $query->noRandomize ?? false,
+            // tls:// or any of the TLS options requires TLS.
+            tls: $parsed->tls || $query->hasTls() ? new TlsConfig(
+                caFile: $query->tlsCaFile,
+                certFile: $query->tlsCertFile,
+                keyFile: $query->tlsKeyFile,
+                keyPassphrase: $query->tlsKeyPassphrase,
+                verifyPeer: $query->tlsVerify ?? true,
+                serverName: $query->tlsServerName,
+                handshakeFirst: $query->tlsHandshakeFirst ?? false,
+            ) : null,
         );
     }
 
@@ -208,6 +221,15 @@ final readonly class Config
      *     reconnect_jitter?: float,
      *     reconnect_buffer_size?: non-negative-int,
      *     no_randomize?: bool,
+     *     tls?: array{
+     *         ca_file?: non-empty-string,
+     *         cert_file?: non-empty-string,
+     *         key_file?: non-empty-string,
+     *         key_passphrase?: non-empty-string,
+     *         verify_peer?: bool,
+     *         server_name?: non-empty-string,
+     *         handshake_first?: bool,
+     *     },
      * } $options
      * @throws \InvalidArgumentException
      */
@@ -239,6 +261,15 @@ final readonly class Config
             reconnectJitter: $options['reconnect_jitter'] ?? self::DEFAULT_RECONNECT_JITTER,
             reconnectBufferSize: $options['reconnect_buffer_size'] ?? self::DEFAULT_RECONNECT_BUFFER_SIZE,
             noRandomize: $options['no_randomize'] ?? false,
+            tls: isset($options['tls']) ? new TlsConfig(
+                caFile: $options['tls']['ca_file'] ?? null,
+                certFile: $options['tls']['cert_file'] ?? null,
+                keyFile: $options['tls']['key_file'] ?? null,
+                keyPassphrase: $options['tls']['key_passphrase'] ?? null,
+                verifyPeer: $options['tls']['verify_peer'] ?? true,
+                serverName: $options['tls']['server_name'] ?? null,
+                handshakeFirst: $options['tls']['handshake_first'] ?? false,
+            ) : null,
         );
     }
 }
