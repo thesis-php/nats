@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\ObjectStore;
 
 use Amp\ByteStream\ReadableIterableStream;
-use Amp\ByteStream\WritableIterableStream;
 use Amp\Cancellation;
+use Amp\CancelledException;
+use Amp\Pipeline\Queue;
+use Amp\TimeoutCancellation;
 use Thesis\Nats\Client;
-use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Exception\ObjectIsInvalid;
 use Thesis\Nats\Header\MsgRollup;
 use Thesis\Nats\Header\Timestamp;
@@ -16,7 +17,9 @@ use Thesis\Nats\Headers;
 use Thesis\Nats\Internal\Id;
 use Thesis\Nats\Internal\Validation\Validate;
 use Thesis\Nats\JetStream;
+use Thesis\Nats\JetStream\Api\AckPolicy;
 use Thesis\Nats\JetStream\Api\DeliverPolicy;
+use Thesis\Nats\JetStream\Api\ReplayPolicy;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
 use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
 use Thesis\Nats\Json\Encoder;
@@ -24,6 +27,8 @@ use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Subscription;
+use Thesis\Time\TimeSpan;
+use function Amp\async;
 
 /**
  * @api
@@ -32,6 +37,9 @@ final readonly class Store
 {
     /** @var int default chunk size is 128KB */
     private const int DEFAULT_CHUNK_SIZE = 128 * 1024;
+    private const int GET_HEARTBEAT_SECONDS = 5;
+    private const int GET_INACTIVE_THRESHOLD_SECONDS = 300;
+    private const int CLEANUP_TIMEOUT_SECONDS = 5;
 
     public function __construct(
         public string $name,
@@ -79,39 +87,69 @@ final readonly class Store
             return new StoredObject($info);
         }
 
-        $sink = new WritableIterableStream($info->size);
+        /** @var Queue<string> $chunks */
+        $chunks = new Queue(max($info->chunks, 1));
+        $collector = new Internal\ChunkCollector($info, $chunks);
 
-        $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
-            deliverSubject: $id = $this->nats->newInbox(),
+        // An ordered consumer of nats.go: no acks, flow control with heartbeats, a replica in memory.
+        $consumer = $this->stream->createOrUpdateConsumer(new JetStream\Api\ConsumerConfig(
+            description: 'object store get consumer',
+            deliverPolicy: DeliverPolicy::All,
+            deliverSubject: $this->nats->newInbox(),
+            ackPolicy: AckPolicy::None,
+            maxDeliver: 1,
             filterSubject: "\$O.{$this->name}.C.{$info->nuid}",
+            flowControl: true,
+            idleHeartbeat: TimeSpan::fromSeconds(self::GET_HEARTBEAT_SECONDS),
+            replayPolicy: ReplayPolicy::Instant,
+            inactiveThreshold: TimeSpan::fromSeconds(self::GET_INACTIVE_THRESHOLD_SECONDS),
+            replicas: 1,
+            memoryStorage: true,
         ));
 
-        $this->nats->subscribe($id, static function (
-            NatsDelivery $delivery,
-            Subscription $subscription,
-        ) use ($sink): void {
-            $metadata = $delivery->replyTo !== null ? JetStream\Metadata::parse($delivery->replyTo) : null;
+        // Each chunk is a message, so fewer messages than chunks means some of them are gone.
+        if ($consumer->info->numPending < $info->chunks) {
+            $completion = async($this->deleteConsumer(...), $consumer);
+            $completion->ignore();
 
-            $payload = $delivery->message->payload;
+            throw new ObjectIsInvalid("Object '{$info->name}' is missing chunks: expected {$info->chunks}, stored {$consumer->info->numPending}.");
+        }
 
-            if ($metadata !== null && $payload !== null && $payload !== '') {
-                $sink->write($payload);
+        $subscription = $consumer->push($collector);
+
+        // The reader gets the end of the object or the error first, the consumer is deleted afterwards.
+        $completion = async(function () use (
+            $subscription,
+            $consumer,
+            $collector,
+            $chunks,
+        ): void {
+            try {
+                try {
+                    $subscription->awaitCompletion($collector->exhausted());
+                } catch (CancelledException) {
+                    $subscription->stop();
+                }
+
+                $collector->verify();
+                $chunks->complete();
+            } catch (\Throwable $e) {
+                $chunks->error($e);
             }
 
-            if ($metadata?->pending === 0) {
-                $sink->close();
-                $subscription->stop();
-            }
+            $this->deleteConsumer($consumer);
         });
+        $completion->ignore();
 
         return new StoredObject(
             $info,
-            new ReadableIterableStream($sink->getIterator()),
+            new ReadableIterableStream($chunks->iterate()),
         );
     }
 
     /**
-     * @param Reader|non-empty-string $object
+     * Chunks already published are purged if reading the object or publishing fails.
+     *
      * @throws NatsException
      */
     public function put(ObjectMeta $meta, Reader|string $object): ObjectInfo
@@ -130,52 +168,55 @@ final readonly class Store
         $chunkSize = $meta->chunkSize ?? self::DEFAULT_CHUNK_SIZE;
         $digest = DigestCalculator::sha256();
 
-        while (!$object->eof()) {
-            $data = $object->read($chunkSize);
+        try {
+            while (!$object->eof()) {
+                $data = $object->read($chunkSize);
 
-            if ($data === null) {
-                break;
+                if ($data === null) {
+                    break;
+                }
+
+                $digest->update($data);
+                $size += \strlen($data);
+                ++$chunks;
+
+                $this->js->publish($chunkSubject, new Message($data));
             }
 
-            $digest->update($data);
-            $size += \strlen($data);
-            ++$chunks;
+            $encodedDigest = self::base64encode($digest->finish());
 
-            $this->js->publish($chunkSubject, new Message($data));
+            $objectInfo = new ObjectInfo(
+                name: $meta->name,
+                bucket: $this->name,
+                nuid: $nuid,
+                size: $size,
+                chunks: $chunks,
+                mtime: new \DateTimeImmutable(),
+                digest: "{$digest->name()}={$encodedDigest}",
+                deleted: false,
+                description: $meta->description,
+                headers: $meta->headers,
+                metadata: $meta->metadata,
+                options: new ObjectMetaOptions(
+                    maxChunkSize: $meta->chunkSize,
+                ),
+            );
+
+            $this->js->publish(
+                subject: "\$O.{$this->name}.M." . self::base64encode($meta->name),
+                message: new Message(
+                    payload: $this->json->encode($objectInfo),
+                    headers: new Headers()
+                        ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
+                ),
+            );
+        } catch (\Throwable $e) {
+            if ($chunks > 0) {
+                $this->purgeChunks($chunkSubject);
+            }
+
+            throw $e;
         }
-
-        if ($size === 0) {
-            throw new \LogicException('Empty object provided.');
-        }
-
-        $encodedDigest = self::base64encode($digest->finish());
-        $subject = "\$O.{$this->name}.M." . self::base64encode($meta->name);
-
-        $objectInfo = new ObjectInfo(
-            name: $meta->name,
-            bucket: $this->name,
-            nuid: $nuid,
-            size: $size,
-            chunks: $chunks,
-            mtime: new \DateTimeImmutable(),
-            digest: "{$digest->name()}={$encodedDigest}",
-            deleted: false,
-            description: $meta->description,
-            headers: $meta->headers,
-            metadata: $meta->metadata,
-            options: new ObjectMetaOptions(
-                maxChunkSize: $meta->chunkSize,
-            ),
-        );
-
-        $this->js->publish(
-            subject: $subject,
-            message: new Message(
-                payload: $this->json->encode($objectInfo),
-                headers: new Headers()
-                    ->with(MsgRollup::header(), MsgRollup::ROLLUP_SUBJECT),
-            ),
-        );
 
         if ($info !== null) {
             $this->stream->purge(
@@ -224,13 +265,13 @@ final readonly class Store
         $msg = $this->stream->getLastMessageForSubject("\$O.{$this->name}.M." . self::base64encode($name));
 
         if ($msg !== null && $msg->payload !== null && $msg->payload !== '') {
-            $data = $this->json->decode($msg->payload);
-            $data['mtime'] = ($msg->headers?->get(Timestamp::Header) ?? new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-            return $this->serializer->deserialize(
+            $info = $this->serializer->deserialize(
                 ObjectInfo::class,
-                $data,
+                $this->json->decode($msg->payload),
             );
+
+            // The time the server stored the meta, like nats.go: the mtime in the payload is set by the writer.
+            return $info->withTime($msg->headers?->get(Timestamp::Header) ?? $info->mtime);
         }
 
         return null;
@@ -328,6 +369,31 @@ final readonly class Store
     {
         $info = $this->stream->actualInfo();
         $this->js->updateStream($info->config->seal());
+    }
+
+    /**
+     * A cleanup: bounded in time and not reported, the inactive threshold removes the consumer anyway.
+     */
+    private function deleteConsumer(JetStream\Consumer $consumer): void
+    {
+        try {
+            $consumer->delete(new TimeoutCancellation(self::CLEANUP_TIMEOUT_SECONDS));
+        } catch (\Throwable) {
+        }
+    }
+
+    /**
+     * A cleanup: bounded in time and not reported, the error that made the put fail matters more.
+     */
+    private function purgeChunks(string $subject): void
+    {
+        try {
+            $this->stream->purge(
+                subject: $subject,
+                cancellation: new TimeoutCancellation(self::CLEANUP_TIMEOUT_SECONDS),
+            );
+        } catch (\Throwable) {
+        }
     }
 
     /**

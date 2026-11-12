@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore\Internal;
 
+use Thesis\Nats\Exception\ObjectIsInvalid;
+
 /**
  * @internal
  */
@@ -25,6 +27,24 @@ final readonly class DigestCalculator
     public static function sha256(): self
     {
         return new self(self::ALGO_SHA256);
+    }
+
+    /**
+     * Decodes "SHA-256=<padded url-safe base64>" like nats.go DecodeObjectDigest.
+     *
+     * @throws ObjectIsInvalid
+     */
+    public static function decode(string $digest): string
+    {
+        $parts = explode('=', $digest, 2);
+
+        $decoded = \count($parts) === 2 ? base64_decode(strtr($parts[1], '-_', '+/'), true) : false;
+
+        if ($decoded === false || $decoded === '') {
+            throw new ObjectIsInvalid("Invalid object digest format '{$digest}'.");
+        }
+
+        return $decoded;
     }
 
     /**

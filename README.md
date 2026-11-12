@@ -1445,6 +1445,11 @@ dump(
 $nc->drain();
 ```
 
+- An empty object (`''` or an empty reader) is stored as meta without chunks.
+- If the reader or a publish fails in the middle of `put()`, the chunks already published are purged and the error is rethrown; the previous version of the object stays as it was.
+- `get()` reads the chunks through a temporary consumer, deleted after the object is read to the end. It throws `Nats\Exception\ObjectIsInvalid` at once if the stream holds fewer chunks than the meta tells. The size and the SHA-256 digest of the chunks are checked against the meta: on a mismatch, or when the chunks disappear while reading, the read of the stream throws `Nats\Exception\ObjectIsInvalid`.
+- `info()->mtime` is the time the server stored the meta, with sub-second precision.
+
 #### Watch Object Store
 
 ```php
