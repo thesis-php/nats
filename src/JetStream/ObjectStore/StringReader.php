@@ -12,12 +12,9 @@ final class StringReader implements Reader
     /** @var non-negative-int */
     private int $cursor = 0;
 
-    /** @var positive-int */
+    /** @var non-negative-int */
     private readonly int $length;
 
-    /**
-     * @param non-empty-string $data
-     */
     public function __construct(
         private readonly string $data,
     ) {
