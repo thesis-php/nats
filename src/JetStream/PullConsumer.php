@@ -8,7 +8,9 @@ use Amp\Cancellation;
 use Amp\Future;
 use Amp\Pipeline;
 use Thesis\Nats\Client;
+use Thesis\Nats\Internal\Iter;
 use Thesis\Nats\Internal\Timer;
+use Thesis\Nats\Iterator;
 use Thesis\Nats\JetStream\Api\PullRequest;
 use Thesis\Nats\JetStream\Api\Router;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
@@ -100,6 +102,46 @@ final class PullConsumer
                 $watchdog->stop(...),
             ),
         );
+    }
+
+    /**
+     * Waits for one message, at most $maxWait (30 seconds by default).
+     *
+     * @return ?JetStreamDelivery null if no message came in time
+     * @throws NatsException
+     */
+    public function next(?TimeSpan $maxWait = null, ?Cancellation $cancellation = null): ?JetStreamDelivery
+    {
+        foreach ($this->fetch(FetchConfig::batch(1, $maxWait), $cancellation) as $delivery) {
+            return $delivery;
+        }
+
+        return null;
+    }
+
+    /**
+     * The same as {@see self::consume()}, but the messages are read from the iterator: the next one is taken
+     * from the server buffer only when the previous one has been read.
+     *
+     * @return Iterator<JetStreamDelivery>
+     * @throws NatsException
+     */
+    public function consumeIterator(
+        PullConsumeConfig $config = new PullConsumeConfig(),
+        ?Cancellation $cancellation = null,
+    ): Iterator {
+        /** @var Pipeline\Queue<JetStreamDelivery> $queue */
+        $queue = new Pipeline\Queue();
+
+        $subscription = $this->consume(
+            static function (JetStreamDelivery $delivery) use ($queue): void {
+                Iter\push($queue, $delivery);
+            },
+            $config,
+            $cancellation,
+        );
+
+        return Iter\PipelineIterator::fromSubscription($queue, $subscription);
     }
 
     /**

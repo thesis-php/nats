@@ -8,6 +8,7 @@ use Amp\Cancellation;
 use Thesis\Nats\Client;
 use Thesis\Nats\Description;
 use Thesis\Nats\Exception\HeadersIsInvalid;
+use Thesis\Nats\Exception\InvalidName;
 use Thesis\Nats\Exception\MessageNotFound;
 use Thesis\Nats\Header;
 use Thesis\Nats\Headers;
@@ -93,6 +94,14 @@ final readonly class Stream
     public function consumer(string $consumer): Consumer
     {
         return $this->js->consumer($this->name, $consumer);
+    }
+
+    /**
+     * @throws InvalidName
+     */
+    public function orderedConsumer(OrderedConsumerConfig $config = new OrderedConsumerConfig()): OrderedConsumer
+    {
+        return $this->js->orderedConsumer($this->name, $config);
     }
 
     /**

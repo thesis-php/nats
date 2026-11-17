@@ -17,6 +17,7 @@ use Thesis\Nats\Description;
 use Thesis\Nats\Exception\MaxRequestBatchExceeded;
 use Thesis\Nats\Exception\MaxRequestExpiresExceeded;
 use Thesis\Nats\Exception\MaxRequestMaxBytesExceeded;
+use Thesis\Nats\Exception\RequestHasNoResponders;
 use Thesis\Nats\Header\StatusCode;
 use Thesis\Nats\Header\StatusDescription;
 use Thesis\Nats\Headers;
@@ -268,6 +269,146 @@ final class PullConsumerTest extends NatsTestCase
 
             delay(0.01);
         }
+    }
+
+    public function testNextReturnsTheMessage(): void
+    {
+        [$stream, $subject, $consumer] = $this->streamWithConsumer();
+
+        $this->client()->jetStream()->publish("{$subject}.x", new Message('first'));
+        $this->client()->jetStream()->publish("{$subject}.x", new Message('second'));
+
+        $pulling = $consumer->pulling();
+
+        self::assertSame('first', $pulling->next(TimeSpan::fromSeconds(1))?->message->payload);
+        self::assertSame('second', $pulling->next(TimeSpan::fromSeconds(1))?->message->payload);
+        self::assertNull($pulling->next(TimeSpan::fromSeconds(1)));
+
+        $stream->delete();
+    }
+
+    public function testFetchImmediateTakesAtMostTheBatch(): void
+    {
+        [$stream, $subject, $consumer] = $this->streamWithConsumer();
+
+        for ($i = 1; $i <= 5; ++$i) {
+            $this->client()->jetStream()->publish("{$subject}.x", new Message("m{$i}"));
+        }
+
+        $pulling = $consumer->pulling();
+
+        self::assertSame(['m1', 'm2'], self::payloads($pulling->fetch(FetchConfig::immediate(2))));
+        self::assertSame(['m3', 'm4', 'm5'], self::payloads($pulling->fetch(FetchConfig::immediate(10))));
+        self::assertSame([], self::payloads($pulling->fetch(FetchConfig::immediate(10))));
+
+        $stream->delete();
+    }
+
+    public function testConsumeIterator(): void
+    {
+        [$stream, $subject, $consumer] = $this->streamWithConsumer();
+
+        for ($i = 1; $i <= 3; ++$i) {
+            $this->client()->jetStream()->publish("{$subject}.x", new Message("m{$i}"));
+        }
+
+        $iterator = $consumer->pulling()->consumeIterator();
+
+        $received = [];
+        foreach ($iterator as $delivery) {
+            $received[] = $delivery->message->payload;
+            $delivery->ack();
+
+            if (\count($received) === 3) {
+                $iterator->stop();
+            }
+        }
+
+        self::assertSame(['m1', 'm2', 'm3'], $received);
+
+        $stream->delete();
+    }
+
+    public function testAckSyncWaitsForTheServer(): void
+    {
+        [$stream, $subject, $consumer] = $this->streamWithConsumer();
+
+        $this->client()->jetStream()->publish("{$subject}.x", new Message('first'));
+        $this->client()->jetStream()->publish("{$subject}.x", new Message('second'));
+
+        $pulling = $consumer->pulling();
+
+        $pulling->next(TimeSpan::fromSeconds(1))?->ackSync();
+
+        // No waiting: the server has processed the ack before confirming it.
+        self::assertSame(0, $consumer->actualInfo()->numAckPending);
+
+        $delivery = $pulling->next(TimeSpan::fromSeconds(1));
+        self::assertNotNull($delivery);
+
+        $consumer->delete();
+
+        try {
+            self::expectException(RequestHasNoResponders::class);
+            $delivery->ackSync(new TimeoutCancellation(5));
+        } finally {
+            $stream->delete();
+        }
+    }
+
+    public function testPayloadSizeOfHeadersOnlyConsumer(): void
+    {
+        [$stream, $subject] = $this->streamWithConsumer();
+
+        $this->client()->jetStream()->publish("{$subject}.x", new Message('hello'));
+
+        $full = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10)));
+        $headersOnly = $stream->createConsumer(new ConsumerConfig(durableName: generateUniqueId(10), headersOnly: true));
+
+        $delivery = $full->pulling()->next(TimeSpan::fromSeconds(1));
+        self::assertSame('hello', $delivery?->message->payload);
+        self::assertSame(5, $delivery->payloadSize());
+
+        $delivery = $headersOnly->pulling()->next(TimeSpan::fromSeconds(1));
+        self::assertNotNull($delivery);
+        self::assertEmpty($delivery->message->payload);
+        self::assertSame(5, $delivery->payloadSize());
+
+        $stream->delete();
+    }
+
+    /**
+     * @param DeliveryBatch<JetStreamDelivery> $batch
+     * @return list<?string>
+     */
+    private static function payloads(DeliveryBatch $batch): array
+    {
+        $payloads = [];
+        foreach ($batch as $delivery) {
+            $payloads[] = $delivery->message->payload;
+        }
+
+        return $payloads;
+    }
+
+    /**
+     * @return array{Stream, non-empty-string, Consumer}
+     */
+    private function streamWithConsumer(): array
+    {
+        $js = $this->client()->jetStream();
+        $subject = generateUniqueId(10);
+
+        $stream = $js->createStream(new StreamConfig(
+            name: generateUniqueId(10),
+            subjects: ["{$subject}.*"],
+        ));
+
+        $consumer = $stream->createConsumer(
+            new ConsumerConfig(durableName: generateUniqueId(10), ackPolicy: AckPolicy::Explicit),
+        );
+
+        return [$stream, $subject, $consumer];
     }
 
     public function testStopFromHandlerDoesNotPullAfterwards(): void

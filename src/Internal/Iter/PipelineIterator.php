@@ -39,6 +39,41 @@ final class PipelineIterator implements Iterator, \IteratorAggregate
     }
 
     /**
+     * The iterator ends the way the subscription does: cleanly after stop() or drain(), with the error after a failure,
+     * e.g. the connection closed by the server. Otherwise the consumer would wait forever.
+     *
+     * @template E
+     * @param Pipeline\Queue<E> $queue
+     * @return self<E>
+     */
+    public static function fromSubscription(
+        Pipeline\Queue $queue,
+        Subscription $subscription,
+    ): self {
+        $future = async(static function () use (
+            $queue,
+            $subscription,
+        ): void {
+            try {
+                $subscription->awaitCompletion();
+            } catch (\Throwable $e) {
+                if (!$queue->isComplete()) {
+                    $queue->error($e);
+                }
+
+                return;
+            }
+
+            if (!$queue->isComplete()) {
+                $queue->complete();
+            }
+        });
+        $future->ignore();
+
+        return self::fromQueue($queue, $subscription);
+    }
+
+    /**
      * @param Pipeline\Pipeline<T> $pipeline
      * @param Pipeline\Queue<*> $queue
      */

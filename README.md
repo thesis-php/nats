@@ -23,8 +23,11 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Fetch Batch](#fetch-batch)
   - [Fetch Bytes](#fetch-bytes)
   - [Fetch Immediate](#fetch-immediate)
+  - [Next message](#next-message)
+  - [Acknowledgements](#acknowledgements)
   - [Push Consumer](#push-consumer)
   - [Pull Consumer](#pull-consumer)
+  - [Ordered Consumer](#ordered-consumer)
   - [Get message](#get-message)
 - [NATS KV](https://docs.nats.io/nats-concepts/jetstream/key-value-store)
   - [Store key values](#store-key-values)
@@ -798,7 +801,7 @@ And you can also configure the timeout and heartbeat settings.
 
 #### Fetch Immediate
 
-If you simply want to retrieve a batch of messages currently available in the stream, use `FetchConfig::immediate()`:
+If you simply want to retrieve a batch of messages currently available in the stream, use `FetchConfig::immediate()`, optionally with the maximum number of messages to take:
 
 ```php
 <?php
@@ -812,13 +815,52 @@ $consumer = $stream->createOrUpdateConsumer(...);
 
 $batch = $consumer
     ->pulling()
-    ->fetch(JetStream\FetchConfig::immediate());
+    ->fetch(JetStream\FetchConfig::immediate(100));
 
 foreach ($batch as $delivery) {
     // handle message
     $delivery->ack();
 }
 ```
+
+#### Next message
+
+`PullConsumer::next()` waits for a single message, at most `maxWait` (30 seconds by default), and returns `null` if none came in time:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Time\TimeSpan;
+
+$delivery = $consumer->pulling()->next(TimeSpan::fromSeconds(5));
+
+if ($delivery !== null) {
+    // handle message
+    $delivery->ack();
+}
+```
+
+#### Acknowledgements
+
+`Delivery::ack()` sends the acknowledgement without waiting for the server. `Delivery::ackSync()` waits until the server confirms it has processed the acknowledgement,
+so the message is not redelivered afterwards, and throws if the server does not confirm it, e.g. the consumer was deleted meanwhile.
+`nack()`, `terminate()` and `inProgress()` complete the set.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Amp\TimeoutCancellation;
+
+$delivery = $consumer->pulling()->next();
+
+$delivery?->ackSync(new TimeoutCancellation(5));
+```
+
+A consumer created with `headersOnly: true` delivers the headers without the payload, `Delivery::payloadSize()` then tells the size of the stored payload (for other consumers it is the size of the payload delivered).
 
 #### Push Consumer
 
@@ -896,6 +938,24 @@ $consumer = $stream->createOrUpdateConsumer(new Api\ConsumerConfig(
 ```
 
 Please refer to the push consumer configuration [documentation](https://docs.nats.io/nats-concepts/jetstream/consumers#push-specific) to understand the purpose of each parameter.
+
+With `idleHeartbeat` set and without a `deliverGroup`, the subscription compares the heartbeats with the last message received: if the server has delivered messages
+the subscription never got, e.g. dropped beyond the pending limits, a `ConsumerSequenceMismatch` is reported to `Client::onError()` once per gap.
+The subscription keeps going, and the exception tells the stream sequence to read the lost messages again from:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats;
+
+$nc->onError(static function (\Throwable $e): void {
+    if ($e instanceof Nats\Exception\ConsumerSequenceMismatch) {
+        dump("Lost messages of {$e->consumer}, resume from {$e->streamResumeSequence}");
+    }
+});
+```
 
 #### Pull Consumer
 
@@ -989,6 +1049,71 @@ $consumer->consume(
     ),
 );
 ```
+
+Messages can also be read from an iterator with `PullConsumer::consumeIterator()`: the next message is taken only once the previous one has been read.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Thesis\Nats\JetStream;
+
+$iterator = $consumer->pulling()->consumeIterator(new JetStream\PullConsumeConfig(maxMessages: 100));
+
+foreach ($iterator as $delivery) {
+    dump($delivery->message->payload);
+    $delivery->ack();
+
+    if ($done) {
+        $iterator->stop();
+    }
+}
+```
+
+#### Ordered Consumer
+
+An ordered consumer reads a stream in order, without gaps and without acknowledgements, e.g. to replay or to inspect it. The client creates an ephemeral push consumer with flow control and heartbeats
+and replaces it with a new one, starting right after the last message delivered, once a message is lost (e.g. dropped beyond the pending limits), the heartbeats stop,
+the consumer is deleted or the connection is restored. The consumers are created on `consume()` and deleted when the subscription completes; a following `consume()` continues after the last message.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream;
+use Thesis\Nats\JetStream\Api;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$consumer = $js->orderedConsumer('Orders', new JetStream\OrderedConsumerConfig(
+    filterSubjects: ['orders.created'],
+    deliverPolicy: Api\DeliverPolicy::ByStartSequence,
+    startSeq: 100,
+));
+
+$subscription = $consumer->consume(
+    static function (JetStream\Delivery $delivery): void {
+        dump($delivery->metadata?->streamSequence, $delivery->message->payload);
+    },
+);
+
+// or read them from an iterator
+$consumer->stop();
+
+foreach ($consumer->consumeIterator() as $delivery) {
+    dump($delivery->message->payload);
+}
+```
+
+`Stream::orderedConsumer()` does the same for a stream at hand. The heartbeat interval (5 seconds by default), the inactive threshold of the server consumers,
+the number of reset attempts before the subscription fails (unlimited by default) and the pending limits are set through `OrderedConsumerConfig`.
+A consumer is consumed by one subscription at a time.
 
 #### Get message
 

@@ -289,7 +289,7 @@ final class Client
             pendingLimits: $pendingLimits,
         );
 
-        return self::iterate($queue, $subscription);
+        return Iter\PipelineIterator::fromSubscription($queue, $subscription);
     }
 
     /**
@@ -410,7 +410,7 @@ final class Client
             throw $e;
         }
 
-        return self::iterate($queue, $subscription);
+        return Iter\PipelineIterator::fromSubscription($queue, $subscription);
     }
 
     /**
@@ -716,6 +716,72 @@ final class Client
     }
 
     /**
+     * Subscribes one more subject into an active subscription: its messages go to the same handler, in turn with the others
+     * and under the same pending limits. E.g. an ordered consumer switches its deliveries to a new subject without
+     * replacing the subscription it handed out, while the server counts only a literal subject as an interest.
+     * A JetStream delivery carries the subject of the stored message, not the one subscribed, so $onReceive tells
+     * which deliveries came through this subject: it is called with each of them before it is queued.
+     *
+     * @internal
+     * @param non-empty-string $subject
+     * @param \Closure(Delivery): void $onReceive
+     * @return \Closure(?Cancellation=): void unsubscribes the subject
+     * @throws NatsException
+     * @throws \Throwable
+     */
+    public function attach(
+        Subscription $subscription,
+        string $subject,
+        \Closure $onReceive,
+        ?Cancellation $cancellation = null,
+    ): \Closure {
+        $push = null;
+        foreach ($this->subscribers as $subscriber) {
+            if ($subscriber->subscription === $subscription) {
+                $push = $subscriber->push;
+                break;
+            }
+        }
+
+        if ($push === null) {
+            throw new \LogicException('The subscription is not active.');
+        }
+
+        $subscriptionId = $this->subscriptionIdGenerator->nextId();
+
+        // Without the subscription: it is completed through its own subject only.
+        $this->subscribers[$subscriptionId] = new Subscriber(
+            subject: $subject,
+            queueGroup: null,
+            push: static function (Delivery $delivery) use (
+                $push,
+                $onReceive,
+            ): bool {
+                $onReceive($delivery);
+
+                return $push($delivery);
+            },
+        );
+
+        try {
+            $this->sub($subject, $subscriptionId, cancellation: $cancellation);
+        } catch (\Throwable $e) {
+            unset($this->subscribers[$subscriptionId]);
+
+            throw $e;
+        }
+
+        $client = \WeakReference::create($this);
+
+        return static function (?Cancellation $cancellation = null) use (
+            $client,
+            $subscriptionId,
+        ): void {
+            $client->get()?->unsubscribe($subscriptionId, $cancellation);
+        };
+    }
+
+    /**
      * @param non-empty-string $subject
      * @param callable(Delivery): void $handler
      * @return \Closure(?Cancellation=): void
@@ -921,7 +987,12 @@ final class Client
         return $failed;
     }
 
-    private function reportError(\Throwable $e): void
+    /**
+     * Reports an error that does not end anything to the {@see self::onError()} callbacks, e.g. one of a JetStream consumer.
+     *
+     * @internal
+     */
+    public function reportError(\Throwable $e): void
     {
         $this->logger->warning('Nats error: {message}', ['message' => $e->getMessage(), 'exception' => $e]);
 
@@ -1020,37 +1091,6 @@ final class Client
                 $this->reportError($error);
             }
         }
-    }
-
-    /**
-     * @param Pipeline\Queue<Delivery> $queue
-     * @return Iterator<Delivery>
-     */
-    private static function iterate(Pipeline\Queue $queue, Subscription $subscription): Iterator
-    {
-        // The iterator ends the way the subscription does: cleanly after stop() or drain(), with the error
-        // after a failure, e.g. the connection closed by the server. Otherwise the consumer would wait forever.
-        $future = async(static function () use (
-            $queue,
-            $subscription,
-        ): void {
-            try {
-                $subscription->awaitCompletion();
-            } catch (\Throwable $e) {
-                if (!$queue->isComplete()) {
-                    $queue->error($e);
-                }
-
-                return;
-            }
-
-            if (!$queue->isComplete()) {
-                $queue->complete();
-            }
-        });
-        $future->ignore();
-
-        return Iter\PipelineIterator::fromQueue($queue, $subscription);
     }
 
     /**
