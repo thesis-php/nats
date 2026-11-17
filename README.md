@@ -37,6 +37,9 @@ Pure non-blocking (fiber based) strictly typed full-featured PHP driver for NATS
   - [Mirrors and sources](#mirrors-and-sources)
 - [NATS ObjectStore](https://docs.nats.io/nats-concepts/jetstream/obj_store)
   - [Store objects](#store-objects-in-the-buckets)
+  - [List and update objects](#list-and-update-objects)
+  - [Files and streams](#files-and-streams)
+  - [Object Store status](#object-store-status)
   - [Watch Object Store](#watch-object-store)
 - [NATS CRDT](#nats-crdt)
   - [Add Counter](#add-counter)
@@ -1449,6 +1452,129 @@ $nc->drain();
 - If the reader or a publish fails in the middle of `put()`, the chunks already published are purged and the error is rethrown; the previous version of the object stays as it was.
 - `get()` reads the chunks through a temporary consumer, deleted after the object is read to the end. It throws `Nats\Exception\ObjectIsInvalid` at once if the stream holds fewer chunks than the meta tells. The size and the SHA-256 digest of the chunks are checked against the meta: on a mismatch, or when the chunks disappear while reading, the read of the stream throws `Nats\Exception\ObjectIsInvalid`.
 - `info()->mtime` is the time the server stored the meta, with sub-second precision.
+- `info()` returns null for a deleted object, `info($name, showDeleted: true)` returns its meta with `deleted: true`.
+
+#### List and update objects
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
+use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$store = $js->createOrUpdateObjectStore(new StoreConfig(
+    store: 'code',
+));
+
+$store->put(new ObjectMeta('app.php'), '<?php echo 1;');
+$store->put(new ObjectMeta('old.php'), '<?php echo 2;');
+$store->delete('old.php');
+
+foreach ($store->list() as $info) {
+    dump("{$info->name}: {$info->size} bytes, changed at {$info->mtime->format('c')}");
+}
+
+dump(count($store->list(showDeleted: true))); // 2
+
+$store->updateMeta('app.php', new ObjectMeta(
+    name: 'main.php',
+    description: 'The entrypoint',
+    metadata: ['owner' => 'core'],
+));
+
+dump((string) $store->get('main.php'));
+
+$nc->drain();
+```
+
+- `list()` returns the metas of the objects (links included) in the order they were last changed, an empty list for an empty store. It reads them through a temporary consumer, deleted afterwards. A part of the list is never returned: if the client is stopped or the connection is lost before every meta is received, `list()` throws `Nats\Exception\ObjectListIsIncomplete`.
+- `updateMeta()` changes the name, the description, the headers and the metadata, the data is not copied. The chunk size of the new meta is ignored. It throws `Nats\Exception\ObjectNotFound` for a missing or deleted object and `Nats\Exception\ObjectAlreadyExists` when the new name belongs to another object; a deleted object does not hold its name.
+- `addLink()` throws `Nats\Exception\ObjectAlreadyExists` when the name belongs to an object that is not a link.
+
+#### Files and streams
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Amp\ByteStream\ReadableResourceStream;
+use Thesis\Nats;
+use Thesis\Nats\JetStream\ObjectStore\ObjectMeta;
+use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$store = $js->createOrUpdateObjectStore(new StoreConfig(
+    store: 'backups',
+));
+
+$store->putFile('/var/backups/db.sql', new ObjectMeta('db.sql'));
+$store->getFile('db.sql', '/tmp/db.sql');
+
+// Any amphp byte stream: a socket, a process output, another object.
+$store->put(new ObjectMeta('stdin'), new ReadableResourceStream(STDIN));
+$object = $store->get('db.sql') ?? throw new \RuntimeException('db.sql is not found.');
+$store->put(new ObjectMeta('db-copy.sql'), $object->stream);
+
+$nc->drain();
+```
+
+- `putFile()` stores the file under its path, like nats.go, unless a meta is given.
+- `getFile()` writes the object to a temporary file next to the target and renames it over the target, so the file is replaced only by a complete, verified object. It returns null if there is no such object; if reading the object fails, e.g. on a digest mismatch, the temporary file is removed, an existing file is left untouched, and the error is rethrown.
+- A file that cannot be opened or is not a regular file throws `Nats\Exception\FileIsNotAccessible`; so does a read error of a `ResourceReader`, and nothing is stored. A failing `ReadableStream` throws its own `Amp\ByteStream\StreamException`.
+- `put()` accepts a string, a `Reader` (`StringReader`, `ResourceReader`, `StreamReader`) or an `Amp\ByteStream\ReadableStream`. The parts of a stream are glued, so that every chunk but the last one has the chunk size.
+
+#### Object Store status
+
+```php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Thesis\Nats;
+use Thesis\Nats\JetStream\ObjectStore\StoreConfig;
+use Thesis\Time\TimeSpan;
+
+$nc = new Nats\Client(Nats\Config::default());
+$js = $nc->jetStream();
+
+$store = $js->createOrUpdateObjectStore(new StoreConfig(
+    store: 'code',
+    description: 'Source code',
+    ttl: TimeSpan::fromDays(7),
+));
+
+$status = $store->status();
+
+dump(
+    $status->bucket,       // code
+    $status->description,  // Source code
+    $status->ttl,          // 7 days, null if objects are kept forever
+    $status->storage,      // StorageType::File
+    $status->replicas,     // 1
+    $status->sealed,       // false
+    $status->size,         // bytes of the stored chunks and metas
+    $status->compressed,   // false
+    $status->metadata,
+    $status->info,         // the stream info behind the store
+);
+
+$nc->drain();
+```
 
 #### Watch Object Store
 

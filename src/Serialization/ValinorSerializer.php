@@ -47,7 +47,7 @@ final readonly class ValinorSerializer implements Serializer
     {
         return $this->mapper->map(
             signature: $type,
-            source: Source::iterable($data)->camelCaseKeys(),
+            source: Source::iterable(new Internal\CamelCaseKeys($data)),
         );
     }
 }

@@ -7,6 +7,7 @@ namespace Thesis\Nats\JetStream\KeyValue\Internal;
 use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Delivery;
 use Thesis\Nats\JetStream\Internal\IdleListener;
+use Thesis\Nats\JetStream\Internal\InitialValues;
 use Thesis\Nats\JetStream\KeyValue\Entry;
 use Thesis\Nats\JetStream\KeyValue\EntryState;
 use Thesis\Nats\Subscription;
