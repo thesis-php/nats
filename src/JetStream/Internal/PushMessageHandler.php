@@ -7,8 +7,10 @@ namespace Thesis\Nats\JetStream\Internal;
 use Thesis\Nats\Client;
 use Thesis\Nats\Delivery as NatsDelivery;
 use Thesis\Nats\Description;
+use Thesis\Nats\Exception\ConsumerSequenceMismatch;
 use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Delivery as JetStreamDelivery;
+use Thesis\Nats\JetStream\Metadata;
 use Thesis\Nats\Message;
 use Thesis\Nats\Status;
 use Thesis\Nats\Subscription;
@@ -16,15 +18,24 @@ use Thesis\Nats\Subscription;
 /**
  * @internal
  */
-final readonly class PushMessageHandler
+final class PushMessageHandler
 {
+    /** The last message received, null until the first one: the heartbeats are compared with it. */
+    private ?Metadata $last = null;
+
+    /** The consumer sequence of the last gap reported. */
+    private int $reported = 0;
+
     /**
      * @param callable(JetStreamDelivery, Subscription): void $handler
+     * @param bool $sequenced whether this subscription receives every message of the consumer, i.e. it has no deliver group,
+     *                        and so a heartbeat naming a later consumer sequence than the last one received means a gap
      */
     public function __construct(
-        private mixed $handler,
-        private Client $nc,
-        private Heartbeat\Watchdog $watchdog,
+        private readonly mixed $handler,
+        private readonly Client $nc,
+        private readonly Heartbeat\Watchdog $watchdog,
+        private readonly bool $sequenced = false,
     ) {}
 
     public function __invoke(NatsDelivery $delivery, Subscription $subscription): void
@@ -60,6 +71,8 @@ final readonly class PushMessageHandler
                 case [Status::Control, Description::IdleHeartbeat]: // @phpstan-ignore switch.type
                     $stalled = $delivery->message->headers?->exists(Header\ConsumerStalled::header()) ?? false;
 
+                    $this->detectGap($delivery);
+
                     if (!$stalled && $this->handler instanceof IdleListener) {
                         $this->handler->idle();
                     }
@@ -73,7 +86,37 @@ final readonly class PushMessageHandler
         }
 
         if ($delivery->replyTo !== null) {
-            ($this->handler)($this->nc->toJetStreamDelivery($delivery), $subscription);
+            $jsDelivery = $this->nc->toJetStreamDelivery($delivery);
+            $this->last = $jsDelivery->metadata;
+
+            ($this->handler)($jsDelivery, $subscription);
         }
+    }
+
+    /**
+     * Like nats.go, compares the consumer sequence of the heartbeat with the last message received, but reports a gap once.
+     */
+    private function detectGap(NatsDelivery $heartbeat): void
+    {
+        $last = $this->last;
+        $delivered = $heartbeat->message->headers?->get(Header\LastConsumer::header());
+
+        if (!$this->sequenced || $last === null || $delivered === null || $delivered <= max($last->consumerSequence, $this->reported)) {
+            return;
+        }
+
+        /** @var positive-int $streamResumeSequence */
+        $streamResumeSequence = max($last->streamSequence, 0) + 1;
+
+        $this->nc->reportError(new ConsumerSequenceMismatch(
+            stream: $last->stream,
+            consumer: $last->consumer,
+            consumerSequence: max($last->consumerSequence, 0),
+            lastConsumerSequence: $delivered,
+            streamResumeSequence: $streamResumeSequence,
+        ));
+
+        // The next heartbeats name the same sequence until a message comes: the gap is already reported.
+        $this->reported = $delivered;
     }
 }

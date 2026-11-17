@@ -17,9 +17,14 @@ final readonly class FetchConfig
 
     public TimeSpan $heartbeat;
 
-    public static function immediate(): self
+    /**
+     * Takes the messages available right now, at most $batch, and does not wait for more.
+     *
+     * @param positive-int $batch
+     */
+    public static function immediate(int $batch = self::DEFAULT_BATCH): self
     {
-        return new self(noWait: true);
+        return new self(batch: $batch, noWait: true);
     }
 
     /**

@@ -50,6 +50,8 @@ final class PushConsumer
             handler: $handler,
             nc: $this->nats,
             watchdog: $watchdog,
+            // Each subscriber of a deliver group sees a part of the consumer sequence.
+            sequenced: $this->info->config->deliverGroup === null,
         );
 
         $subscription = $this->nats->subscribe(

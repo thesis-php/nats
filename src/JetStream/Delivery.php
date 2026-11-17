@@ -6,6 +6,7 @@ namespace Thesis\Nats\JetStream;
 
 use Amp\Cancellation;
 use Amp\Future;
+use Thesis\Nats\Header;
 use Thesis\Nats\JetStream\Internal\Acks;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
@@ -36,14 +37,41 @@ final class Delivery
     ) {}
 
     /**
+     * The size of the message payload. A consumer with headersOnly delivers no payload, then it is the size of the stored one.
+     *
+     * @return non-negative-int
+     */
+    public function payloadSize(): int
+    {
+        return $this->message->headers?->get(Header\MsgSize::header()) ?? \strlen($this->message->payload ?? '');
+    }
+
+    /**
+     * Sends the acknowledgement without waiting for the server, see {@see self::ackSync()} to wait.
+     *
      * @throws NatsException
      */
-    public function ack(bool $sync = false, ?Cancellation $cancellation = null): void
+    public function ack(?Cancellation $cancellation = null): void
     {
         if (($reply = $this->replyTo) !== null) {
             $ack = $this->acks->ack(...);
 
-            $this->doAck(static fn() => $ack($reply, $sync, $cancellation), $cancellation);
+            $this->doAck(static fn() => $ack($reply, $cancellation), $cancellation);
+        }
+    }
+
+    /**
+     * Acknowledges and waits until the server confirms it has processed the acknowledgement, so the message
+     * is not redelivered afterwards. Throws when the server does not confirm it, e.g. the consumer is deleted.
+     *
+     * @throws NatsException
+     */
+    public function ackSync(?Cancellation $cancellation = null): void
+    {
+        if (($reply = $this->replyTo) !== null) {
+            $ackSync = $this->acks->ackSync(...);
+
+            $this->doAck(static fn() => $ackSync($reply, $cancellation), $cancellation);
         }
     }
 

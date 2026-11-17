@@ -269,6 +269,26 @@ final readonly class JetStream
     }
 
     /**
+     * The server consumers are created once it starts consuming, see {@see JetStream\OrderedConsumer}.
+     *
+     * @param non-empty-string $stream
+     * @throws Exception\InvalidName
+     */
+    public function orderedConsumer(
+        string $stream,
+        JetStream\OrderedConsumerConfig $config = new JetStream\OrderedConsumerConfig(),
+    ): JetStream\OrderedConsumer {
+        Validate::name($stream);
+
+        return new JetStream\OrderedConsumer(
+            stream: $stream,
+            config: $config,
+            js: $this,
+            nats: $this->nats,
+        );
+    }
+
+    /**
      * @param non-empty-string $stream
      * @param non-empty-string $consumer
      * @throws NatsException

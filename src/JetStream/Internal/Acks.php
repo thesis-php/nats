@@ -39,14 +39,21 @@ final readonly class Acks
     /**
      * @param non-empty-string $replyTo
      */
-    public function ack(string $replyTo, bool $sync = false, ?Cancellation $cancellation = null): void
+    public function ack(string $replyTo, ?Cancellation $cancellation = null): void
     {
-        $handler = match ($sync) {
-            true => $this->request,
-            default => $this->publish,
-        };
+        ($this->publish)(
+            $replyTo,
+            new Message('+ACK'),
+            $cancellation,
+        );
+    }
 
-        $handler(
+    /**
+     * @param non-empty-string $replyTo
+     */
+    public function ackSync(string $replyTo, ?Cancellation $cancellation = null): void
+    {
+        ($this->request)(
             $replyTo,
             new Message('+ACK'),
             $cancellation,
