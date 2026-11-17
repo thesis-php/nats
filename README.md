@@ -858,6 +858,19 @@ $subscription = $consumer->push(
 
 Additionally, for push consumers, the `deliverSubject` parameter is mandatory, as it is this very parameter that distinguishes the push model from pull.
 
+The deliveries the handler has not taken yet are bounded by the same pending limits as a core subscription (see [Slow consumers](#slow-consumers)), set through `PushConsumeConfig`:
+
+```php
+$subscription = $consumer->push(
+    static function (Nats\JetStream\Delivery $delivery): void {
+        $delivery->ack();
+    },
+    new Nats\JetStream\PushConsumeConfig(
+        pendingLimits: new Nats\PendingLimits(messages: 10_000, bytes: null),
+    ),
+);
+```
+
 If you want to distribute messages from a single consumer across different subscriptions, you should use the `deliverGroup` parameter.
 This enables you to scale processing across multiple consumer instances. This parameter functions identically to `queueGroup` in NATS Core.
 
@@ -1451,6 +1464,7 @@ $nc->drain();
 - An empty object (`''` or an empty reader) is stored as meta without chunks.
 - If the reader or a publish fails in the middle of `put()`, the chunks already published are purged and the error is rethrown; the previous version of the object stays as it was.
 - `get()` reads the chunks through a temporary consumer, deleted after the object is read to the end. It throws `Nats\Exception\ObjectIsInvalid` at once if the stream holds fewer chunks than the meta tells. The size and the SHA-256 digest of the chunks are checked against the meta: on a mismatch, or when the chunks disappear while reading, the read of the stream throws `Nats\Exception\ObjectIsInvalid`.
+- The chunks reach the reader of `get()` as fast as it reads them: a chunk is taken from the subscription only after the reader took the previous one, and the flow control reply waits behind the chunks before it, so the server stops sending. At most the flow control window of the server (32 MiB) is received ahead of a slow reader, not the whole object. Closing the stream before its end stops the reading and deletes the consumer.
 - `info()->mtime` is the time the server stored the meta, with sub-second precision.
 - `info()` returns null for a deleted object, `info($name, showDeleted: true)` returns its meta with `deleted: true`.
 

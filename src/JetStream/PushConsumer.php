@@ -57,6 +57,7 @@ final class PushConsumer
             handler: $handler,
             queueGroup: $this->info->config->deliverGroup,
             cancellation: $cancellation,
+            pendingLimits: $config->pendingLimits,
         );
 
         $watchdog->subscribe($subscription->error(...));

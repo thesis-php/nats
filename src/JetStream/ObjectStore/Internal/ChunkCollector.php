@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Thesis\Nats\JetStream\ObjectStore\Internal;
 
 use Amp\Cancellation;
+use Amp\CancelledException;
 use Amp\DeferredCancellation;
+use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
 use Thesis\Nats\Exception\ObjectIsInvalid;
 use Thesis\Nats\JetStream\Delivery;
@@ -15,6 +17,8 @@ use Thesis\Nats\Subscription;
 
 /**
  * Passes the chunks of an object to its reader and verifies the size and the digest once the last chunk arrives.
+ * A chunk is handled only after the reader took the previous ones, so a slow reader holds back the flow control reply,
+ * and the server stops delivering.
  *
  * @internal
  */
@@ -23,6 +27,8 @@ final class ChunkCollector implements IdleListener
     private readonly DigestCalculator $digest;
 
     private readonly DeferredCancellation $exhausted;
+
+    private readonly DeferredCancellation $released;
 
     /** @var non-negative-int */
     private int $size = 0;
@@ -39,6 +45,7 @@ final class ChunkCollector implements IdleListener
     ) {
         $this->digest = DigestCalculator::sha256();
         $this->exhausted = new DeferredCancellation();
+        $this->released = new DeferredCancellation();
     }
 
     /**
@@ -47,6 +54,15 @@ final class ChunkCollector implements IdleListener
     public function exhausted(): Cancellation
     {
         return $this->exhausted->getCancellation();
+    }
+
+    /**
+     * Called once the subscription completes: the chunks left are queued without waiting for the reader,
+     * so that the subscription is not held by a reader that does not read anymore.
+     */
+    public function release(): void
+    {
+        $this->released->cancel();
     }
 
     public function idle(): void
@@ -75,8 +91,17 @@ final class ChunkCollector implements IdleListener
             $this->digest->update($payload);
             $this->size += \strlen($payload);
 
-            $pushed = $this->chunks->pushAsync($payload);
-            $pushed->ignore();
+            try {
+                $this->chunks
+                    ->pushAsync($payload)
+                    ->await($this->released->getCancellation());
+            } catch (CancelledException) {
+                // The subscription is completed: the chunk stays queued for the reader, the rest is not coming.
+            } catch (DisposedException) {
+                $subscription->stop();
+
+                return;
+            }
         }
 
         if ($delivery->metadata?->pending === 0) {
