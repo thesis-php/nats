@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Nats\JetStream\ObjectStore;
 
+use Thesis\Nats\Exception\FileIsNotAccessible;
+
 /**
  * @api
  */
@@ -21,13 +23,18 @@ final readonly class ResourceReader implements Reader
         return feof($this->handle);
     }
 
+    /**
+     * @throws FileIsNotAccessible if reading fails: an object cut short must not be stored as a whole one
+     */
     public function read(int $length): ?string
     {
-        $chunk = fread($this->handle, $length);
-        if ($chunk === false || $chunk === '') {
-            return null;
+        error_clear_last();
+        $chunk = @fread($this->handle, $length);
+
+        if ($chunk === false) {
+            throw new FileIsNotAccessible(\sprintf('Failed to read the resource: %s.', error_get_last()['message'] ?? 'unknown error'));
         }
 
-        return $chunk;
+        return $chunk !== '' ? $chunk : null;
     }
 }

@@ -67,6 +67,29 @@ final readonly class ObjectInfo implements \JsonSerializable
     }
 
     /**
+     * The options, i.e. the link and the chunk size, are kept: they describe the stored data, not the object.
+     *
+     * @internal
+     */
+    public function withMeta(ObjectMeta $meta): self
+    {
+        return new self(
+            name: $meta->name,
+            bucket: $this->bucket,
+            nuid: $this->nuid,
+            size: $this->size,
+            chunks: $this->chunks,
+            mtime: $this->mtime,
+            digest: $this->digest,
+            deleted: $this->deleted,
+            description: $meta->description,
+            headers: $meta->headers,
+            metadata: $meta->metadata,
+            options: $this->options,
+        );
+    }
+
+    /**
      * @internal
      */
     public function asDeleted(): self

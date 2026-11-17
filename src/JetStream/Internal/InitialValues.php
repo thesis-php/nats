@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Thesis\Nats\JetStream\KeyValue\Internal;
+namespace Thesis\Nats\JetStream\Internal;
 
 use Amp\DeferredFuture;
 use Amp\Future;

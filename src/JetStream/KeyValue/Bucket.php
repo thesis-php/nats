@@ -349,8 +349,8 @@ final readonly class Bucket
         $consumer = $this->stream->createOrUpdateConsumer($consumerConfig, $cancellation);
 
         $initialValues = $config->updatesOnly
-            ? Internal\InitialValues::none()
-            : new Internal\InitialValues($consumer->info->numPending + $consumer->info->delivered->consumerSeq);
+            ? JetStream\Internal\InitialValues::none()
+            : new JetStream\Internal\InitialValues($consumer->info->numPending + $consumer->info->delivered->consumerSeq);
 
         $subscription = $consumer->push(
             new Internal\WatchHandler(
