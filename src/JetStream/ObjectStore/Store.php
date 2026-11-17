@@ -34,6 +34,7 @@ use Thesis\Nats\JetStream\ObjectStore\Internal\DigestCalculator;
 use Thesis\Nats\Json\Encoder;
 use Thesis\Nats\Message;
 use Thesis\Nats\NatsException;
+use Thesis\Nats\PendingLimits;
 use Thesis\Nats\Serialization\Serializer;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
@@ -50,6 +51,9 @@ final readonly class Store
     private const int HEARTBEAT_SECONDS = 5;
     private const int INACTIVE_THRESHOLD_SECONDS = 300;
     private const int CLEANUP_TIMEOUT_SECONDS = 5;
+
+    /** @var int the chunks queued ahead of the reader of {@see get()}, the next one waits until the reader takes one */
+    private const int READ_AHEAD_CHUNKS = 1;
 
     /**
      * @param non-empty-string $name
@@ -101,7 +105,7 @@ final readonly class Store
         }
 
         /** @var Queue<string> $chunks */
-        $chunks = new Queue(max($info->chunks, 1));
+        $chunks = new Queue(self::READ_AHEAD_CHUNKS);
         $collector = new Internal\ChunkCollector($info, $chunks);
 
         // An ordered consumer of nats.go: no acks, flow control with heartbeats, a replica in memory.
@@ -128,7 +132,11 @@ final readonly class Store
             throw new ObjectIsInvalid("Object '{$info->name}' is missing chunks: expected {$info->chunks}, stored {$consumer->info->numPending}.");
         }
 
-        $subscription = $consumer->push($collector);
+        // The collector waits for the reader, and the flow control reply goes out only after the chunks before it,
+        // so the server holds the rest of the object back: its window (32 MiB at most) bounds the chunks received ahead
+        // of the reader. Every dropped chunk would break the object, so the window is the only limit.
+        $subscription = $consumer->push($collector, new JetStream\PushConsumeConfig(pendingLimits: PendingLimits::unlimited()));
+        $subscription->onComplete($collector->release(...));
 
         // The reader gets the end of the object or the error first, the consumer is deleted afterwards.
         $completion = async(function () use (

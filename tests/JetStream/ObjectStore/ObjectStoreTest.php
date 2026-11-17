@@ -28,6 +28,7 @@ use Thesis\Nats\Serialization\ValinorSerializer;
 use Thesis\Nats\Subscription;
 use Thesis\Time\TimeSpan;
 use function Amp\async;
+use function Amp\ByteStream\buffer;
 use function Amp\delay;
 use function Thesis\Nats\Internal\Id\generateUniqueId;
 
@@ -35,6 +36,9 @@ use function Thesis\Nats\Internal\Id\generateUniqueId;
 final class ObjectStoreTest extends NatsTestCase
 {
     private const float TIMEOUT = 5;
+
+    /** @var positive-int many times the initial flow control window of the server (2 MiB) */
+    private const int LARGE_OBJECT_SIZE = 16 * 1024 * 1024;
 
     private ?PausableProxy $proxy = null;
 
@@ -447,6 +451,103 @@ final class ObjectStoreTest extends NatsTestCase
         $this->awaitNoConsumers($js, $name);
 
         $js->deleteObjectStore($name);
+    }
+
+    public function testSlowReaderHoldsTheRestOfTheObjectOnTheServer(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+        $info = $store->put(new ObjectMeta(name: 'xfile'), self::generatedObject(self::LARGE_OBJECT_SIZE));
+
+        memory_reset_peak_usage();
+        $baseline = memory_get_usage();
+
+        $object = $store->get('xfile');
+        self::assertNotNull($object);
+
+        $digest = hash_init('sha256');
+        $first = $object->stream->read();
+        self::assertNotNull($first);
+        hash_update($digest, $first);
+
+        // The reader stalls: the server stops at its flow control window instead of sending the whole object.
+        delay(1);
+
+        $consumers = array_values([...$js->consumerNames("OBJ_{$name}")]);
+        self::assertCount(1, $consumers);
+        self::assertGreaterThan(0, $js->consumerInfo("OBJ_{$name}", $consumers[0])->numPending);
+        self::assertLessThan(self::LARGE_OBJECT_SIZE / 2, memory_get_peak_usage() - $baseline);
+
+        $size = \strlen($first);
+
+        while (($chunk = $object->stream->read()) !== null) {
+            hash_update($digest, $chunk);
+            $size += \strlen($chunk);
+        }
+
+        self::assertSame($info->size, $size);
+        self::assertSame(hash_final($digest), hash('sha256', buffer(self::generatedObject(self::LARGE_OBJECT_SIZE))));
+
+        $this->awaitNoConsumers($js, $name);
+
+        $js->deleteObjectStore($name);
+    }
+
+    public function testReaderClosingStreamMidwayStopsTheGet(): void
+    {
+        $js = $this->client()->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+        $store->put(new ObjectMeta(name: 'xfile'), self::generatedObject(self::LARGE_OBJECT_SIZE));
+
+        $object = $store->get('xfile');
+        self::assertNotNull($object);
+        self::assertNotNull($object->stream->read());
+
+        // The rest of the object waits for the reader, who gives up.
+        delay(0.5);
+        $object->stream->close();
+
+        $this->awaitNoConsumers($js, $name);
+
+        $js->deleteObjectStore($name);
+    }
+
+    public function testDrainDoesNotWaitForStalledReader(): void
+    {
+        $nc = $this->client();
+        $js = $nc->jetStream();
+
+        $store = $js->createOrUpdateObjectStore(new StoreConfig($name = generateUniqueId(10)));
+        $store->put(new ObjectMeta(name: 'xfile'), self::generatedObject(self::LARGE_OBJECT_SIZE));
+
+        $object = $store->get('xfile');
+        self::assertNotNull($object);
+        self::assertNotNull($object->stream->read());
+        delay(0.5);
+
+        // The drain does not wait for the reader to take the received chunks.
+        $started = microtime(true);
+        $nc->drain();
+        self::assertLessThan(self::TIMEOUT, microtime(true) - $started);
+
+        // The reader still gets the received chunks, but not the object.
+        try {
+            $read = $object->buffer();
+            self::fail(\sprintf('A partly received object must not be read to the end, %d bytes were read.', \strlen($read)));
+        } catch (ObjectIsInvalid $e) {
+            self::assertStringContainsString("Object 'xfile' is missing chunks", $e->getMessage());
+        }
+
+        // The stopped client cannot delete the consumer, the server removes it after the inactive threshold.
+        $other = new Client($this->config());
+
+        try {
+            $other->jetStream()->deleteObjectStore($name);
+        } finally {
+            $other->stop();
+        }
     }
 
     public function testPutRethrowsWhenPurgeIsLost(): void
@@ -973,6 +1074,18 @@ final class ObjectStoreTest extends NatsTestCase
                 return str_repeat('x', $length);
             }
         };
+    }
+
+    /**
+     * @param positive-int $size
+     */
+    private static function generatedObject(int $size): ReadableIterableStream
+    {
+        return new ReadableIterableStream((static function () use ($size): \Generator {
+            for ($offset = 0; $offset < $size; $offset += 1024) {
+                yield str_repeat(\chr(intdiv($offset, 1024) % 256), min(1024, $size - $offset));
+            }
+        })());
     }
 
     /**
